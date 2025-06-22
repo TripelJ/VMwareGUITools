@@ -197,7 +197,7 @@
 
                     <!-- Profile Details -->
                     <materialDesign:Card Grid.Column="1" Margin="8,0,0,0">
-                        <StackPanel Padding="16" DataContext="{Binding SelectedHostProfile}">
+                        <StackPanel Margin="16" DataContext="{Binding SelectedHostProfile}">
                             <TextBlock Text="Profile Details"
                                        FontSize="16"
                                        FontWeight="Medium"
