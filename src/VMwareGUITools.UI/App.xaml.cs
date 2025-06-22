@@ -150,13 +150,21 @@ public partial class App : Application
         services.AddTransient<MainWindowViewModel>();
         services.AddTransient<VCenterListViewModel>();
         services.AddTransient<AddVCenterViewModel>();
+        services.AddTransient<EditVCenterViewModel>();
+        services.AddTransient<SettingsViewModel>();
         services.AddTransient<ClusterListViewModel>();
         services.AddTransient<HostListViewModel>();
         services.AddTransient<CheckResultsViewModel>();
 
-        // Views
-        services.AddTransient<MainWindow>();
+        // Views - Register with factory to ensure proper ViewModel injection
+        services.AddTransient<MainWindow>(provider =>
+        {
+            var viewModel = provider.GetRequiredService<MainWindowViewModel>();
+            return new MainWindow(viewModel);
+        });
         services.AddTransient<AddVCenterWindow>();
+        services.AddTransient<EditVCenterWindow>();
+        services.AddTransient<SettingsWindow>();
         services.AddTransient<VCenterDetailsWindow>();
 
         // Configuration

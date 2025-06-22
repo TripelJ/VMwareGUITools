@@ -9,6 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using VMwareGUITools.Core.Models;
 using VMwareGUITools.Data;
+using VMwareGUITools.Infrastructure.Security;
 using VMwareGUITools.Infrastructure.VMware;
 using VMwareGUITools.UI.Views;
 
@@ -169,16 +170,131 @@ public partial class MainWindowViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Command to edit a vCenter server
+    /// </summary>
+    [RelayCommand]
+    private async Task EditVCenterAsync(VCenter? vCenter)
+    {
+        if (vCenter == null) return;
+
+        try
+        {
+            _logger.LogInformation("Opening Edit vCenter dialog for: {VCenterName}", vCenter.Name);
+
+            var editVCenterWindow = _serviceProvider.GetRequiredService<EditVCenterWindow>();
+            var editViewModel = _serviceProvider.GetRequiredService<EditVCenterViewModel>();
+            
+            // Initialize the edit view model with the vCenter data
+            await editViewModel.InitializeAsync(vCenter);
+            editVCenterWindow.DataContext = editViewModel;
+
+            var result = editVCenterWindow.ShowDialog();
+
+            if (result == true)
+            {
+                await LoadVCentersAsync();
+                StatusMessage = "vCenter server updated successfully";
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to edit vCenter server: {VCenterName}", vCenter?.Name);
+            StatusMessage = $"Failed to edit vCenter server: {ex.Message}";
+        }
+    }
+
+    /// <summary>
+    /// Command to delete a vCenter server
+    /// </summary>
+    [RelayCommand]
+    private async Task DeleteVCenterAsync(VCenter? vCenter)
+    {
+        if (vCenter == null) return;
+
+        try
+        {
+            _logger.LogInformation("Deleting vCenter: {VCenterName}", vCenter.Name);
+
+            var result = MessageBox.Show(
+                $"Are you sure you want to delete vCenter '{vCenter.DisplayName}'?\n\nThis will also remove all associated clusters and hosts data.",
+                "Confirm Delete",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+
+            if (result == MessageBoxResult.Yes)
+            {
+                _context.VCenters.Remove(vCenter);
+                await _context.SaveChangesAsync();
+
+                await LoadVCentersAsync();
+                StatusMessage = $"vCenter '{vCenter.DisplayName}' deleted successfully";
+                
+                // Clear selection if deleted vCenter was selected
+                if (SelectedVCenter?.Id == vCenter.Id)
+                {
+                    SelectedVCenter = null;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to delete vCenter: {VCenterName}", vCenter.Name);
+            StatusMessage = $"Failed to delete vCenter: {ex.Message}";
+        }
+    }
+
+    /// <summary>
+    /// Command to test connection to a vCenter server
+    /// </summary>
+    [RelayCommand]
+    private async Task TestVCenterConnectionAsync(VCenter? vCenter)
+    {
+        if (vCenter == null) return;
+
+        try
+        {
+            IsLoading = true;
+            StatusMessage = $"Testing connection to {vCenter.DisplayName}...";
+
+            _logger.LogInformation("Testing connection to vCenter: {VCenterName}", vCenter.Name);
+
+            var credentials = _serviceProvider.GetRequiredService<ICredentialService>()
+                .DecryptCredentials(vCenter.EncryptedCredentials);
+
+            var testResult = await _vmwareService.TestConnectionAsync(vCenter.Url, credentials.Username, credentials.Password);
+
+            if (testResult.IsSuccessful)
+            {
+                StatusMessage = $"Connection to {vCenter.DisplayName} successful - {testResult.ResponseTime.TotalMilliseconds:F0}ms";
+            }
+            else
+            {
+                StatusMessage = $"Connection to {vCenter.DisplayName} failed: {testResult.ErrorMessage}";
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to test connection to vCenter: {VCenterName}", vCenter.Name);
+            StatusMessage = $"Failed to test connection to {vCenter.DisplayName}: {ex.Message}";
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    /// <summary>
     /// Command to open settings
     /// </summary>
     [RelayCommand]
-    private void Settings()
+    private async Task SettingsAsync()
     {
         try
         {
             _logger.LogInformation("Opening settings dialog");
-            // TODO: Implement settings dialog
-            StatusMessage = "Settings dialog - Coming Soon";
+
+            var settingsWindow = _serviceProvider.GetRequiredService<SettingsWindow>();
+            settingsWindow.ShowDialog();
         }
         catch (Exception ex)
         {

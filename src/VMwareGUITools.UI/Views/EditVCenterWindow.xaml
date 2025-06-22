@@ -1,0 +1,223 @@
+<Window x:Class="VMwareGUITools.UI.Views.EditVCenterWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+        Title="Edit vCenter Server" 
+        Height="600" Width="500"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        TextElement.Foreground="{DynamicResource MaterialDesignBody}"
+        TextElement.FontWeight="Regular"
+        TextElement.FontSize="13"
+        TextOptions.TextFormattingMode="Ideal"
+        TextOptions.TextRenderingMode="Auto"
+        Background="{DynamicResource MaterialDesignPaper}"
+        FontFamily="{DynamicResource MaterialDesignFont}">
+
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <materialDesign:ColorZone Grid.Row="0" 
+                                  Mode="PrimaryMid" 
+                                  Padding="16,12">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                
+                <materialDesign:PackIcon Grid.Column="0"
+                                         Kind="ServerEdit" 
+                                         Height="32" Width="32"
+                                         VerticalAlignment="Center"
+                                         Foreground="White"
+                                         Margin="0,0,12,0"/>
+                
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock Text="Edit vCenter Server"
+                               FontSize="20"
+                               FontWeight="Medium"
+                               Foreground="White"/>
+                    <TextBlock Text="Modify vCenter Server settings"
+                               FontSize="12"
+                               Foreground="White"
+                               Opacity="0.8"/>
+                </StackPanel>
+            </Grid>
+        </materialDesign:ColorZone>
+
+        <!-- Form Content -->
+        <ScrollViewer Grid.Row="1" 
+                      VerticalScrollBarVisibility="Auto"
+                      Padding="24">
+            <StackPanel>
+                
+                <!-- Basic Information -->
+                <TextBlock Text="Basic Information"
+                           FontSize="16"
+                           FontWeight="Medium"
+                           Margin="0,0,0,8"/>
+
+                <TextBox materialDesign:HintAssist.Hint="Display Name"
+                         Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
+                         Style="{StaticResource MaterialDesignFloatingHintTextBox}"
+                         materialDesign:ValidationAssist.UsePopup="True"
+                         Margin="0,0,0,16"/>
+
+                <TextBox materialDesign:HintAssist.Hint="vCenter Server URL (https://vcenter.company.com)"
+                         Text="{Binding Url, UpdateSourceTrigger=PropertyChanged}"
+                         Style="{StaticResource MaterialDesignFloatingHintTextBox}"
+                         materialDesign:ValidationAssist.UsePopup="True"
+                         Margin="0,0,0,16"/>
+
+                <!-- Credentials -->
+                <TextBlock Text="Credentials"
+                           FontSize="16"
+                           FontWeight="Medium"
+                           Margin="0,24,0,8"/>
+
+                <TextBox materialDesign:HintAssist.Hint="Username (administrator@vsphere.local)"
+                         Text="{Binding Username, UpdateSourceTrigger=PropertyChanged}"
+                         Style="{StaticResource MaterialDesignFloatingHintTextBox}"
+                         materialDesign:ValidationAssist.UsePopup="True"
+                         Margin="0,0,0,16"/>
+
+                <PasswordBox materialDesign:HintAssist.Hint="Password"
+                             materialDesign:PasswordBoxAssist.Password="{Binding Password, UpdateSourceTrigger=PropertyChanged}"
+                             Style="{StaticResource MaterialDesignFloatingHintPasswordBox}"
+                             materialDesign:ValidationAssist.UsePopup="True"
+                             Margin="0,0,0,16"/>
+
+                <!-- Options -->
+                <TextBlock Text="Options"
+                           FontSize="16"
+                           FontWeight="Medium"
+                           Margin="0,24,0,8"/>
+
+                <CheckBox Content="Enable automatic discovery"
+                          IsChecked="{Binding EnableAutoDiscovery}"
+                          Margin="0,8"/>
+
+                <CheckBox Content="Test connection on save"
+                          IsChecked="{Binding TestOnSave}"
+                          Margin="0,8"/>
+
+                <!-- Test Connection -->
+                <Grid Margin="0,16,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Button Grid.Column="0"
+                            Content="Test Connection"
+                            Command="{Binding TestConnectionCommand}"
+                            Style="{StaticResource MaterialDesignOutlinedButton}"
+                            HorizontalAlignment="Left"
+                            IsEnabled="{Binding CanTestConnection}"/>
+
+                    <ProgressBar Grid.Column="1"
+                                 Style="{StaticResource MaterialDesignCircularProgressBar}"
+                                 Value="0"
+                                 IsIndeterminate="True"
+                                 Width="24" Height="24"
+                                 Margin="16,0,0,0"
+                                 Visibility="{Binding IsTesting, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                </Grid>
+
+                <!-- Test Result -->
+                <Border Background="{DynamicResource MaterialDesignChipBackground}"
+                        CornerRadius="4"
+                        Padding="12,8"
+                        Margin="0,8,0,0"
+                        Visibility="{Binding ShowTestResult, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <materialDesign:PackIcon Grid.Column="0"
+                                                 VerticalAlignment="Top"
+                                                 Margin="0,0,12,0">
+                            <materialDesign:PackIcon.Style>
+                                <Style TargetType="materialDesign:PackIcon">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding TestResult.IsSuccessful}" Value="True">
+                                            <Setter Property="Kind" Value="CheckCircle"/>
+                                            <Setter Property="Foreground" Value="{StaticResource SuccessBrush}"/>
+                                        </DataTrigger>  
+                                        <DataTrigger Binding="{Binding TestResult.IsSuccessful}" Value="False">
+                                            <Setter Property="Kind" Value="AlertCircle"/>
+                                            <Setter Property="Foreground" Value="{StaticResource ErrorBrush}"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </materialDesign:PackIcon.Style>
+                        </materialDesign:PackIcon>
+
+                        <StackPanel Grid.Column="1">
+                            <TextBlock FontWeight="Medium">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding TestResult.IsSuccessful}" Value="True">
+                                                <Setter Property="Text" Value="Connection Successful"/>
+                                                <Setter Property="Foreground" Value="{StaticResource SuccessBrush}"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding TestResult.IsSuccessful}" Value="False">
+                                                <Setter Property="Text" Value="Connection Failed"/>
+                                                <Setter Property="Foreground" Value="{StaticResource ErrorBrush}"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                            
+                            <TextBlock Text="{Binding TestResultMessage}"
+                                       FontSize="12"
+                                       TextWrapping="Wrap"
+                                       Margin="0,4,0,0"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Action Buttons -->
+        <Border Grid.Row="2" 
+                BorderBrush="{DynamicResource MaterialDesignDivider}"
+                BorderThickness="0,1,0,0"
+                Padding="24,16">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <Button Grid.Column="1"
+                        Content="Cancel"
+                        Command="{Binding CancelCommand}"
+                        Style="{StaticResource MaterialDesignFlatButton}"
+                        Margin="8,0"/>
+
+                <Button Grid.Column="2"
+                        Content="Save Changes"
+                        Command="{Binding SaveCommand}"
+                        Style="{StaticResource MaterialDesignRaisedButton}"
+                        IsDefault="True"
+                        Margin="8,0,0,0"/>
+            </Grid>
+        </Border>
+    </Grid>
+</Window> 

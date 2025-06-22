@@ -8,6 +8,13 @@ namespace VMwareGUITools.UI.Views;
 /// </summary>
 public partial class MainWindow : Window
 {
+    // Default constructor for XAML instantiation
+    public MainWindow()
+    {
+        InitializeComponent();
+        // DataContext will be set later when created through DI
+    }
+
     public MainWindow(MainWindowViewModel viewModel)
     {
         InitializeComponent();
