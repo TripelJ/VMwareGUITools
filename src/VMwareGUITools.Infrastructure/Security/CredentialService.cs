@@ -1,3 +1,4 @@
+using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -8,6 +9,7 @@ namespace VMwareGUITools.Infrastructure.Security;
 /// <summary>
 /// Implementation of credential service using Windows DPAPI for encryption
 /// </summary>
+[SupportedOSPlatform("windows")]
 public class CredentialService : ICredentialService
 {
     private readonly ILogger<CredentialService> _logger;

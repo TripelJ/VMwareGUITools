@@ -55,7 +55,7 @@
         <ScrollViewer Grid.Row="1" 
                       VerticalScrollBarVisibility="Auto"
                       Padding="24">
-            <StackPanel Spacing="16">
+            <StackPanel>
                 
                 <!-- Basic Information -->
                 <TextBlock Text="Basic Information"
@@ -66,12 +66,14 @@
                 <TextBox materialDesign:HintAssist.Hint="Display Name"
                          Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
                          Style="{StaticResource MaterialDesignFloatingHintTextBox}"
-                         materialDesign:ValidationAssist.UsePopup="True"/>
+                         materialDesign:ValidationAssist.UsePopup="True"
+                         Margin="0,0,0,16"/>
 
                 <TextBox materialDesign:HintAssist.Hint="vCenter Server URL (https://vcenter.company.com)"
                          Text="{Binding Url, UpdateSourceTrigger=PropertyChanged}"
                          Style="{StaticResource MaterialDesignFloatingHintTextBox}"
-                         materialDesign:ValidationAssist.UsePopup="True"/>
+                         materialDesign:ValidationAssist.UsePopup="True"
+                         Margin="0,0,0,16"/>
 
                 <!-- Credentials -->
                 <TextBlock Text="Credentials"
@@ -82,12 +84,14 @@
                 <TextBox materialDesign:HintAssist.Hint="Username (administrator@vsphere.local)"
                          Text="{Binding Username, UpdateSourceTrigger=PropertyChanged}"
                          Style="{StaticResource MaterialDesignFloatingHintTextBox}"
-                         materialDesign:ValidationAssist.UsePopup="True"/>
+                         materialDesign:ValidationAssist.UsePopup="True"
+                         Margin="0,0,0,16"/>
 
                 <PasswordBox materialDesign:HintAssist.Hint="Password"
                              materialDesign:PasswordBoxAssist.Password="{Binding Password, UpdateSourceTrigger=PropertyChanged}"
                              Style="{StaticResource MaterialDesignFloatingHintPasswordBox}"
-                             materialDesign:ValidationAssist.UsePopup="True"/>
+                             materialDesign:ValidationAssist.UsePopup="True"
+                             Margin="0,0,0,16"/>
 
                 <!-- Options -->
                 <TextBlock Text="Options"

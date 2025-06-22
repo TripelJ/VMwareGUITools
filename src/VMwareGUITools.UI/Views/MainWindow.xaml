@@ -326,7 +326,7 @@
                                 </TabItem>
                                 <TabItem Header="Checks">
                                     <Grid Margin="16">
-                                        <TextBlock Text="Health & Configuration Checks - Coming Soon"
+                                        <TextBlock Text="Health &amp; Configuration Checks - Coming Soon"
                                                    VerticalAlignment="Center"
                                                    HorizontalAlignment="Center"
                                                    FontSize="16"
