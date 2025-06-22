@@ -32,7 +32,7 @@ public class CheckCategory
     /// <summary>
     /// Gets the count of enabled check definitions in this category
     /// </summary>
-    public int EnabledCheckCount => CheckDefinitions?.Count(c => c.Enabled) ?? 0;
+    public int EnabledCheckCount => CheckDefinitions?.Count(c => c.IsEnabled) ?? 0;
 }
 
 /// <summary>
