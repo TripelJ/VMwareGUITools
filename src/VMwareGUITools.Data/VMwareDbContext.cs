@@ -63,7 +63,7 @@ public class VMwareDbContext : DbContext
             entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
             entity.Property(e => e.IpAddress).IsRequired().HasMaxLength(45);
             entity.Property(e => e.MoId).IsRequired().HasMaxLength(50);
-            entity.Property(e => e.Type).HasConversion<string>();
+            entity.Property(e => e.HostType).HasConversion<string>();
             
             entity.HasOne(e => e.Cluster)
                 .WithMany(c => c.Hosts)
@@ -138,11 +138,11 @@ public class VMwareDbContext : DbContext
                 
             entity.HasOne(e => e.CheckDefinition)
                 .WithMany(c => c.CheckResults)
-                .HasForeignKey(e => e.CheckId)
+                .HasForeignKey(e => e.CheckDefinitionId)
                 .OnDelete(DeleteBehavior.Cascade);
                 
-            entity.HasIndex(e => new { e.HostId, e.CheckId, e.Timestamp });
-            entity.HasIndex(e => e.Timestamp);
+            entity.HasIndex(e => new { e.HostId, e.CheckDefinitionId, e.ExecutedAt });
+            entity.HasIndex(e => e.ExecutedAt);
         });
 
         // Seed default data
