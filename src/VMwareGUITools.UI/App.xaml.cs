@@ -25,6 +25,12 @@ public partial class App : Application
 {
     private IHost? _host;
 
+    public App()
+    {
+        // Prevent WPF from automatically creating a window
+        ShutdownMode = ShutdownMode.OnExplicitShutdown;
+    }
+
     protected override async void OnStartup(StartupEventArgs e)
     {
         // Initialize Serilog
@@ -51,7 +57,12 @@ public partial class App : Application
             var mainWindow = _host.Services.GetRequiredService<MainWindow>();
             mainWindow.Show();
 
-            base.OnStartup(e);
+            // Now that we have our main window, set shutdown mode to close when main window closes
+            ShutdownMode = ShutdownMode.OnMainWindowClose;
+            MainWindow = mainWindow;
+
+            // Important: Don't call base.OnStartup(e) as it might trigger default window creation
+            // base.OnStartup(e);
         }
         catch (Exception ex)
         {
