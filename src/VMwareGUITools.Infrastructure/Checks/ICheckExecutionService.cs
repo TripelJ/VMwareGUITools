@@ -55,26 +55,5 @@ public interface ICheckExecutionService
     Task<CheckValidationResult> ValidateCheckAsync(CheckDefinition checkDefinition, Host sampleHost, VCenter vCenter, CancellationToken cancellationToken = default);
 }
 
-/// <summary>
-/// Represents a check execution request
-/// </summary>
-public class CheckExecution
-{
-    public Host Host { get; set; } = null!;
-    public CheckDefinition CheckDefinition { get; set; } = null!;
-    public VCenter VCenter { get; set; } = null!;
-    public bool IsManualRun { get; set; } = false;
-    public DateTime ScheduledAt { get; set; } = DateTime.UtcNow;
-}
 
-/// <summary>
-/// Represents the result of a check validation
-/// </summary>
-public class CheckValidationResult
-{
-    public bool IsValid { get; set; }
-    public string? ErrorMessage { get; set; }
-    public List<string> Warnings { get; set; } = new List<string>();
-    public TimeSpan ExecutionTime { get; set; }
-    public string? SampleOutput { get; set; }
 } 

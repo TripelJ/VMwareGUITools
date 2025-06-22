@@ -32,6 +32,7 @@ public class VCenter
 
     // Navigation properties
     public virtual ICollection<Cluster> Clusters { get; set; } = new List<Cluster>();
+    public virtual ICollection<Host> Hosts { get; set; } = new List<Host>();
 
     /// <summary>
     /// Gets a display-friendly identifier for this vCenter

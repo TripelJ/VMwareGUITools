@@ -26,6 +26,26 @@ public class CheckValidationResult
     public TimeSpan ValidationTime { get; set; }
 
     /// <summary>
+    /// Time taken to execute the check
+    /// </summary>
+    public TimeSpan ExecutionTime { get; set; }
+
+    /// <summary>
+    /// Error message if validation failed
+    /// </summary>
+    public string ErrorMessage { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Sample output from validation execution
+    /// </summary>
+    public string SampleOutput { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Validation warnings
+    /// </summary>
+    public List<string> Warnings { get; set; } = new List<string>();
+
+    /// <summary>
     /// Sample execution result if validation included execution test
     /// </summary>
     public CheckExecutionResult? SampleResult { get; set; }

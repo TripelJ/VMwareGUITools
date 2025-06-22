@@ -70,6 +70,11 @@ public class VMwareDbContext : DbContext
                 .HasForeignKey(e => e.ClusterId)
                 .OnDelete(DeleteBehavior.Cascade);
                 
+            entity.HasOne(e => e.VCenter)
+                .WithMany(v => v.Hosts)
+                .HasForeignKey(e => e.VCenterId)
+                .OnDelete(DeleteBehavior.Cascade);
+                
             entity.HasOne(e => e.Profile)
                 .WithMany(p => p.Hosts)
                 .HasForeignKey(e => e.ProfileId)

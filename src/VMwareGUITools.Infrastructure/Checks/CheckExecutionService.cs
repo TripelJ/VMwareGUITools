@@ -68,7 +68,7 @@ public class CheckExecutionService : ICheckExecutionService
             }
 
             // Get the appropriate check engine
-            if (!_checkEngines.TryGetValue(checkDefinition.ExecutionType, out var engine))
+            if (!_checkEngines.TryGetValue(checkDefinition.ExecutionType.ToString(), out var engine))
             {
                 result.Status = CheckStatus.Failed;
                 result.Output = $"No engine available for execution type: {checkDefinition.ExecutionType}";
@@ -86,7 +86,7 @@ public class CheckExecutionService : ICheckExecutionService
             // Map execution result to check result
             result.Status = executionResult.IsSuccess ? CheckStatus.Passed : CheckStatus.Failed;
             result.Output = executionResult.Output;
-            result.ErrorMessage = executionResult.ErrorMessage;
+            result.ErrorMessage = executionResult.ErrorMessage ?? string.Empty;
             result.ExecutionTime = executionResult.ExecutionTime;
             result.RawData = executionResult.RawData;
 
@@ -152,7 +152,7 @@ public class CheckExecutionService : ICheckExecutionService
 
             // Get host profile
             var hostProfile = await _dbContext.HostProfiles
-                .FirstOrDefaultAsync(hp => hp.Name == host.HostType, cancellationToken);
+                .FirstOrDefaultAsync(hp => hp.Name == host.HostType.ToString(), cancellationToken);
 
             if (hostProfile == null)
             {
@@ -311,7 +311,7 @@ public class CheckExecutionService : ICheckExecutionService
             }
 
             // Get the appropriate check engine
-            if (!_checkEngines.TryGetValue(checkDefinition.ExecutionType, out var engine))
+            if (!_checkEngines.TryGetValue(checkDefinition.ExecutionType.ToString(), out var engine))
             {
                 result.IsValid = false;
                 result.ErrorMessage = $"No engine available for execution type: {checkDefinition.ExecutionType}";
@@ -322,7 +322,7 @@ public class CheckExecutionService : ICheckExecutionService
             var executionResult = await engine.ValidateAsync(sampleHost, checkDefinition, vCenter, cancellationToken);
 
             result.IsValid = executionResult.IsSuccess;
-            result.ErrorMessage = executionResult.ErrorMessage;
+            result.ErrorMessage = executionResult.ErrorMessage ?? string.Empty;
             result.SampleOutput = executionResult.Output;
             result.ExecutionTime = executionResult.ExecutionTime;
 
@@ -348,8 +348,7 @@ public class CheckExecutionService : ICheckExecutionService
     private bool IsCheckDefinitionValid(CheckDefinition checkDefinition)
     {
         if (string.IsNullOrWhiteSpace(checkDefinition.Name) ||
-            string.IsNullOrWhiteSpace(checkDefinition.Script) ||
-            string.IsNullOrWhiteSpace(checkDefinition.ExecutionType))
+            string.IsNullOrWhiteSpace(checkDefinition.Script))
         {
             return false;
         }

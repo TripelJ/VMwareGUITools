@@ -47,6 +47,7 @@ public class Host
 
     // Navigation properties
     public virtual Cluster Cluster { get; set; } = null!;
+    public virtual VCenter VCenter { get; set; } = null!;
     public virtual HostProfile? Profile { get; set; }
     public virtual ICollection<CheckResult> CheckResults { get; set; } = new List<CheckResult>();
 

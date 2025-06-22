@@ -5,6 +5,7 @@ using Quartz;
 using VMwareGUITools.Core.Models;
 using VMwareGUITools.Data;
 using VMwareGUITools.Infrastructure.Checks;
+using CheckExecution = VMwareGUITools.Core.Models.CheckExecution;
 
 namespace VMwareGUITools.Infrastructure.Scheduling;
 
@@ -83,7 +84,7 @@ public class CheckExecutionJob : IJob
                     {
                         // Execute all checks for the host based on its profile
                         var hostProfile = await dbContext.HostProfiles
-                            .FirstOrDefaultAsync(hp => hp.Name == host.HostType, context.CancellationToken);
+                            .FirstOrDefaultAsync(hp => hp.Name == host.HostType.ToString(), context.CancellationToken);
 
                         if (hostProfile != null)
                         {
@@ -126,7 +127,7 @@ public class CheckExecutionJob : IJob
                     foreach (var host in clusterHosts)
                     {
                         var hostProfile = await dbContext.HostProfiles
-                            .FirstOrDefaultAsync(hp => hp.Name == host.HostType, context.CancellationToken);
+                            .FirstOrDefaultAsync(hp => hp.Name == host.HostType.ToString(), context.CancellationToken);
 
                         if (hostProfile != null)
                         {
