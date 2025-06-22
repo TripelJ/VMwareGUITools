@@ -25,13 +25,17 @@ public class CheckDefinition
     [Required]
     public string ScriptPath { get; set; } = string.Empty;
 
+    public string Script { get; set; } = string.Empty;
+
     public string Parameters { get; set; } = "{}"; // JSON object for parameters
 
     public string Thresholds { get; set; } = "{}"; // JSON object for thresholds
 
+    public string? ThresholdCriteria { get; set; }
+
     public CheckSeverity DefaultSeverity { get; set; } = CheckSeverity.Warning;
 
-    public bool Enabled { get; set; } = true;
+    public bool IsEnabled { get; set; } = true;
 
     public int TimeoutSeconds { get; set; } = 300; // 5 minutes default
 
@@ -96,6 +100,11 @@ public class CheckDefinition
         });
         UpdatedAt = DateTime.UtcNow;
     }
+
+    /// <summary>
+    /// Gets whether this check has threshold criteria defined
+    /// </summary>
+    public bool HasThreshold => !string.IsNullOrEmpty(ThresholdCriteria) || GetThresholds().Count > 0;
 }
 
 /// <summary>

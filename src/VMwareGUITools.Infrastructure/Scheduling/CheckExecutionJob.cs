@@ -1,6 +1,8 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Quartz;
+using VMwareGUITools.Core.Models;
 using VMwareGUITools.Data;
 using VMwareGUITools.Infrastructure.Checks;
 

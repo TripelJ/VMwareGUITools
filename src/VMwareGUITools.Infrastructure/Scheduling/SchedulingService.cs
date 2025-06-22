@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Quartz;
+using Quartz.Impl.Matchers;
 using VMwareGUITools.Core.Models;
 using VMwareGUITools.Data;
 

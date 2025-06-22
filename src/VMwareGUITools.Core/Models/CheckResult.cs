@@ -13,11 +13,11 @@ public class CheckResult
     public int HostId { get; set; }
 
     [Required]
-    public int CheckId { get; set; }
+    public int CheckDefinitionId { get; set; }
 
-    public DateTime Timestamp { get; set; } = DateTime.UtcNow;
+    public DateTime ExecutedAt { get; set; } = DateTime.UtcNow;
 
-    public CheckStatus Status { get; set; } = CheckStatus.Unknown;
+    public CheckStatus Status { get; set; } = CheckStatus.Pending;
 
     public string Output { get; set; } = string.Empty;
 
@@ -25,7 +25,9 @@ public class CheckResult
 
     public string ErrorMessage { get; set; } = string.Empty;
 
-    public int ExecutionTimeMs { get; set; } = 0;
+    public TimeSpan ExecutionTime { get; set; } = TimeSpan.Zero;
+
+    public string? RawData { get; set; }
 
     public bool IsManualRun { get; set; } = false;
 
@@ -58,7 +60,7 @@ public class CheckResult
     /// <summary>
     /// Gets whether this result indicates a problem that requires attention
     /// </summary>
-    public bool RequiresAttention => Status == CheckStatus.Critical || Status == CheckStatus.Warning;
+    public bool RequiresAttention => Status == CheckStatus.Critical || Status == CheckStatus.Warning || Status == CheckStatus.Failed;
 
     /// <summary>
     /// Gets a friendly display of the execution time
@@ -67,9 +69,9 @@ public class CheckResult
     {
         get
         {
-            if (ExecutionTimeMs < 1000) return $"{ExecutionTimeMs}ms";
-            if (ExecutionTimeMs < 60000) return $"{ExecutionTimeMs / 1000.0:F1}s";
-            return $"{ExecutionTimeMs / 60000.0:F1}min";
+            if (ExecutionTime.TotalMilliseconds < 1000) return $"{ExecutionTime.TotalMilliseconds:F0}ms";
+            if (ExecutionTime.TotalSeconds < 60) return $"{ExecutionTime.TotalSeconds:F1}s";
+            return $"{ExecutionTime.TotalMinutes:F1}min";
         }
     }
 }
@@ -79,8 +81,9 @@ public class CheckResult
 /// </summary>
 public enum CheckStatus
 {
-    Unknown,
-    Success,
+    Pending,
+    Passed,
+    Failed,
     Warning,
     Critical,
     Error,

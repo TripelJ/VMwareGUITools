@@ -13,6 +13,9 @@ public class Host
     public int ClusterId { get; set; }
 
     [Required]
+    public int VCenterId { get; set; }
+
+    [Required]
     [StringLength(100)]
     public string Name { get; set; } = string.Empty;
 
@@ -24,7 +27,11 @@ public class Host
     [StringLength(50)]
     public string MoId { get; set; } = string.Empty;
 
-    public HostType Type { get; set; } = HostType.Standard;
+    [Required]
+    [StringLength(100)]
+    public string ClusterName { get; set; } = string.Empty;
+
+    public HostType HostType { get; set; } = HostType.Standard;
 
     public int? ProfileId { get; set; }
 
@@ -53,14 +60,15 @@ public class Host
             if (CheckResults == null || !CheckResults.Any()) return HealthStatus.Unknown;
             
             var latestResults = CheckResults
-                .Where(r => r.Timestamp > DateTime.UtcNow.AddHours(-24))
+                .Where(r => r.ExecutedAt > DateTime.UtcNow.AddHours(-24))
                 .ToList();
             
             if (!latestResults.Any()) return HealthStatus.Stale;
             
             if (latestResults.Any(r => r.Status == CheckStatus.Critical)) return HealthStatus.Critical;
             if (latestResults.Any(r => r.Status == CheckStatus.Warning)) return HealthStatus.Warning;
-            if (latestResults.All(r => r.Status == CheckStatus.Success)) return HealthStatus.Healthy;
+            if (latestResults.Any(r => r.Status == CheckStatus.Failed)) return HealthStatus.Critical;
+            if (latestResults.All(r => r.Status == CheckStatus.Passed)) return HealthStatus.Healthy;
             
             return HealthStatus.Unknown;
         }

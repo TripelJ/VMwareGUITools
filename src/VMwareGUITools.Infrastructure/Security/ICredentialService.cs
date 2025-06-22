@@ -32,6 +32,13 @@ public interface ICredentialService
     /// </summary>
     /// <param name="useMachineScope">If true, uses machine-level encryption; otherwise user-level</param>
     void SetEncryptionScope(bool useMachineScope);
+
+    /// <summary>
+    /// Asynchronously decrypts the provided encrypted credentials
+    /// </summary>
+    /// <param name="encryptedCredentials">The encrypted credential string</param>
+    /// <returns>VCenterCredentials object containing decrypted credentials</returns>
+    Task<VCenterCredentials> DecryptCredentialsAsync(string encryptedCredentials);
 }
 
 /// <summary>

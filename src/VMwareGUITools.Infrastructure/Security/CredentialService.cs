@@ -113,6 +113,19 @@ public class CredentialService : ICredentialService
             useMachineScope ? "LocalMachine" : "CurrentUser");
     }
 
+    public Task<VCenterCredentials> DecryptCredentialsAsync(string encryptedCredentials)
+    {
+        return Task.Run(() =>
+        {
+            var (username, password) = DecryptCredentials(encryptedCredentials);
+            return new VCenterCredentials 
+            { 
+                Username = username, 
+                Password = password 
+            };
+        });
+    }
+
     /// <summary>
     /// Creates a VCenterCredentials object from username and password with optional domain parsing
     /// </summary>
