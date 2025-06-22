@@ -118,7 +118,6 @@ public partial class App : Application
         // Scheduling Services with Quartz.NET
         services.AddQuartz(q =>
         {
-            q.UseMicrosoftDependencyInjection();
             q.UseSimpleTypeLoader();
             q.UseInMemoryStore();
             q.UseDefaultThreadPool(tp =>

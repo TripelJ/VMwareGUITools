@@ -39,7 +39,6 @@ public class Program
             // Add Quartz.NET
             builder.Services.AddQuartz(q =>
             {
-                q.UseMicrosoftDependencyInjection();
                 q.UseSimpleTypeLoader();
                 q.UseInMemoryStore();
                 q.UseDefaultThreadPool(tp =>
