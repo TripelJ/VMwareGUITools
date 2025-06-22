@@ -42,6 +42,9 @@ public partial class MainWindowViewModel : ObservableObject
     private bool _isPowerCLIAvailable = false;
 
     [ObservableProperty]
+    private bool _isDatabaseConnected = false;
+
+    [ObservableProperty]
     private bool _isLoading = false;
 
     public MainWindowViewModel(
@@ -155,6 +158,7 @@ public partial class MainWindowViewModel : ObservableObject
 
             await LoadVCentersAsync();
             await CheckPowerCLIAsync();
+            await CheckDatabaseConnectivityAsync();
 
             StatusMessage = "Data refreshed successfully";
         }
@@ -304,9 +308,9 @@ public partial class MainWindowViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Initialize the view model
+    /// Initialize the view model and load data
     /// </summary>
-    private async Task InitializeAsync()
+    public async Task InitializeAsync()
     {
         try
         {
@@ -314,6 +318,7 @@ public partial class MainWindowViewModel : ObservableObject
 
             await LoadVCentersAsync();
             await CheckPowerCLIAsync();
+            await CheckDatabaseConnectivityAsync();
 
             StatusMessage = "Application initialized successfully";
         }
@@ -372,6 +377,31 @@ public partial class MainWindowViewModel : ObservableObject
         {
             _logger.LogError(ex, "Failed to check PowerCLI availability");
             IsPowerCLIAvailable = false;
+        }
+    }
+
+    /// <summary>
+    /// Check database connectivity
+    /// </summary>
+    private async Task CheckDatabaseConnectivityAsync()
+    {
+        try
+        {
+            _logger.LogDebug("Checking database connectivity");
+            
+            // Test database connection by trying to access the database
+            await _context.Database.CanConnectAsync();
+            
+            // Verify we can actually query the database
+            var connectionTest = await _context.VCenters.Take(1).CountAsync();
+            
+            IsDatabaseConnected = true;
+            _logger.LogDebug("Database connectivity: Connected");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to check database connectivity");
+            IsDatabaseConnected = false;
         }
     }
 

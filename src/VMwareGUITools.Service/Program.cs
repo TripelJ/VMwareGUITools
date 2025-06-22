@@ -1,3 +1,5 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -33,7 +35,7 @@ public class Program
             // Configure services
             if (OperatingSystem.IsWindows())
             {
-                ConfigureServices(builder.Services);
+                ConfigureServices(builder.Services, builder.Configuration);
             }
             
             // Add Windows Service support
@@ -77,10 +79,15 @@ public class Program
     }
     
     [SupportedOSPlatform("windows")]
-    private static void ConfigureServices(IServiceCollection services)
+    private static void ConfigureServices(IServiceCollection services, IConfiguration configuration)
     {
         // Database
-        services.AddDbContext<VMwareDbContext>();
+        services.AddDbContext<VMwareDbContext>(options =>
+        {
+            var connectionString = configuration.GetConnectionString("DefaultConnection") 
+                ?? "Data Source=vmware-gui-tools.db";
+            options.UseSqlite(connectionString);
+        });
         
         // Infrastructure services
         services.AddScoped<ICredentialService, CredentialService>();
