@@ -1,0 +1,192 @@
+using System.Windows;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Quartz;
+using Serilog;
+using VMwareGUITools.Data;
+using VMwareGUITools.Infrastructure.Checks;
+using VMwareGUITools.Infrastructure.Notifications;
+using VMwareGUITools.Infrastructure.PowerShell;
+using VMwareGUITools.Infrastructure.Scheduling;
+using VMwareGUITools.Infrastructure.Security;
+using VMwareGUITools.Infrastructure.VMware;
+using VMwareGUITools.UI.ViewModels;
+using VMwareGUITools.UI.Views;
+
+namespace VMwareGUITools.UI;
+
+/// <summary>
+/// Interaction logic for App.xaml
+/// </summary>
+public partial class App : Application
+{
+    private IHost? _host;
+
+    protected override async void OnStartup(StartupEventArgs e)
+    {
+        // Initialize Serilog
+        Log.Logger = new LoggerConfiguration()
+            .MinimumLevel.Debug()
+            .WriteTo.File("logs/vmware-gui-tools-.log", 
+                rollingInterval: RollingInterval.Day,
+                retainedFileCountLimit: 30)
+            .WriteTo.Console()
+            .CreateLogger();
+
+        try
+        {
+            // Build host with dependency injection
+            _host = CreateHostBuilder(e.Args).Build();
+
+            // Initialize database
+            await InitializeDatabaseAsync();
+
+            // Start the host
+            await _host.StartAsync();
+
+            // Show the main window
+            var mainWindow = _host.Services.GetRequiredService<MainWindow>();
+            mainWindow.Show();
+
+            base.OnStartup(e);
+        }
+        catch (Exception ex)
+        {
+            Log.Fatal(ex, "Application startup failed");
+            MessageBox.Show($"Application failed to start: {ex.Message}", "Startup Error", 
+                MessageBoxButton.OK, MessageBoxImage.Error);
+            Shutdown(1);
+        }
+    }
+
+    protected override async void OnExit(ExitEventArgs e)
+    {
+        if (_host != null)
+        {
+            await _host.StopAsync();
+            _host.Dispose();
+        }
+
+        Log.CloseAndFlush();
+        base.OnExit(e);
+    }
+
+    private static IHostBuilder CreateHostBuilder(string[] args) =>
+        Host.CreateDefaultBuilder(args)
+            .UseSerilog()
+            .ConfigureAppConfiguration((context, config) =>
+            {
+                config.AddJsonFile("appsettings.json", optional: true, reloadOnChange: true);
+                config.AddJsonFile($"appsettings.{context.HostingEnvironment.EnvironmentName}.json", optional: true);
+                config.AddEnvironmentVariables();
+                config.AddCommandLine(args);
+            })
+            .ConfigureServices((context, services) =>
+            {
+                ConfigureServices(services, context.Configuration);
+            });
+
+    private static void ConfigureServices(IServiceCollection services, IConfiguration configuration)
+    {
+        // Database
+        services.AddDbContext<VMwareDbContext>(options =>
+        {
+            var connectionString = configuration.GetConnectionString("DefaultConnection") 
+                ?? "Data Source=vmware-gui-tools.db";
+            options.UseSqlite(connectionString);
+        });
+
+        // PowerShell and PowerCLI Services
+        services.AddSingleton<IPowerShellService, PowerShellService>();
+        services.Configure<PowerShellOptions>(configuration.GetSection(PowerShellOptions.SectionName));
+
+        // Infrastructure Services
+        services.AddSingleton<ICredentialService, CredentialService>();
+        services.AddScoped<IVMwareConnectionService, VMwareConnectionService>();
+
+        // Check Engine Services
+        services.AddScoped<ICheckExecutionService, CheckExecutionService>();
+        services.AddScoped<ICheckEngine, PowerCLICheckEngine>();
+        services.Configure<CheckExecutionOptions>(configuration.GetSection(CheckExecutionOptions.SectionName));
+
+        // Notification Services
+        services.AddScoped<INotificationService, NotificationService>();
+
+        // Scheduling Services with Quartz.NET
+        services.AddQuartz(q =>
+        {
+            q.UseMicrosoftDependencyInjection();
+            q.UseSimpleTypeLoader();
+            q.UseInMemoryStore();
+            q.UseDefaultThreadPool(tp =>
+            {
+                tp.MaxConcurrency = 10;
+            });
+        });
+
+        services.AddQuartzHostedService(q => q.WaitForJobsToComplete = true);
+        services.AddScoped<ISchedulingService, SchedulingService>();
+
+        // ViewModels
+        services.AddTransient<MainWindowViewModel>();
+        services.AddTransient<VCenterListViewModel>();
+        services.AddTransient<AddVCenterViewModel>();
+        services.AddTransient<ClusterListViewModel>();
+        services.AddTransient<HostListViewModel>();
+        services.AddTransient<CheckResultsViewModel>();
+
+        // Views
+        services.AddSingleton<MainWindow>();
+        services.AddTransient<AddVCenterWindow>();
+        services.AddTransient<VCenterDetailsWindow>();
+
+        // Configuration
+        services.Configure<VMwareGUIToolsOptions>(configuration.GetSection("VMwareGUITools"));
+    }
+
+    private async Task InitializeDatabaseAsync()
+    {
+        try
+        {
+            using var scope = _host!.Services.CreateScope();
+            var context = scope.ServiceProvider.GetRequiredService<VMwareDbContext>();
+            
+            Log.Information("Initializing database...");
+            await context.Database.EnsureCreatedAsync();
+            
+            // Run any pending migrations
+            var pendingMigrations = await context.Database.GetPendingMigrationsAsync();
+            if (pendingMigrations.Any())
+            {
+                Log.Information("Applying {Count} pending migrations", pendingMigrations.Count());
+                await context.Database.MigrateAsync();
+            }
+            
+            Log.Information("Database initialized successfully");
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Failed to initialize database");
+            throw;
+        }
+    }
+}
+
+/// <summary>
+/// Configuration options for the VMware GUI Tools application
+/// </summary>
+public class VMwareGUIToolsOptions
+{
+    public const string SectionName = "VMwareGUITools";
+
+    public bool UseMachineLevelEncryption { get; set; } = false;
+    public int ConnectionTimeoutSeconds { get; set; } = 30;
+    public int DefaultCheckTimeoutSeconds { get; set; } = 300;
+    public bool EnableAutoDiscovery { get; set; } = true;
+    public string PowerCLIModulePath { get; set; } = string.Empty;
+    public string CheckScriptsPath { get; set; } = "Scripts";
+    public string ReportsPath { get; set; } = "Reports";
+} 

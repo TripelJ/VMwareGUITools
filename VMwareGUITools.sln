@@ -1,0 +1,67 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "VMwareGUITools.Core", "src\VMwareGUITools.Core\VMwareGUITools.Core.csproj", "{A1B2C3D4-E5F6-7890-ABCD-123456789ABC}"
+EndProject
+
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "VMwareGUITools.Data", "src\VMwareGUITools.Data\VMwareGUITools.Data.csproj", "{B2C3D4E5-F6G7-8901-BCDE-234567890BCD}"
+EndProject
+
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "VMwareGUITools.Infrastructure", "src\VMwareGUITools.Infrastructure\VMwareGUITools.Infrastructure.csproj", "{C3D4E5F6-G7H8-9012-CDEF-345678901CDE}"
+EndProject
+
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "VMwareGUITools.UI", "src\VMwareGUITools.UI\VMwareGUITools.UI.csproj", "{D4E5F6G7-H8I9-0123-DEF0-456789012DEF}"
+EndProject
+
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "VMwareGUITools.Service", "src\VMwareGUITools.Service\VMwareGUITools.Service.csproj", "{E5F6G7H8-I9J0-1234-EF01-567890123EF0}"
+EndProject
+
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{F6G7H8I9-J0K1-2345-F012-678901234F01}"
+EndProject
+
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "docs", "docs", "{G7H8I9J0-K1L2-3456-0123-789012345G02}"
+EndProject
+
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{A1B2C3D4-E5F6-7890-ABCD-123456789ABC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A1B2C3D4-E5F6-7890-ABCD-123456789ABC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A1B2C3D4-E5F6-7890-ABCD-123456789ABC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A1B2C3D4-E5F6-7890-ABCD-123456789ABC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B2C3D4E5-F6G7-8901-BCDE-234567890BCD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B2C3D4E5-F6G7-8901-BCDE-234567890BCD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B2C3D4E5-F6G7-8901-BCDE-234567890BCD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B2C3D4E5-F6G7-8901-BCDE-234567890BCD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C3D4E5F6-G7H8-9012-CDEF-345678901CDE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C3D4E5F6-G7H8-9012-CDEF-345678901CDE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C3D4E5F6-G7H8-9012-CDEF-345678901CDE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C3D4E5F6-G7H8-9012-CDEF-345678901CDE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D4E5F6G7-H8I9-0123-DEF0-456789012DEF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D4E5F6G7-H8I9-0123-DEF0-456789012DEF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D4E5F6G7-H8I9-0123-DEF0-456789012DEF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D4E5F6G7-H8I9-0123-DEF0-456789012DEF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E5F6G7H8-I9J0-1234-EF01-567890123EF0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E5F6G7H8-I9J0-1234-EF01-567890123EF0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E5F6G7H8-I9J0-1234-EF01-567890123EF0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E5F6G7H8-I9J0-1234-EF01-567890123EF0}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{A1B2C3D4-E5F6-7890-ABCD-123456789ABC} = {F6G7H8I9-J0K1-2345-F012-678901234F01}
+		{B2C3D4E5-F6G7-8901-BCDE-234567890BCD} = {F6G7H8I9-J0K1-2345-F012-678901234F01}
+		{C3D4E5F6-G7H8-9012-CDEF-345678901CDE} = {F6G7H8I9-J0K1-2345-F012-678901234F01}
+		{D4E5F6G7-H8I9-0123-DEF0-456789012DEF} = {F6G7H8I9-J0K1-2345-F012-678901234F01}
+		{E5F6G7H8-I9J0-1234-EF01-567890123EF0} = {F6G7H8I9-J0K1-2345-F012-678901234F01}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {12345678-1234-1234-1234-123456789012}
+	EndGlobalSection
+EndGlobal 

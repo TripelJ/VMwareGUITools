@@ -1,0 +1,11 @@
+<Window x:Class="VMwareGUITools.UI.Views.VCenterDetailsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="vCenter Details" Height="450" Width="800">
+    <Grid>
+        <TextBlock Text="vCenter Details - Coming Soon" 
+                   HorizontalAlignment="Center" 
+                   VerticalAlignment="Center"
+                   FontSize="18"/>
+    </Grid>
+</Window> 

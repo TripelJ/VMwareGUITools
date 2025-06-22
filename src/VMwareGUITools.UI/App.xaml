@@ -1,0 +1,29 @@
+<Application x:Class="VMwareGUITools.UI.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+             StartupUri="Views/MainWindow.xaml">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <!-- Material Design -->
+                <materialDesign:BundledTheme BaseTheme="Light" PrimaryColor="Blue" SecondaryColor="Orange" />
+                <ResourceDictionary Source="pack://application:,,,/MaterialDesignThemes.Wpf;component/Themes/MaterialDesignTheme.Defaults.xaml" />
+                
+                <!-- Custom Styles -->
+                <ResourceDictionary Source="Styles/CustomStyles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- Custom Brushes -->
+            <SolidColorBrush x:Key="VMwareBlueBrush" Color="#2D4F8C"/>
+            <SolidColorBrush x:Key="VMwareOrangeBrush" Color="#F47B20"/>
+            <SolidColorBrush x:Key="SuccessBrush" Color="#4CAF50"/>
+            <SolidColorBrush x:Key="WarningBrush" Color="#FF9800"/>
+            <SolidColorBrush x:Key="ErrorBrush" Color="#F44336"/>
+            <SolidColorBrush x:Key="InfoBrush" Color="#2196F3"/>
+
+            <!-- Status Converters -->
+            <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application> 
