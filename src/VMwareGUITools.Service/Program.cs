@@ -3,6 +3,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Quartz;
 using Serilog;
+using System.Runtime.Versioning;
 using VMwareGUITools.Data;
 using VMwareGUITools.Infrastructure.Checks;
 using VMwareGUITools.Infrastructure.Notifications;
@@ -73,6 +74,7 @@ public class Program
         }
     }
     
+    [SupportedOSPlatform("windows")]
     private static void ConfigureServices(IServiceCollection services)
     {
         // Database

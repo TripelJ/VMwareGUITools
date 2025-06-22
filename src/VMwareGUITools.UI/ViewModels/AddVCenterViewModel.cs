@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using VMwareGUITools.Core.Models;
 using VMwareGUITools.Data;
@@ -12,7 +13,7 @@ namespace VMwareGUITools.UI.ViewModels;
 /// <summary>
 /// View model for adding a new vCenter server
 /// </summary>
-public partial class AddVCenterViewModel : ObservableObject
+public partial class AddVCenterViewModel : ObservableValidator
 {
     private readonly ILogger<AddVCenterViewModel> _logger;
     private readonly VMwareDbContext _context;
