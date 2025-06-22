@@ -31,7 +31,13 @@ public partial class App : Application
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
     }
 
-    protected override async void OnStartup(StartupEventArgs e)
+    protected override void OnStartup(StartupEventArgs e)
+    {
+        // Don't call base.OnStartup(e) to prevent automatic window creation
+        OnStartupAsync(e);
+    }
+
+    private async void OnStartupAsync(StartupEventArgs e)
     {
         // Initialize Serilog
         Log.Logger = new LoggerConfiguration()
@@ -149,7 +155,7 @@ public partial class App : Application
         services.AddTransient<CheckResultsViewModel>();
 
         // Views
-        services.AddSingleton<MainWindow>();
+        services.AddTransient<MainWindow>();
         services.AddTransient<AddVCenterWindow>();
         services.AddTransient<VCenterDetailsWindow>();
 
