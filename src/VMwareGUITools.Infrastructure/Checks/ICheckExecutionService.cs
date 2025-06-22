@@ -53,7 +53,4 @@ public interface ICheckExecutionService
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Validation result</returns>
     Task<CheckValidationResult> ValidateCheckAsync(CheckDefinition checkDefinition, Host sampleHost, VCenter vCenter, CancellationToken cancellationToken = default);
-}
-
-
 } 
