@@ -89,7 +89,7 @@ public partial class SettingsViewModel : ObservableObject
             else
             {
                 // TODO: Show error message
-                _logger.LogWarning("PowerCLI test failed: {Error}", result.ErrorMessage);
+                _logger.LogWarning("PowerCLI test failed: {Error}", result.ErrorOutput);
             }
         }
         catch (Exception ex)

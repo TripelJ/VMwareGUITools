@@ -287,7 +287,7 @@ public partial class MainWindowViewModel : ObservableObject
     /// Command to open settings
     /// </summary>
     [RelayCommand]
-    private async Task SettingsAsync()
+    private void Settings()
     {
         try
         {

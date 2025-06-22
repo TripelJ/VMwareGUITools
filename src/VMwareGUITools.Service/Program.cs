@@ -31,7 +31,10 @@ public class Program
             var builder = Host.CreateApplicationBuilder(args);
             
             // Configure services
-            ConfigureServices(builder.Services);
+            if (OperatingSystem.IsWindows())
+            {
+                ConfigureServices(builder.Services);
+            }
             
             // Add Windows Service support
             builder.Services.AddWindowsService();
