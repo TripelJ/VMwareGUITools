@@ -35,6 +35,24 @@ public class HostProfile
     public virtual ICollection<Host> Hosts { get; set; } = new List<Host>();
 
     /// <summary>
+    /// Gets the list of enabled check IDs from the check configurations
+    /// </summary>
+    public List<int> EnabledCheckIds
+    {
+        get
+        {
+            try
+            {
+                return GetCheckConfigs().Select(c => c.CheckId).ToList();
+            }
+            catch
+            {
+                return new List<int>();
+            }
+        }
+    }
+
+    /// <summary>
     /// Gets the parsed check configurations from the JSON string
     /// </summary>
     public List<HostProfileCheckConfig> GetCheckConfigs()
