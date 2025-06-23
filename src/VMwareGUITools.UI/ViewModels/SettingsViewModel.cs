@@ -748,8 +748,8 @@ public partial class SettingsViewModel : ObservableObject
             message.AppendLine("   Install-Module VMware.PowerCLI -AllowClobber -Force");
             message.AppendLine();
             message.AppendLine("2. Or load specific compatible versions:");
-            message.AppendLine("   Import-Module VMware.VimAutomation.Common -RequiredVersion 13.2.0");
-            message.AppendLine("   Import-Module VMware.VimAutomation.Core -RequiredVersion 13.2.0");
+            message.AppendLine("   Import-Module VMware.VimAutomation.Common -RequiredVersion 13.4.0");
+            message.AppendLine("   Import-Module VMware.VimAutomation.Core -RequiredVersion 13.4.0");
             message.AppendLine();
             message.AppendLine("FOR EXECUTION POLICY ISSUES:");
             message.AppendLine("3. Set execution policy (as Administrator):");

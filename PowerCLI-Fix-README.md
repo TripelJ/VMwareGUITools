@@ -27,7 +27,7 @@ Execution policy fix script that:
 ## Common Issues Addressed
 
 ### 1. **Version Conflicts** (e.g., VMware.Vim v9.0 vs VMware.VimAutomation.Common v13.x)
-**Symptoms**: "Version conflict detected: VMware.Vim v9.0.0.24798382 is incompatible with VMware.VimAutomation.Common v13.3.0.24145081"
+**Symptoms**: "Version conflict detected: VMware.Vim v9.0.0.24798382 is incompatible with VMware.VimAutomation.Common v13.4.0.24145081"
 
 **Solutions**:
 ```powershell

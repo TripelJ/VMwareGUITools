@@ -148,7 +148,7 @@ The new service uses configuration from `appsettings.json`:
     "CommandTimeoutSeconds": 300,
     "IgnoreInvalidCertificates": true,
     "EnableVerboseLogging": false,
-    "PreferredPowerCLIVersion": ""
+    "PreferredPowerCLIVersion": "13.4.0"
   }
 }
 ```
