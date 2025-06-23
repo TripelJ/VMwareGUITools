@@ -547,4 +547,3 @@ public class PowerShellOptions
     public string PowerCLIModulePath { get; set; } = string.Empty;
     public bool EnableVerboseLogging { get; set; } = false;
 } 
-} 
