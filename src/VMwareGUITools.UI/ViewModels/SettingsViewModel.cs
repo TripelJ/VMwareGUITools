@@ -193,55 +193,12 @@ public partial class SettingsViewModel : ObservableObject
                         $result.Errors += 'Failed to check VMware modules: ' + $_.Exception.Message
                     }
 
-                    # Try to load PowerCLI core and get version with enhanced compatibility checking
+                    # Try to load PowerCLI core and get version
                     if ($result.PowerCLIInstalled) {
                         try {
-                            # Check for version compatibility issues
-                            $coreModules = Get-Module -ListAvailable -Name 'VMware.VimAutomation.Core' | Sort-Object Version -Descending
-                            $commonModules = Get-Module -ListAvailable -Name 'VMware.VimAutomation.Common' | Sort-Object Version -Descending
-                            $vimModules = Get-Module -ListAvailable -Name 'VMware.Vim' | Sort-Object Version -Descending
-                            
-                            $result.VersionAnalysis = [PSCustomObject]@{
-                                CoreVersions = $coreModules.Count
-                                CommonVersions = $commonModules.Count
-                                VimVersions = $vimModules.Count
-                                LatestCore = if ($coreModules) { $coreModules[0].Version.ToString() } else { 'None' }
-                                LatestCommon = if ($commonModules) { $commonModules[0].Version.ToString() } else { 'None' }
-                                LatestVim = if ($vimModules) { $vimModules[0].Version.ToString() } else { 'None' }
-                            }
-                            
-                            # Try to find compatible versions
-                            $loaded = $false
-                            foreach ($coreModule in $coreModules) {
-                                $majorMinor = "$($coreModule.Version.Major).$($coreModule.Version.Minor)"
-                                $compatibleCommon = $commonModules | Where-Object { 
-                                    "$($_.Version.Major).$($_.Version.Minor)" -eq $majorMinor 
-                                } | Select-Object -First 1
-                                
-                                if ($compatibleCommon) {
-                                    try {
-                                        # Remove any conflicting modules first
-                                        Get-Module | Where-Object { $_.Name -like '*VMware*' } | Remove-Module -Force -ErrorAction SilentlyContinue
-                                        
-                                        # Load compatible versions
-                                        Import-Module $compatibleCommon.Path -Force -ErrorAction Stop
-                                        Import-Module $coreModule.Path -Force -ErrorAction Stop
-                                        
-                                        $powerCLIVersion = Get-PowerCLIVersion -ErrorAction Stop
-                                        $result.PowerCLIVersion = $powerCLIVersion.ProductLine
-                                        $result.LoadedVersion = "Core v$($coreModule.Version), Common v$($compatibleCommon.Version)"
-                                        $loaded = $true
-                                        break
-                                    } catch {
-                                        $result.Errors += "Failed to load PowerCLI Core v$($coreModule.Version) with Common v$($compatibleCommon.Version): $($_.Exception.Message)"
-                                        continue
-                                    }
-                                }
-                            }
-                            
-                            if (-not $loaded) {
-                                $result.Errors += 'No compatible PowerCLI module versions found. Multiple versions may be causing conflicts.'
-                            }
+                            Import-Module VMware.VimAutomation.Core -ErrorAction Stop
+                            $powerCLIVersion = Get-PowerCLIVersion -ErrorAction Stop
+                            $result.PowerCLIVersion = $powerCLIVersion.ProductLine
                         } catch {
                             $result.Errors += 'Failed to load PowerCLI: ' + $_.Exception.Message
                         }
@@ -282,40 +239,7 @@ public partial class SettingsViewModel : ObservableObject
                         message.AppendLine($"PowerCLI Version: {powerCLIVersion}");
                     }
                     
-                    var loadedVersion = diagObj.Properties["LoadedVersion"]?.Value?.ToString();
-                    if (!string.IsNullOrEmpty(loadedVersion))
-                    {
-                        message.AppendLine($"Loaded Modules: {loadedVersion}");
-                    }
-                    
-                    // Show version analysis if available
-                    var versionAnalysis = diagObj.Properties["VersionAnalysis"]?.Value;
-                    if (versionAnalysis is PSObject versionObj)
-                    {
-                        message.AppendLine();
-                        message.AppendLine("Module Version Analysis:");
-                        message.AppendLine("-" + new string('-', 30));
-                        message.AppendLine($"  Core Modules Available: {versionObj.Properties["CoreVersions"]?.Value}");
-                        message.AppendLine($"  Common Modules Available: {versionObj.Properties["CommonVersions"]?.Value}");
-                        message.AppendLine($"  Vim Modules Available: {versionObj.Properties["VimVersions"]?.Value}");
-                        message.AppendLine($"  Latest Core Version: {versionObj.Properties["LatestCore"]?.Value}");
-                        message.AppendLine($"  Latest Common Version: {versionObj.Properties["LatestCommon"]?.Value}");
-                        message.AppendLine($"  Latest Vim Version: {versionObj.Properties["LatestVim"]?.Value}");
-                        
-                        // Check for version conflicts
-                        var coreVersions = int.Parse(versionObj.Properties["CoreVersions"]?.Value?.ToString() ?? "0");
-                        var commonVersions = int.Parse(versionObj.Properties["CommonVersions"]?.Value?.ToString() ?? "0");
-                        var vimVersions = int.Parse(versionObj.Properties["VimVersions"]?.Value?.ToString() ?? "0");
-                        
-                        if (coreVersions > 1 || commonVersions > 1 || vimVersions > 1)
-                        {
-                            message.AppendLine();
-                            message.AppendLine("⚠️  WARNING: Multiple VMware module versions detected!");
-                            message.AppendLine("   This can cause compatibility issues. Consider cleaning up:");
-                            message.AppendLine("   1. Uninstall all PowerCLI: Uninstall-Module VMware.PowerCLI -AllVersions -Force");
-                            message.AppendLine("   2. Reinstall latest: Install-Module VMware.PowerCLI -AllowClobber");
-                        }
-                    }
+
                     
                     message.AppendLine();
                     message.AppendLine("Execution Policies:");
