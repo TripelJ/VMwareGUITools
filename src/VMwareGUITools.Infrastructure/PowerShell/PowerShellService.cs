@@ -273,101 +273,221 @@ public class PowerShellService : IPowerShellService, IDisposable
             // Create runspace pool for better performance
             var initialSessionState = InitialSessionState.CreateDefault();
             
-            // Set execution policy for the session
+            // Set execution policy for the session to most permissive
             initialSessionState.ExecutionPolicy = Microsoft.PowerShell.ExecutionPolicy.Bypass;
             
             // Add additional PowerShell commands to handle execution policy
             initialSessionState.Commands.Add(new SessionStateCmdletEntry("Set-ExecutionPolicy", typeof(Microsoft.PowerShell.Commands.SetExecutionPolicyCommand), null));
 
+            // Import modules explicitly in the session state if they exist
+            try
+            {
+                var coreModule = "VMware.VimAutomation.Core";
+                if (System.Management.Automation.PowerShell.Create().AddCommand("Get-Module").AddParameter("ListAvailable").AddParameter("Name", coreModule).Invoke().Any())
+                {
+                    initialSessionState.ImportPSModule(new[] { coreModule, "VMware.VimAutomation.Common", "VMware.VimAutomation.Vds", "VMware.VimAutomation.Storage" });
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not pre-import PowerCLI modules in session state, will try runtime import");
+            }
+
             // Create runspace pool
             _runspacePool = RunspaceFactory.CreateRunspacePool(1, _options.MaxConcurrentSessions, initialSessionState, null);
             _runspacePool.Open();
 
-            // Test basic PowerShell functionality and set execution policy
+            // Enhanced initialization script with better error handling
             var initScript = @"
-                # Set execution policy for this session
+                # Comprehensive execution policy and module setup
                 try {
+                    # Set execution policy for this session at multiple scopes
                     Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force -ErrorAction SilentlyContinue
+                    Write-Output ""Process execution policy set to Bypass""
+                    
+                    # Check if we're running as admin and can set user policy
+                    $isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] ""Administrator"")
+                    if ($isAdmin) {
+                        try {
+                            Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force -ErrorAction SilentlyContinue
+                            Write-Output ""CurrentUser execution policy set to RemoteSigned""
+                        } catch {
+                            Write-Warning ""Could not set CurrentUser execution policy: $($_.Exception.Message)""
+                        }
+                    }
+                    
+                    # Report current policies
+                    $policies = @{}
+                    @('Process', 'CurrentUser', 'LocalMachine', 'MachinePolicy', 'UserPolicy') | ForEach-Object {
+                        try {
+                            $policies[$_] = Get-ExecutionPolicy -Scope $_ -ErrorAction SilentlyContinue
+                        } catch {
+                            $policies[$_] = ""Unable to read""
+                        }
+                    }
+                    
+                    Write-Output ""Current Execution Policies:""
+                    $policies.GetEnumerator() | ForEach-Object { Write-Output ""  $($_.Key): $($_.Value)"" }
+                    
+                    # Force reload PSModulePath to ensure all module paths are available
+                    $env:PSModulePath = [System.Environment]::GetEnvironmentVariable('PSModulePath', 'Machine') + ';' + [System.Environment]::GetEnvironmentVariable('PSModulePath', 'User')
+                    
+                    # Check PowerCLI installation location
+                    $powerCLIPaths = @()
+                    
+                    # Check common installation paths
+                    $commonPaths = @(
+                        ""${env:ProgramFiles}\WindowsPowerShell\Modules"",
+                        ""${env:ProgramFiles(x86)}\WindowsPowerShell\Modules"",
+                        ""${env:USERPROFILE}\Documents\WindowsPowerShell\Modules"",
+                        ""${env:ProgramFiles}\PowerShell\Modules"",
+                        ""${env:USERPROFILE}\Documents\PowerShell\Modules""
+                    )
+                    
+                    foreach ($path in $commonPaths) {
+                        if (Test-Path $path) {
+                            $coreModulePath = Join-Path $path ""VMware.VimAutomation.Core""
+                            if (Test-Path $coreModulePath) {
+                                $powerCLIPaths += $coreModulePath
+                            }
+                        }
+                    }
+                    
+                    Write-Output ""PowerCLI module paths found: $($powerCLIPaths -join ', ')""
+                    
+                    # Test basic functionality
+                    Get-Date | Out-Null
+                    Write-Output ""Basic PowerShell functionality confirmed""
+                    
+                    return [PSCustomObject]@{
+                        Success = $true
+                        ExecutionPolicies = $policies
+                        PowerCLIPaths = $powerCLIPaths
+                        IsAdmin = $isAdmin
+                    }
                 } catch {
-                    Write-Warning ""Could not set execution policy: $($_.Exception.Message)""
+                    return [PSCustomObject]@{
+                        Success = $false
+                        Error = $_.Exception.Message
+                        ExecutionPolicies = @{}
+                        PowerCLIPaths = @()
+                        IsAdmin = $false
+                    }
                 }
-                
-                # Test basic functionality
-                Get-Date
             ";
             
             var result = await ExecuteScriptAsync(initScript, timeoutSeconds: 30, cancellationToken: cancellationToken);
 
-            if (result.IsSuccess)
+            if (result.IsSuccess && result.Objects.Count > 0 && result.Objects[0] is PSObject psObj)
             {
-                // Test PowerCLI module availability with better error reporting
+                var success = bool.Parse(psObj.Properties["Success"]?.Value?.ToString() ?? "false");
+                var isAdmin = bool.Parse(psObj.Properties["IsAdmin"]?.Value?.ToString() ?? "false");
+                
+                _logger.LogInformation("PowerShell initialization success: {Success}, Running as admin: {IsAdmin}", success, isAdmin);
+                
+                if (!success)
+                {
+                    var error = psObj.Properties["Error"]?.Value?.ToString();
+                    _logger.LogError("PowerShell initialization failed: {Error}", error);
+                }
+                
+                // Now test PowerCLI module availability with enhanced loading
                 var moduleTestScript = @"
                     try {
-                        # Check current execution policy
-                        $currentPolicy = Get-ExecutionPolicy -Scope Process
-                        Write-Output ""Current execution policy (Process): $currentPolicy""
+                        # Force module path refresh
+                        $env:PSModulePath = [System.Environment]::GetEnvironmentVariable('PSModulePath', 'Machine') + ';' + [System.Environment]::GetEnvironmentVariable('PSModulePath', 'User')
                         
-                        $userPolicy = Get-ExecutionPolicy -Scope CurrentUser
-                        Write-Output ""Current execution policy (CurrentUser): $userPolicy""
+                        # Get all available modules to help debug
+                        $allModules = Get-Module -ListAvailable | Where-Object { $_.Name -like '*VMware*' } | Select-Object Name, Version, Path
                         
-                        $systemPolicy = Get-ExecutionPolicy -Scope LocalMachine
-                        Write-Output ""Current execution policy (LocalMachine): $systemPolicy""
-                        
-                        # Try to import VMware modules
-                        $modules = @('VMware.VimAutomation.Core', 'VMware.VimAutomation.Common')
+                        # Try to import VMware modules with various approaches
+                        $modules = @('VMware.VimAutomation.Core', 'VMware.VimAutomation.Common', 'VMware.VimAutomation.Vds', 'VMware.VimAutomation.Storage')
                         $moduleResults = @()
                         
                         foreach ($moduleName in $modules) {
                             try {
-                                $module = Get-Module -ListAvailable -Name $moduleName -ErrorAction Stop | Select-Object -First 1
-                                if ($module) {
-                                    Import-Module $moduleName -ErrorAction Stop
-                                    $moduleResults += ""$moduleName - Successfully loaded (Version: $($module.Version))""
+                                # First, try to find the module
+                                $availableModule = Get-Module -ListAvailable -Name $moduleName -ErrorAction SilentlyContinue | Select-Object -First 1
+                                if ($availableModule) {
+                                    try {
+                                        # Try to import with force
+                                        Import-Module $moduleName -Force -ErrorAction Stop
+                                        $loadedModule = Get-Module -Name $moduleName
+                                        if ($loadedModule) {
+                                            $moduleResults += ""$moduleName - Successfully loaded (Version: $($availableModule.Version), Path: $($availableModule.Path))""
+                                        } else {
+                                            $moduleResults += ""$moduleName - Import succeeded but module not found in session""
+                                        }
+                                    } catch {
+                                        # Try alternative import method
+                                        try {
+                                            Import-Module $availableModule.Path -Force -ErrorAction Stop
+                                            $moduleResults += ""$moduleName - Successfully loaded via path (Version: $($availableModule.Version))""
+                                        } catch {
+                                            $moduleResults += ""$moduleName - Failed to import: $($_.Exception.Message)""
+                                        }
+                                    }
                                 } else {
-                                    $moduleResults += ""$moduleName - Not found""
+                                    $moduleResults += ""$moduleName - Module not found in any module path""
                                 }
                             } catch {
-                                $moduleResults += ""$moduleName - Failed to load: $($_.Exception.Message)""
+                                $moduleResults += ""$moduleName - Error during module discovery: $($_.Exception.Message)""
+                            }
+                        }
+                        
+                        # Test a basic PowerCLI command if core module loaded
+                        $coreLoaded = Get-Module -Name 'VMware.VimAutomation.Core' -ErrorAction SilentlyContinue
+                        $testResult = $null
+                        if ($coreLoaded) {
+                            try {
+                                # Test with a simple command
+                                $testResult = Get-PowerCLIVersion -ErrorAction Stop
+                                $moduleResults += ""PowerCLI Version Test: Success - $($testResult.ProductLine)""
+                            } catch {
+                                $moduleResults += ""PowerCLI Version Test: Failed - $($_.Exception.Message)""
                             }
                         }
                         
                         return [PSCustomObject]@{
-                            Success = $true
-                            ExecutionPolicies = @{
-                                Process = $currentPolicy
-                                CurrentUser = $userPolicy
-                                LocalMachine = $systemPolicy
-                            }
+                            Success = ($coreLoaded -ne $null)
                             ModuleResults = $moduleResults
+                            AllVMwareModules = $allModules
+                            PowerCLIVersion = $testResult
+                            LoadedModules = (Get-Module | Where-Object { $_.Name -like '*VMware*' } | Select-Object Name, Version)
                         }
                     } catch {
                         return [PSCustomObject]@{
                             Success = $false
                             Error = $_.Exception.Message
-                            ExecutionPolicies = @{}
-                            ModuleResults = @()
+                            ModuleResults = @(""Critical error during module testing: $($_.Exception.Message)"")
+                            AllVMwareModules = @()
+                            PowerCLIVersion = $null
+                            LoadedModules = @()
                         }
                     }
                 ";
                 
                 var moduleResult = await ExecuteScriptAsync(moduleTestScript, timeoutSeconds: 60, cancellationToken: cancellationToken);
                 
-                if (moduleResult.IsSuccess && moduleResult.Objects.Count > 0 && moduleResult.Objects[0] is PSObject psObj)
+                if (moduleResult.IsSuccess && moduleResult.Objects.Count > 0 && moduleResult.Objects[0] is PSObject moduleObj)
                 {
-                    var success = bool.Parse(psObj.Properties["Success"]?.Value?.ToString() ?? "false");
-                    var moduleResultsArray = psObj.Properties["ModuleResults"]?.Value as object[];
+                    var moduleSuccess = bool.Parse(moduleObj.Properties["Success"]?.Value?.ToString() ?? "false");
+                    var moduleResultsArray = moduleObj.Properties["ModuleResults"]?.Value as object[];
                     var moduleStatuses = moduleResultsArray?.Cast<string>().ToArray() ?? Array.Empty<string>();
                     
+                    _logger.LogInformation("PowerCLI module test success: {Success}", moduleSuccess);
                     foreach (var moduleStatus in moduleStatuses)
                     {
                         _logger.LogInformation("PowerCLI Module Status: {ModuleStatus}", moduleStatus);
                     }
                     
-                    if (!success)
+                    if (!moduleSuccess)
                     {
-                        var error = psObj.Properties["Error"]?.Value?.ToString();
-                        _logger.LogError("PowerCLI initialization failed: {Error}", error);
-                        _logger.LogError("This usually indicates a PowerShell execution policy issue. Please run 'Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force' in PowerShell as an administrator.");
+                        var error = moduleObj.Properties["Error"]?.Value?.ToString();
+                        _logger.LogError("PowerCLI module testing failed: {Error}", error);
+                        _logger.LogError("Please ensure PowerCLI is installed. Run: Install-Module -Name VMware.PowerCLI -AllowClobber");
+                        _logger.LogError("If execution policy issues persist, run as administrator: Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope LocalMachine");
+                        return false;
                     }
                 }
 
@@ -378,14 +498,20 @@ public class PowerShellService : IPowerShellService, IDisposable
             else
             {
                 _logger.LogError("Failed to initialize PowerCLI session: {Error}", result.ErrorOutput);
-                _logger.LogError("This usually indicates a PowerShell execution policy issue. Please run 'Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force' in PowerShell.");
+                _logger.LogError("Common solutions:");
+                _logger.LogError("1. Run as administrator: Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope LocalMachine");
+                _logger.LogError("2. For current user only: Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser");
+                _logger.LogError("3. Install PowerCLI: Install-Module -Name VMware.PowerCLI -AllowClobber");
                 return false;
             }
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to initialize PowerCLI session");
-            _logger.LogError("This usually indicates a PowerShell execution policy issue. Please run 'Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force' in PowerShell.");
+            _logger.LogError("Common solutions:");
+            _logger.LogError("1. Run as administrator: Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope LocalMachine");
+            _logger.LogError("2. For current user only: Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser");
+            _logger.LogError("3. Install PowerCLI: Install-Module -Name VMware.PowerCLI -AllowClobber");
             return false;
         }
         finally
@@ -420,4 +546,5 @@ public class PowerShellOptions
     public int DefaultTimeoutSeconds { get; set; } = 300;
     public string PowerCLIModulePath { get; set; } = string.Empty;
     public bool EnableVerboseLogging { get; set; } = false;
+} 
 } 

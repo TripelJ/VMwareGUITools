@@ -4,7 +4,11 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Management.Automation;
+using System.Text;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
 using VMwareGUITools.Core.Models;
 using VMwareGUITools.Infrastructure.PowerShell;
 using VMwareGUITools.Data;
@@ -141,6 +145,255 @@ public partial class SettingsViewModel : ObservableObject
             });
             
             _logger.LogError(ex, "Failed to test PowerCLI configuration");
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    /// <summary>
+    /// Command to run comprehensive PowerShell diagnostics
+    /// </summary>
+    [RelayCommand]
+    private async Task RunPowerShellDiagnosticsAsync()
+    {
+        try
+        {
+            IsLoading = true;
+            _logger.LogInformation("Running PowerShell diagnostics...");
+
+            var diagnosticScript = @"
+                try {
+                    $result = [PSCustomObject]@{
+                        PowerShellVersion = $PSVersionTable.PSVersion.ToString()
+                        ExecutionPolicies = @{}
+                        ModulePaths = $env:PSModulePath -split ';'
+                        VMwareModules = @()
+                        PowerCLIInstalled = $false
+                        IsAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] 'Administrator')
+                        Errors = @()
+                    }
+
+                    # Get execution policies for all scopes
+                    @('Process', 'CurrentUser', 'LocalMachine', 'MachinePolicy', 'UserPolicy') | ForEach-Object {
+                        try {
+                            $result.ExecutionPolicies[$_] = Get-ExecutionPolicy -Scope $_ -ErrorAction SilentlyContinue
+                        } catch {
+                            $result.ExecutionPolicies[$_] = 'Error: ' + $_.Exception.Message
+                        }
+                    }
+
+                    # Check for VMware modules
+                    try {
+                        $vmwareModules = Get-Module -ListAvailable | Where-Object { $_.Name -like '*VMware*' }
+                        $result.VMwareModules = $vmwareModules | Select-Object Name, Version, Path
+                        $result.PowerCLIInstalled = ($vmwareModules | Where-Object { $_.Name -eq 'VMware.VimAutomation.Core' }) -ne $null
+                    } catch {
+                        $result.Errors += 'Failed to check VMware modules: ' + $_.Exception.Message
+                    }
+
+                    # Try to load PowerCLI core and get version
+                    if ($result.PowerCLIInstalled) {
+                        try {
+                            Import-Module VMware.VimAutomation.Core -ErrorAction Stop
+                            $powerCLIVersion = Get-PowerCLIVersion -ErrorAction Stop
+                            $result.PowerCLIVersion = $powerCLIVersion.ProductLine
+                        } catch {
+                            $result.Errors += 'Failed to load PowerCLI: ' + $_.Exception.Message
+                        }
+                    }
+
+                    return $result
+                } catch {
+                    return [PSCustomObject]@{
+                        Error = $_.Exception.Message
+                        PowerShellVersion = $PSVersionTable.PSVersion.ToString()
+                        ExecutionPolicies = @{}
+                        ModulePaths = @()
+                        VMwareModules = @()
+                        PowerCLIInstalled = $false
+                        IsAdmin = $false
+                        Errors = @($_.Exception.Message)
+                    }
+                }
+            ";
+
+            var psResult = await _powerShellService.ExecuteScriptAsync(diagnosticScript, timeoutSeconds: 60);
+            
+            var message = new StringBuilder();
+            message.AppendLine("PowerShell Diagnostic Results:");
+            message.AppendLine("=" + new string('=', 50));
+            
+            if (psResult.IsSuccess && psResult.Objects.Count > 0)
+            {
+                if (psResult.Objects[0] is PSObject diagObj)
+                {
+                    message.AppendLine($"PowerShell Version: {diagObj.Properties["PowerShellVersion"]?.Value}");
+                    message.AppendLine($"Running as Administrator: {diagObj.Properties["IsAdmin"]?.Value}");
+                    message.AppendLine($"PowerCLI Installed: {diagObj.Properties["PowerCLIInstalled"]?.Value}");
+                    
+                    var powerCLIVersion = diagObj.Properties["PowerCLIVersion"]?.Value?.ToString();
+                    if (!string.IsNullOrEmpty(powerCLIVersion))
+                    {
+                        message.AppendLine($"PowerCLI Version: {powerCLIVersion}");
+                    }
+                    
+                    message.AppendLine();
+                    message.AppendLine("Execution Policies:");
+                    message.AppendLine("-" + new string('-', 30));
+                    
+                    var policies = diagObj.Properties["ExecutionPolicies"]?.Value;
+                    if (policies is PSObject policiesObj)
+                    {
+                        foreach (var policy in policiesObj.Properties)
+                        {
+                            message.AppendLine($"  {policy.Name}: {policy.Value}");
+                        }
+                    }
+                    
+                    message.AppendLine();
+                    message.AppendLine("Module Paths:");
+                    message.AppendLine("-" + new string('-', 30));
+                    
+                    var modulePaths = diagObj.Properties["ModulePaths"]?.Value as object[];
+                    if (modulePaths != null)
+                    {
+                        foreach (var path in modulePaths)
+                        {
+                            message.AppendLine($"  {path}");
+                        }
+                    }
+                    
+                    message.AppendLine();
+                    message.AppendLine("VMware Modules Found:");
+                    message.AppendLine("-" + new string('-', 30));
+                    
+                    var vmwareModules = diagObj.Properties["VMwareModules"]?.Value as object[];
+                    if (vmwareModules != null && vmwareModules.Length > 0)
+                    {
+                        foreach (var module in vmwareModules)
+                        {
+                            if (module is PSObject moduleObj)
+                            {
+                                var name = moduleObj.Properties["Name"]?.Value;
+                                var version = moduleObj.Properties["Version"]?.Value;
+                                var path = moduleObj.Properties["Path"]?.Value;
+                                message.AppendLine($"  {name} (v{version})");
+                                message.AppendLine($"    Path: {path}");
+                            }
+                        }
+                    }
+                    else
+                    {
+                        message.AppendLine("  ❌ No VMware modules found!");
+                        message.AppendLine("  Install with: Install-Module -Name VMware.PowerCLI -AllowClobber");
+                    }
+                    
+                    var errors = diagObj.Properties["Errors"]?.Value as object[];
+                    if (errors != null && errors.Length > 0)
+                    {
+                        message.AppendLine();
+                        message.AppendLine("❌ Errors:");
+                        message.AppendLine("-" + new string('-', 30));
+                        foreach (var error in errors)
+                        {
+                            message.AppendLine($"  {error}");
+                        }
+                    }
+                }
+            }
+            else
+            {
+                message.AppendLine("❌ Failed to run diagnostics:");
+                message.AppendLine(psResult.ErrorOutput);
+            }
+            
+            message.AppendLine();
+            message.AppendLine("🔧 Common Solutions:");
+            message.AppendLine("-" + new string('-', 30));
+            message.AppendLine("1. Install PowerCLI:");
+            message.AppendLine("   Install-Module -Name VMware.PowerCLI -AllowClobber");
+            message.AppendLine();
+            message.AppendLine("2. Set execution policy (as Administrator):");
+            message.AppendLine("   Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope LocalMachine");
+            message.AppendLine();
+            message.AppendLine("3. Set execution policy (current user only):");
+            message.AppendLine("   Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser");
+            message.AppendLine();
+            message.AppendLine("4. Trust PowerShell Gallery (if needed):");
+            message.AppendLine("   Set-PSRepository -Name PSGallery -InstallationPolicy Trusted");
+
+            // Show results in a dialog
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                var diagWindow = new Window
+                {
+                    Title = "PowerShell Diagnostics",
+                    Width = 900,
+                    Height = 700,
+                    WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                    Owner = Application.Current.MainWindow
+                };
+
+                var textBox = new TextBox
+                {
+                    Text = message.ToString(),
+                    IsReadOnly = true,
+                    FontFamily = new FontFamily("Consolas"),
+                    FontSize = 11,
+                    TextWrapping = TextWrapping.Wrap,
+                    VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                    HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+                    Margin = new Thickness(10)
+                };
+
+                var copyButton = new Button
+                {
+                    Content = "📋 Copy to Clipboard",
+                    Margin = new Thickness(10, 0, 10, 10),
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                    VerticalAlignment = VerticalAlignment.Bottom,
+                    Padding = new Thickness(15, 5)
+                };
+
+                copyButton.Click += (s, e) =>
+                {
+                    try
+                    {
+                        Clipboard.SetText(message.ToString());
+                        MessageBox.Show("✅ Diagnostic information copied to clipboard!", "Copied", 
+                            MessageBoxButton.OK, MessageBoxImage.Information);
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show($"❌ Failed to copy to clipboard: {ex.Message}", "Error", 
+                            MessageBoxButton.OK, MessageBoxImage.Warning);
+                    }
+                };
+
+                var grid = new Grid();
+                grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+                grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+                Grid.SetRow(textBox, 0);
+                Grid.SetRow(copyButton, 1);
+
+                grid.Children.Add(textBox);
+                grid.Children.Add(copyButton);
+
+                diagWindow.Content = grid;
+                diagWindow.ShowDialog();
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "PowerShell diagnostics failed");
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                MessageBox.Show($"❌ PowerShell diagnostics failed: {ex.Message}", "Error", 
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            });
         }
         finally
         {

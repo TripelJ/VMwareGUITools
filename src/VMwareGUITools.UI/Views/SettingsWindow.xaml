@@ -120,6 +120,33 @@
                         <CheckBox Content="Enable verbose PowerShell logging"
                                   IsChecked="{Binding EnableVerboseLogging}"
                                   Margin="0,8"/>
+
+                        <!-- Diagnostics Section -->
+                        <Separator Margin="0,16"/>
+                        
+                        <TextBlock Text="Troubleshooting"
+                                   FontSize="14"
+                                   FontWeight="Medium"
+                                   Margin="0,16,0,8"/>
+                        
+                        <StackPanel Orientation="Horizontal" Margin="0,8">
+                            <Button Content="📋 Run PowerShell Diagnostics"
+                                    Command="{Binding RunPowerShellDiagnosticsCommand}"
+                                    Style="{StaticResource MaterialDesignRaisedButton}"
+                                    Margin="0,0,8,0"
+                                    ToolTip="Run comprehensive PowerShell and PowerCLI diagnostics to troubleshoot issues"/>
+                            
+                            <Button Content="🔄 Reinitialize PowerCLI"
+                                    Command="{Binding TestPowerCLICommand}"
+                                    Style="{StaticResource MaterialDesignOutlinedButton}"
+                                    ToolTip="Force reinitialize PowerCLI modules and test connectivity"/>
+                        </StackPanel>
+                        
+                        <TextBlock Text="💡 If you're experiencing PowerShell execution policy issues, use the diagnostics tool to get detailed troubleshooting information."
+                                   FontSize="11"
+                                   Foreground="{DynamicResource MaterialDesignBodyLight}"
+                                   TextWrapping="Wrap"
+                                   Margin="0,8,0,0"/>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
