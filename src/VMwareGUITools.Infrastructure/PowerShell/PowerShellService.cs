@@ -355,11 +355,12 @@ public class PowerShellService : IPowerShellService, IDisposable
                 if (moduleResult.IsSuccess && moduleResult.Objects.Count > 0 && moduleResult.Objects[0] is PSObject psObj)
                 {
                     var success = bool.Parse(psObj.Properties["Success"]?.Value?.ToString() ?? "false");
-                    var moduleResults = ((object[])psObj.Properties["ModuleResults"]?.Value)?.Cast<string>().ToArray() ?? Array.Empty<string>();
+                    var moduleResultsArray = psObj.Properties["ModuleResults"]?.Value as object[];
+                    var moduleStatuses = moduleResultsArray?.Cast<string>().ToArray() ?? Array.Empty<string>();
                     
-                    foreach (var moduleResult in moduleResults)
+                    foreach (var moduleStatus in moduleStatuses)
                     {
-                        _logger.LogInformation("PowerCLI Module Status: {ModuleStatus}", moduleResult);
+                        _logger.LogInformation("PowerCLI Module Status: {ModuleStatus}", moduleStatus);
                     }
                     
                     if (!success)
