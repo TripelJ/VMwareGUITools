@@ -134,7 +134,7 @@ public class PowerCLIDiagnostics
 
             var psResults = powerShell.Invoke();
             
-            if (psResults != null && psResults.Count > 0 && psResults[0] is Hashtable policies)
+            if (psResults != null && psResults.Count > 0 && psResults[0]?.BaseObject is Hashtable policies)
             {
                 var currentUserPolicy = policies["CurrentUser"]?.ToString();
                 var localMachinePolicy = policies["LocalMachine"]?.ToString();
@@ -189,10 +189,10 @@ public class PowerCLIDiagnostics
 
             var psResults = powerShell.Invoke();
             
-            if (psResults != null && psResults.Count > 0 && psResults[0] is Hashtable moduleInfo)
+            if (psResults != null && psResults.Count > 0 && psResults[0]?.BaseObject is Hashtable moduleInfo)
             {
-                var availableModules = ((object[])moduleInfo["Available"]).Cast<PSObject>().ToList();
-                var loadedModules = ((object[])moduleInfo["Loaded"]).Cast<PSObject>().ToList();
+                var availableModules = ((object[])moduleInfo["Available"])?.Cast<PSObject>().ToList() ?? new List<PSObject>();
+                var loadedModules = ((object[])moduleInfo["Loaded"])?.Cast<PSObject>().ToList() ?? new List<PSObject>();
 
                 if (!availableModules.Any(m => m.Properties["Name"]?.Value?.ToString() == "VMware.VimAutomation.Core"))
                 {
@@ -314,7 +314,7 @@ public class PowerCLIDiagnostics
 
             var psResults = powerShell.Invoke();
             
-            if (psResults != null && psResults.Count > 0 && psResults[0] is Hashtable versionTable)
+            if (psResults != null && psResults.Count > 0 && psResults[0]?.BaseObject is Hashtable versionTable)
             {
                 var psVersion = versionTable["PSVersion"]?.ToString();
                 var psEdition = versionTable["PSEdition"]?.ToString();
@@ -376,9 +376,9 @@ public class PowerCLIDiagnostics
 
             var psResults = powerShell.Invoke();
             
-            if (psResults != null && psResults.Count > 0 && psResults[0] is Hashtable testResult)
+            if (psResults != null && psResults.Count > 0 && psResults[0]?.BaseObject is Hashtable testResult)
             {
-                var success = (bool)testResult["Success"];
+                var success = (bool)(testResult["Success"] ?? false);
                 
                 if (success)
                 {
@@ -445,9 +445,9 @@ public class PowerCLIDiagnostics
 
             var psResults = powerShell.Invoke();
             
-            if (psResults != null && psResults.Count > 0 && psResults[0] is Hashtable networkInfo)
+            if (psResults != null && psResults.Count > 0 && psResults[0]?.BaseObject is Hashtable networkInfo)
             {
-                var success = (bool)networkInfo["Success"];
+                var success = (bool)(networkInfo["Success"] ?? false);
                 
                 if (success)
                 {
