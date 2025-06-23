@@ -21,5 +21,8 @@ public partial class SettingsWindow : Window
         
         // Subscribe to view model events
         viewModel.DialogResultRequested += (result) => DialogResult = result;
+        
+        // Refresh settings when window is loaded
+        Loaded += (sender, args) => viewModel.RefreshSettings();
     }
 } 

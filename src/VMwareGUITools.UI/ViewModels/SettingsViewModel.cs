@@ -7,6 +7,9 @@ using System.IO;
 using System.Windows;
 using VMwareGUITools.Core.Models;
 using VMwareGUITools.Infrastructure.PowerShell;
+using VMwareGUITools.Data;
+using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace VMwareGUITools.UI.ViewModels;
 
@@ -18,6 +21,7 @@ public partial class SettingsViewModel : ObservableObject
     private readonly ILogger<SettingsViewModel> _logger;
     private readonly IConfiguration _configuration;
     private readonly IPowerShellService _powerShellService;
+    private readonly VMwareDbContext _dbContext;
 
     [ObservableProperty]
     private string _powerShellExecutionPolicy = "RemoteSigned";
@@ -55,13 +59,23 @@ public partial class SettingsViewModel : ObservableObject
     public SettingsViewModel(
         ILogger<SettingsViewModel> logger,
         IConfiguration configuration,
-        IPowerShellService powerShellService)
+        IPowerShellService powerShellService,
+        VMwareDbContext dbContext)
     {
         _logger = logger;
         _configuration = configuration;
         _powerShellService = powerShellService;
+        _dbContext = dbContext;
 
         // Initialize with current configuration values
+        LoadCurrentSettings();
+    }
+
+    /// <summary>
+    /// Refresh settings when window is reopened
+    /// </summary>
+    public void RefreshSettings()
+    {
         LoadCurrentSettings();
     }
 
@@ -356,8 +370,85 @@ public partial class SettingsViewModel : ObservableObject
     /// </summary>
     private async Task SaveHostProfilesAsync()
     {
-        // TODO: Implement host profiles persistence
-        await Task.CompletedTask;
+        try
+        {
+            _logger.LogInformation("Saving host profile settings to database");
+
+            foreach (var hostProfileSetting in HostProfiles)
+            {
+                // Find existing host profile by name or create new one
+                var existingProfile = await _dbContext.HostProfiles
+                    .FirstOrDefaultAsync(hp => hp.Name == hostProfileSetting.Name);
+
+                if (existingProfile != null)
+                {
+                    // Update existing profile
+                    existingProfile.Description = hostProfileSetting.Description;
+                    existingProfile.Enabled = hostProfileSetting.IsEnabled;
+                    existingProfile.UpdatedAt = DateTime.UtcNow;
+
+                    // Create check configurations based on selected categories
+                    var checkConfigs = new List<HostProfileCheckConfig>();
+                    
+                    if (hostProfileSetting.HardwareHealthEnabled)
+                        checkConfigs.Add(new HostProfileCheckConfig { Category = "Hardware Health", CheckId = 1, AlertOnFailure = true });
+                    if (hostProfileSetting.NetworkConfigurationEnabled)
+                        checkConfigs.Add(new HostProfileCheckConfig { Category = "Network Configuration", CheckId = 2, AlertOnFailure = true });
+                    if (hostProfileSetting.StorageHealthEnabled)
+                        checkConfigs.Add(new HostProfileCheckConfig { Category = "Storage Health", CheckId = 3, AlertOnFailure = true });
+                    if (hostProfileSetting.SecuritySettingsEnabled)
+                        checkConfigs.Add(new HostProfileCheckConfig { Category = "Security Settings", CheckId = 4, AlertOnFailure = true });
+                    if (hostProfileSetting.VsanHealthEnabled)
+                        checkConfigs.Add(new HostProfileCheckConfig { Category = "vSAN Health", CheckId = 5, AlertOnFailure = true });
+                    if (hostProfileSetting.NsxConfigurationEnabled)
+                        checkConfigs.Add(new HostProfileCheckConfig { Category = "NSX Configuration", CheckId = 6, AlertOnFailure = true });
+
+                    existingProfile.SetCheckConfigs(checkConfigs);
+                }
+                else
+                {
+                    // Create new profile
+                    var newProfile = new HostProfile
+                    {
+                        Name = hostProfileSetting.Name,
+                        Description = hostProfileSetting.Description,
+                        Type = HostType.Standard,
+                        Enabled = hostProfileSetting.IsEnabled,
+                        IsDefault = false,
+                        CreatedAt = DateTime.UtcNow,
+                        UpdatedAt = DateTime.UtcNow
+                    };
+
+                    // Create check configurations based on selected categories
+                    var checkConfigs = new List<HostProfileCheckConfig>();
+                    
+                    if (hostProfileSetting.HardwareHealthEnabled)
+                        checkConfigs.Add(new HostProfileCheckConfig { Category = "Hardware Health", CheckId = 1, AlertOnFailure = true });
+                    if (hostProfileSetting.NetworkConfigurationEnabled)
+                        checkConfigs.Add(new HostProfileCheckConfig { Category = "Network Configuration", CheckId = 2, AlertOnFailure = true });
+                    if (hostProfileSetting.StorageHealthEnabled)
+                        checkConfigs.Add(new HostProfileCheckConfig { Category = "Storage Health", CheckId = 3, AlertOnFailure = true });
+                    if (hostProfileSetting.SecuritySettingsEnabled)
+                        checkConfigs.Add(new HostProfileCheckConfig { Category = "Security Settings", CheckId = 4, AlertOnFailure = true });
+                    if (hostProfileSetting.VsanHealthEnabled)
+                        checkConfigs.Add(new HostProfileCheckConfig { Category = "vSAN Health", CheckId = 5, AlertOnFailure = true });
+                    if (hostProfileSetting.NsxConfigurationEnabled)
+                        checkConfigs.Add(new HostProfileCheckConfig { Category = "NSX Configuration", CheckId = 6, AlertOnFailure = true });
+
+                    newProfile.SetCheckConfigs(checkConfigs);
+                    
+                    _dbContext.HostProfiles.Add(newProfile);
+                }
+            }
+
+            await _dbContext.SaveChangesAsync();
+            _logger.LogInformation("Host profile settings saved successfully");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to save host profile settings");
+            throw;
+        }
     }
 
     /// <summary>
@@ -435,12 +526,62 @@ public partial class SettingsViewModel : ObservableObject
             EnableScheduledChecks = schedulingSection.GetValue<bool>("Enabled", true);
             DefaultCheckSchedule = schedulingSection.GetValue<string>("DefaultCron") ?? "0 0 8 * * ?";
 
-            // Add default host profiles
-            AddDefaultHostProfiles();
+            // Load host profiles from database
+            LoadHostProfilesFromDatabase();
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to load current settings");
+            // Fallback to default profiles if database load fails
+            AddDefaultHostProfiles();
+        }
+    }
+
+    /// <summary>
+    /// Load host profiles from database
+    /// </summary>
+    private void LoadHostProfilesFromDatabase()
+    {
+        try
+        {
+            HostProfiles.Clear();
+            var dbProfiles = _dbContext.HostProfiles.ToList();
+
+            if (dbProfiles.Any())
+            {
+                foreach (var dbProfile in dbProfiles)
+                {
+                    var checkConfigs = dbProfile.GetCheckConfigs();
+                    var hostProfileSetting = new HostProfileSetting
+                    {
+                        Name = dbProfile.Name,
+                        Description = dbProfile.Description,
+                        IsEnabled = dbProfile.Enabled,
+                        HardwareHealthEnabled = checkConfigs.Any(c => c.Category == "Hardware Health"),
+                        NetworkConfigurationEnabled = checkConfigs.Any(c => c.Category == "Network Configuration"),
+                        StorageHealthEnabled = checkConfigs.Any(c => c.Category == "Storage Health"),
+                        SecuritySettingsEnabled = checkConfigs.Any(c => c.Category == "Security Settings"),
+                        VsanHealthEnabled = checkConfigs.Any(c => c.Category == "vSAN Health"),
+                        NsxConfigurationEnabled = checkConfigs.Any(c => c.Category == "NSX Configuration")
+                    };
+
+                    HostProfiles.Add(hostProfileSetting);
+                }
+
+                SelectedHostProfile = HostProfiles.FirstOrDefault();
+                _logger.LogInformation("Loaded {Count} host profiles from database", HostProfiles.Count);
+            }
+            else
+            {
+                // No profiles in database, add defaults
+                AddDefaultHostProfiles();
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to load host profiles from database");
+            // Fallback to default profiles
+            AddDefaultHostProfiles();
         }
     }
 
