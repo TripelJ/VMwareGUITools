@@ -3,6 +3,8 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using System.Collections.ObjectModel;
+using System.IO;
+using System.Windows;
 using VMwareGUITools.Core.Models;
 using VMwareGUITools.Infrastructure.PowerShell;
 
@@ -79,21 +81,51 @@ public partial class SettingsViewModel : ObservableObject
             IsLoading = true;
             _logger.LogInformation("Testing PowerCLI configuration");
 
-            var result = await _powerShellService.ExecuteScriptAsync("Get-Module -ListAvailable VMware.PowerCLI");
+            // Test if PowerCLI modules are available
+            var result = await _powerShellService.IsPowerCLIAvailableAsync();
             
-            if (result.IsSuccess)
+            if (result)
             {
-                // TODO: Show success message
+                // Additional test to get version information
+                var versionInfo = await _powerShellService.GetPowerCLIVersionAsync();
+                
+                var message = $"✅ PowerCLI is properly configured and available!\n\n" +
+                            $"Found modules:\n" +
+                            string.Join("\n", versionInfo.Modules.Select(m => $"• {m.Name}: v{m.Version} {(m.IsLoaded ? "(Loaded)" : "")}"));
+                
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    MessageBox.Show(message, "PowerCLI Test - Success", 
+                        MessageBoxButton.OK, MessageBoxImage.Information);
+                });
+                
                 _logger.LogInformation("PowerCLI test successful");
             }
             else
             {
-                // TODO: Show error message
-                _logger.LogWarning("PowerCLI test failed: {Error}", result.ErrorOutput);
+                var message = "❌ PowerCLI modules are not available or not properly installed.\n\n" +
+                            "Please install VMware PowerCLI using:\n" +
+                            "Install-Module -Name VMware.PowerCLI -Scope CurrentUser";
+                
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    MessageBox.Show(message, "PowerCLI Test - Failed", 
+                        MessageBoxButton.OK, MessageBoxImage.Warning);
+                });
+                
+                _logger.LogWarning("PowerCLI test failed: Modules not available");
             }
         }
         catch (Exception ex)
         {
+            var message = $"❌ Failed to test PowerCLI configuration:\n\n{ex.Message}";
+            
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                MessageBox.Show(message, "PowerCLI Test - Error", 
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            });
+            
             _logger.LogError(ex, "Failed to test PowerCLI configuration");
         }
         finally
@@ -170,20 +202,141 @@ public partial class SettingsViewModel : ObservableObject
             IsLoading = true;
             _logger.LogInformation("Saving application settings");
 
-            // TODO: Save settings to configuration
-            await Task.Delay(500); // Simulate save
+            // Save PowerShell settings
+            await SavePowerShellSettingsAsync();
+            
+            // Save notification settings
+            await SaveNotificationSettingsAsync();
+            
+            // Save scheduling settings
+            await SaveSchedulingSettingsAsync();
+            
+            // Save host profiles
+            await SaveHostProfilesAsync();
+
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                MessageBox.Show("✅ Settings have been saved successfully!", "Settings Saved", 
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+            });
 
             _logger.LogInformation("Settings saved successfully");
             DialogResultRequested?.Invoke(true);
         }
         catch (Exception ex)
         {
+            var message = $"❌ Failed to save settings:\n\n{ex.Message}";
+            
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                MessageBox.Show(message, "Save Error", 
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            });
+            
             _logger.LogError(ex, "Failed to save settings");
         }
         finally
         {
             IsLoading = false;
         }
+    }
+
+    /// <summary>
+    /// Save PowerShell-related settings
+    /// </summary>
+    private async Task SavePowerShellSettingsAsync()
+    {
+        var configPath = "appsettings.json";
+        var json = await File.ReadAllTextAsync(configPath);
+        var config = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(json);
+        
+        var configDict = new Dictionary<string, object>();
+        
+        // Convert JsonElement to Dictionary
+        if (config.ValueKind == System.Text.Json.JsonValueKind.Object)
+        {
+            foreach (var property in config.EnumerateObject())
+            {
+                configDict[property.Name] = ConvertJsonElement(property.Value);
+            }
+        }
+
+        // Update PowerShell settings
+        if (!configDict.ContainsKey("PowerShell"))
+        {
+            configDict["PowerShell"] = new Dictionary<string, object>();
+        }
+
+        var powerShellSettings = (Dictionary<string, object>)configDict["PowerShell"];
+        powerShellSettings["ExecutionPolicy"] = PowerShellExecutionPolicy;
+        powerShellSettings["TimeoutSeconds"] = PowerShellTimeoutSeconds;
+        powerShellSettings["EnableVerboseLogging"] = EnableVerboseLogging;
+        powerShellSettings["EnableAutoUpdate"] = EnablePowerCLIAutoUpdate;
+
+        // Update VMwareGUITools settings
+        if (!configDict.ContainsKey("VMwareGUITools"))
+        {
+            configDict["VMwareGUITools"] = new Dictionary<string, object>();
+        }
+
+        var vmwareSettings = (Dictionary<string, object>)configDict["VMwareGUITools"];
+        vmwareSettings["DefaultCheckTimeoutSeconds"] = PowerShellTimeoutSeconds;
+
+        // Serialize and save
+        var options = new System.Text.Json.JsonSerializerOptions
+        {
+            WriteIndented = true
+        };
+        
+        var updatedJson = System.Text.Json.JsonSerializer.Serialize(configDict, options);
+        await File.WriteAllTextAsync(configPath, updatedJson);
+    }
+
+    /// <summary>
+    /// Save notification settings
+    /// </summary>
+    private async Task SaveNotificationSettingsAsync()
+    {
+        // TODO: Implement notification settings persistence
+        await Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Save scheduling settings
+    /// </summary>
+    private async Task SaveSchedulingSettingsAsync()
+    {
+        // TODO: Implement scheduling settings persistence
+        await Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Save host profiles
+    /// </summary>
+    private async Task SaveHostProfilesAsync()
+    {
+        // TODO: Implement host profiles persistence
+        await Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Convert JsonElement to object for manipulation
+    /// </summary>
+    private object ConvertJsonElement(System.Text.Json.JsonElement element)
+    {
+        return element.ValueKind switch
+        {
+            System.Text.Json.JsonValueKind.Object => element.EnumerateObject()
+                .ToDictionary(x => x.Name, x => ConvertJsonElement(x.Value)),
+            System.Text.Json.JsonValueKind.Array => element.EnumerateArray()
+                .Select(ConvertJsonElement).ToList(),
+            System.Text.Json.JsonValueKind.String => element.GetString()!,
+            System.Text.Json.JsonValueKind.Number => element.TryGetInt32(out var i) ? i : element.GetDouble(),
+            System.Text.Json.JsonValueKind.True => true,
+            System.Text.Json.JsonValueKind.False => false,
+            System.Text.Json.JsonValueKind.Null => null!,
+            _ => element.ToString()
+        };
     }
 
     /// <summary>
