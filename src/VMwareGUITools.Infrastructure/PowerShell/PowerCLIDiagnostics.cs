@@ -1,6 +1,7 @@
 using System.Management.Automation;
 using System.Management.Automation.Runspaces;
 using Microsoft.Extensions.Logging;
+using System.Collections;
 
 namespace VMwareGUITools.Infrastructure.PowerShell;
 
@@ -117,7 +118,7 @@ public class PowerCLIDiagnostics
         }
     }
 
-    private async Task CheckExecutionPolicyAsync(PowerCLIDiagnosticResult result)
+    private Task CheckExecutionPolicyAsync(PowerCLIDiagnosticResult result)
     {
         try
         {
@@ -168,9 +169,10 @@ public class PowerCLIDiagnostics
                 Recommendation = "Manually check PowerShell execution policy"
             });
         }
+        return Task.CompletedTask;
     }
 
-    private async Task CheckPowerCLIModulesAsync(PowerCLIDiagnosticResult result)
+    private Task CheckPowerCLIModulesAsync(PowerCLIDiagnosticResult result)
     {
         try
         {
@@ -242,9 +244,10 @@ public class PowerCLIDiagnostics
                 Recommendation = "Manually verify PowerCLI installation"
             });
         }
+        return Task.CompletedTask;
     }
 
-    private async Task CheckModuleVersionConflictsAsync(PowerCLIDiagnosticResult result)
+    private Task CheckModuleVersionConflictsAsync(PowerCLIDiagnosticResult result)
     {
         try
         {
@@ -299,9 +302,10 @@ public class PowerCLIDiagnostics
                 Recommendation = "Manually check for PowerCLI version conflicts"
             });
         }
+        return Task.CompletedTask;
     }
 
-    private async Task CheckPowerShellVersionAsync(PowerCLIDiagnosticResult result)
+    private Task CheckPowerShellVersionAsync(PowerCLIDiagnosticResult result)
     {
         try
         {
@@ -345,9 +349,10 @@ public class PowerCLIDiagnostics
                 Recommendation = "Manually verify PowerShell version compatibility"
             });
         }
+        return Task.CompletedTask;
     }
 
-    private async Task TestBasicPowerCLIFunctionalityAsync(PowerCLIDiagnosticResult result)
+    private Task TestBasicPowerCLIFunctionalityAsync(PowerCLIDiagnosticResult result)
     {
         try
         {
@@ -408,9 +413,10 @@ public class PowerCLIDiagnostics
                 Recommendation = "Check PowerCLI installation and configuration"
             });
         }
+        return Task.CompletedTask;
     }
 
-    private async Task CheckNetworkSettingsAsync(PowerCLIDiagnosticResult result)
+    private Task CheckNetworkSettingsAsync(PowerCLIDiagnosticResult result)
     {
         try
         {
@@ -463,12 +469,13 @@ public class PowerCLIDiagnostics
                 Recommendation = "Manually verify network and proxy configuration"
             });
         }
+        return Task.CompletedTask;
     }
 
-    private async Task<bool> RepairIssueAsync(DiagnosticIssue issue)
+    private Task<bool> RepairIssueAsync(DiagnosticIssue issue)
     {
         if (string.IsNullOrEmpty(issue.FixCommand))
-            return false;
+            return Task.FromResult(false);
 
         try
         {
@@ -477,12 +484,12 @@ public class PowerCLIDiagnostics
             
             var psResults = powerShell.Invoke();
             
-            return powerShell.Streams.Error.Count == 0;
+            return Task.FromResult(powerShell.Streams.Error.Count == 0);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to execute repair command: {Command}", issue.FixCommand);
-            return false;
+            return Task.FromResult(false);
         }
     }
 }
@@ -521,4 +528,15 @@ public enum IssueSeverity
     Medium,
     High,
     Critical
+}
+
+/// <summary>
+/// Result of PowerCLI repair operations
+/// </summary>
+public class PowerCLIRepairResult
+{
+    public bool IsSuccessful { get; set; }
+    public List<string> ActionsPerformed { get; set; } = new();
+    public List<string> Issues { get; set; } = new();
+    public string? ErrorMessage { get; set; }
 } 

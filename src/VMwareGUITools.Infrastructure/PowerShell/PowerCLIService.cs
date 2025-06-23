@@ -581,7 +581,7 @@ try {
 }";
     }
 
-    private async Task<PowerCLIValidationResult> CheckExecutionPolicyAsync()
+    private Task<PowerCLIValidationResult> CheckExecutionPolicyAsync()
     {
         var result = new PowerCLIValidationResult();
         
@@ -610,7 +610,7 @@ try {
             result.Issues.Add($"Failed to check execution policy: {ex.Message}");
         }
 
-        return result;
+        return Task.FromResult(result);
     }
 
     private async Task<PowerCLIValidationResult> CheckPowerCLIModulesAsync()
@@ -642,7 +642,7 @@ try {
         return result;
     }
 
-    private async Task<PowerCLIValidationResult> TestBasicFunctionalityAsync()
+    private Task<PowerCLIValidationResult> TestBasicFunctionalityAsync()
     {
         var result = new PowerCLIValidationResult();
         
@@ -666,10 +666,10 @@ try {
             result.Issues.Add($"PowerCLI basic functionality test failed: {ex.Message}");
         }
 
-        return result;
+        return Task.FromResult(result);
     }
 
-    private async Task<PowerCLIRepairResult> RepairExecutionPolicyAsync()
+    private Task<PowerCLIRepairResult> RepairExecutionPolicyAsync()
     {
         var result = new PowerCLIRepairResult();
         
@@ -694,10 +694,10 @@ try {
             result.Issues.Add($"Failed to repair execution policy: {ex.Message}");
         }
 
-        return result;
+        return Task.FromResult(result);
     }
 
-    private async Task<PowerCLIRepairResult> RepairModulesAsync()
+    private Task<PowerCLIRepairResult> RepairModulesAsync()
     {
         var result = new PowerCLIRepairResult();
         
@@ -736,7 +736,7 @@ try {
             result.Issues.Add($"Failed to repair PowerCLI modules: {ex.Message}");
         }
 
-        return result;
+        return Task.FromResult(result);
     }
 
     private string ExtractMeaningfulError(ErrorRecord error)
