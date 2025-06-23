@@ -191,8 +191,8 @@ public class PowerCLIDiagnostics
             
             if (psResults != null && psResults.Count > 0 && psResults[0]?.BaseObject is Hashtable moduleInfo)
             {
-                var availableModules = ((object[])moduleInfo["Available"])?.Cast<PSObject>().ToList() ?? new List<PSObject>();
-                var loadedModules = ((object[])moduleInfo["Loaded"])?.Cast<PSObject>().ToList() ?? new List<PSObject>();
+                var availableModules = (moduleInfo["Available"] as object[])?.Cast<PSObject>().ToList() ?? new List<PSObject>();
+                var loadedModules = (moduleInfo["Loaded"] as object[])?.Cast<PSObject>().ToList() ?? new List<PSObject>();
 
                 if (!availableModules.Any(m => m.Properties["Name"]?.Value?.ToString() == "VMware.VimAutomation.Core"))
                 {
