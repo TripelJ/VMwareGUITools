@@ -154,11 +154,11 @@
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding TestResult.IsSuccessful}" Value="True">
                                             <Setter Property="Kind" Value="CheckCircle"/>
-                                            <Setter Property="Foreground" Value="{DynamicResource SuccessBrush}"/>
+                                            <Setter Property="Foreground" Value="#4CAF50"/>
                                         </DataTrigger>  
                                         <DataTrigger Binding="{Binding TestResult.IsSuccessful}" Value="False">
                                             <Setter Property="Kind" Value="AlertCircle"/>
-                                            <Setter Property="Foreground" Value="{DynamicResource ErrorBrush}"/>
+                                            <Setter Property="Foreground" Value="#F44336"/>
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
@@ -172,11 +172,11 @@
                                         <Style.Triggers>
                                             <DataTrigger Binding="{Binding TestResult.IsSuccessful}" Value="True">
                                                 <Setter Property="Text" Value="Connection Successful"/>
-                                                <Setter Property="Foreground" Value="{DynamicResource SuccessBrush}"/>
+                                                <Setter Property="Foreground" Value="#4CAF50"/>
                                             </DataTrigger>
                                             <DataTrigger Binding="{Binding TestResult.IsSuccessful}" Value="False">
                                                 <Setter Property="Text" Value="Connection Failed"/>
-                                                <Setter Property="Foreground" Value="{DynamicResource ErrorBrush}"/>
+                                                <Setter Property="Foreground" Value="#F44336"/>
                                             </DataTrigger>
                                         </Style.Triggers>
                                     </Style>

@@ -242,10 +242,10 @@
                                         <Style TargetType="materialDesign:PackIcon">
                                             <Style.Triggers>
                                                 <DataTrigger Binding="{Binding IsPowerCLIAvailable}" Value="True">
-                                                    <Setter Property="Foreground" Value="{DynamicResource SuccessBrush}"/>
+                                                    <Setter Property="Foreground" Value="{StaticResource SuccessBrush}"/>
                                                 </DataTrigger>
                                                 <DataTrigger Binding="{Binding IsPowerCLIAvailable}" Value="False">
-                                                    <Setter Property="Foreground" Value="{DynamicResource ErrorBrush}"/>
+                                                    <Setter Property="Foreground" Value="{StaticResource ErrorBrush}"/>
                                                 </DataTrigger>
                                             </Style.Triggers>
                                         </Style>
@@ -260,11 +260,11 @@
                                             <Style.Triggers>
                                                 <DataTrigger Binding="{Binding IsPowerCLIAvailable}" Value="True">
                                                     <Setter Property="Text" Value="PowerCLI Available"/>
-                                                    <Setter Property="Foreground" Value="{DynamicResource SuccessBrush}"/>
+                                                    <Setter Property="Foreground" Value="{StaticResource SuccessBrush}"/>
                                                 </DataTrigger>
                                                 <DataTrigger Binding="{Binding IsPowerCLIAvailable}" Value="False">
                                                     <Setter Property="Text" Value="PowerCLI Not Found"/>
-                                                    <Setter Property="Foreground" Value="{DynamicResource ErrorBrush}"/>
+                                                    <Setter Property="Foreground" Value="{StaticResource ErrorBrush}"/>
                                                 </DataTrigger>
                                             </Style.Triggers>
                                         </Style>
@@ -293,10 +293,10 @@
                                         <Style TargetType="materialDesign:PackIcon">
                                             <Style.Triggers>
                                                 <DataTrigger Binding="{Binding IsDatabaseConnected}" Value="True">
-                                                    <Setter Property="Foreground" Value="{DynamicResource SuccessBrush}"/>
+                                                    <Setter Property="Foreground" Value="{StaticResource SuccessBrush}"/>
                                                 </DataTrigger>
                                                 <DataTrigger Binding="{Binding IsDatabaseConnected}" Value="False">
-                                                    <Setter Property="Foreground" Value="{DynamicResource ErrorBrush}"/>
+                                                    <Setter Property="Foreground" Value="{StaticResource ErrorBrush}"/>
                                                 </DataTrigger>
                                             </Style.Triggers>
                                         </Style>
@@ -311,11 +311,11 @@
                                             <Style.Triggers>
                                                 <DataTrigger Binding="{Binding IsDatabaseConnected}" Value="True">
                                                     <Setter Property="Text" Value="Database Connected"/>
-                                                    <Setter Property="Foreground" Value="{DynamicResource SuccessBrush}"/>
+                                                    <Setter Property="Foreground" Value="{StaticResource SuccessBrush}"/>
                                                 </DataTrigger>
                                                 <DataTrigger Binding="{Binding IsDatabaseConnected}" Value="False">
                                                     <Setter Property="Text" Value="Database Disconnected"/>
-                                                    <Setter Property="Foreground" Value="{DynamicResource ErrorBrush}"/>
+                                                    <Setter Property="Foreground" Value="{StaticResource ErrorBrush}"/>
                                                 </DataTrigger>
                                             </Style.Triggers>
                                         </Style>
