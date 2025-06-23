@@ -258,11 +258,11 @@ public partial class SettingsViewModel : ObservableObject
                 ConnectionStrings = new { DefaultConnection = "Data Source=vmware-gui-tools.db" },
                 Logging = new 
                 { 
-                    LogLevel = new 
+                    LogLevel = new Dictionary<string, object>
                     { 
-                        Default = "Information",
-                        Microsoft = "Warning",
-                        Microsoft.Hosting.Lifetime = "Information"
+                        ["Default"] = "Information",
+                        ["Microsoft"] = "Warning",
+                        ["Microsoft.Hosting.Lifetime"] = "Information"
                     }
                 },
                 VMwareGUITools = new 
