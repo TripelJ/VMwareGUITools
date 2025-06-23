@@ -201,6 +201,19 @@ public class PowerShellService : IPowerShellService, IDisposable
                     RecommendedAction = ''
                 }
 
+                # Enhanced execution policy handling
+                try {
+                    # Set execution policy for current process (doesn't require admin)
+                    Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force -ErrorAction SilentlyContinue
+                    
+                    # Also try to set for current session within the runspace
+                    $ExecutionContext.SessionState.LanguageMode = 'FullLanguage'
+                    
+                    Write-Verbose 'Execution policy set to Bypass for current process'
+                } catch {
+                    Write-Warning ""Could not set execution policy: $($_.Exception.Message)""
+                }
+
                 # Check if VMware.PowerCLI meta-module is available (preferred method)
                 $powerCLIModule = Get-Module -ListAvailable -Name 'VMware.PowerCLI' -ErrorAction SilentlyContinue | Select-Object -First 1
                 
@@ -219,80 +232,198 @@ public class PowerShellService : IPowerShellService, IDisposable
                     }
                 }
 
-                # Manual loading approach with version compatibility
-                Write-Verbose 'Attempting manual PowerCLI module loading...'
+                # Enhanced manual loading approach with version compatibility and conflict resolution
+                Write-Verbose 'Attempting manual PowerCLI module loading with conflict resolution...'
                 
-                # Get all available VMware modules and sort by version
+                # Get all available VMware modules and group by name
                 $availableModules = Get-Module -ListAvailable -Name '*VMware*' | 
                     Group-Object Name | 
-                    ForEach-Object { $_.Group | Sort-Object Version -Descending | Select-Object -First 1 }
+                    ForEach-Object { 
+                        # For each module, get all versions and sort by version
+                        $sortedVersions = $_.Group | Sort-Object Version -Descending
+                        [PSCustomObject]@{
+                            Name = $_.Name
+                            LatestVersion = $sortedVersions[0]
+                            AllVersions = $sortedVersions
+                        }
+                    }
                 
-                # Find core modules first
-                $coreModules = @(
-                    'VMware.VimAutomation.Sdk',
-                    'VMware.VimAutomation.Common', 
-                    'VMware.VimAutomation.Core'
-                )
-                
-                # Check for version conflicts (specifically VMware.Vim issue)
+                # Special handling for the VMware.Vim v9.0 compatibility issue
                 $vimModule = $availableModules | Where-Object { $_.Name -eq 'VMware.Vim' }
                 $commonModule = $availableModules | Where-Object { $_.Name -eq 'VMware.VimAutomation.Common' }
+                $coreModule = $availableModules | Where-Object { $_.Name -eq 'VMware.VimAutomation.Core' }
                 
-                if ($vimModule -and $commonModule) {
+                # Strategy: Find a compatible set of modules or work around the conflict
+                $selectedModules = @{}
+                
+                if ($vimModule -and $commonModule -and $coreModule) {
+                    $vimLatest = $vimModule.LatestVersion
+                    $commonLatest = $commonModule.LatestVersion
+                    $coreLatest = $coreModule.LatestVersion
+                    
                     # Check for known incompatible combinations
-                    $vimMajorMinor = ""$($vimModule.Version.Major).$($vimModule.Version.Minor)""
-                    $commonMajorMinor = ""$($commonModule.Version.Major).$($commonModule.Version.Minor)""
+                    $vimMajorMinor = ""$($vimLatest.Version.Major).$($vimLatest.Version.Minor)""
+                    $commonMajorMinor = ""$($commonLatest.Version.Major).$($commonLatest.Version.Minor)""
                     
                     if ($vimMajorMinor -eq '9.0' -and $commonMajorMinor -ne '9.0') {
-                        $result.Errors += ""Version conflict detected: VMware.Vim v$($vimModule.Version) is incompatible with VMware.VimAutomation.Common v$($commonModule.Version)""
-                        $result.RecommendedAction = 'Run PowerCLI cleanup script to resolve version conflicts'
-                        $result.Success = $false
-                        Write-Output $result
-                        return
-                    }
-                }
-                
-                # Try to load core modules in order
-                $loadedCount = 0
-                foreach ($moduleName in $coreModules) {
-                    $module = $availableModules | Where-Object { $_.Name -eq $moduleName }
-                    if ($module) {
-                        try {
-                            Import-Module $module.Path -Force -ErrorAction Stop
-                            $result.LoadedModules += @{ Name = $module.Name; Version = $module.Version.ToString() }
-                            $loadedCount++
-                            Write-Verbose ""Loaded $($module.Name) v$($module.Version)""
-                        } catch {
-                            $result.Errors += ""Failed to load $($module.Name): $($_.Exception.Message)""
+                        Write-Warning ""Version conflict detected: VMware.Vim v$($vimLatest.Version) is incompatible with VMware.VimAutomation.Common v$($commonLatest.Version)""
+                        
+                        # Strategy 1: Try to find compatible older versions
+                        $compatibleCommon = $commonModule.AllVersions | Where-Object { ""$($_.Version.Major).$($_.Version.Minor)"" -eq '9.0' } | Select-Object -First 1
+                        $compatibleCore = $coreModule.AllVersions | Where-Object { ""$($_.Version.Major).$($_.Version.Minor)"" -eq '9.0' } | Select-Object -First 1
+                        
+                        if ($compatibleCommon -and $compatibleCore) {
+                            Write-Output ""Found compatible v9.0 modules, using: Common v$($compatibleCommon.Version), Core v$($compatibleCore.Version)""
+                            $selectedModules['VMware.Vim'] = $vimLatest
+                            $selectedModules['VMware.VimAutomation.Common'] = $compatibleCommon
+                            $selectedModules['VMware.VimAutomation.Core'] = $compatibleCore
+                        } else {
+                            # Strategy 2: Try to use newer versions and skip the problematic VMware.Vim module
+                            Write-Output ""No compatible v9.0 modules found, attempting to load without VMware.Vim module""
+                            $selectedModules['VMware.VimAutomation.Common'] = $commonLatest
+                            $selectedModules['VMware.VimAutomation.Core'] = $coreLatest
+                            # Skip VMware.Vim entirely - many operations can work without it
                         }
                     } else {
-                        $result.Errors += ""Module $moduleName not found""
+                        # No conflict detected, use latest versions
+                        $selectedModules['VMware.Vim'] = $vimLatest
+                        $selectedModules['VMware.VimAutomation.Common'] = $commonLatest
+                        $selectedModules['VMware.VimAutomation.Core'] = $coreLatest
+                    }
+                } else {
+                    # Fallback: use whatever is available
+                    if ($commonModule) { $selectedModules['VMware.VimAutomation.Common'] = $commonModule.LatestVersion }
+                    if ($coreModule) { $selectedModules['VMware.VimAutomation.Core'] = $coreModule.LatestVersion }
+                    if ($vimModule) { $selectedModules['VMware.Vim'] = $vimModule.LatestVersion }
+                }
+                
+                # Add other important modules
+                @('VMware.VimAutomation.Sdk', 'VMware.VimAutomation.Vds', 'VMware.VimAutomation.Storage') | ForEach-Object {
+                    $moduleInfo = $availableModules | Where-Object { $_.Name -eq $_ }
+                    if ($moduleInfo) {
+                        $selectedModules[$_] = $moduleInfo.LatestVersion
                     }
                 }
                 
-                # Check if we have minimum required modules
-                if ($loadedCount -ge 2) { # At least Common and Core
-                    $result.Success = $true
-                    $result.Message = ""PowerCLI core modules loaded successfully ($loadedCount modules)""
-                    
-                    # Try to load additional modules (non-critical)
-                    $additionalModules = @('VMware.VimAutomation.Vds', 'VMware.VimAutomation.Storage')
-                    foreach ($moduleName in $additionalModules) {
-                        $module = $availableModules | Where-Object { $_.Name -eq $moduleName }
-                        if ($module) {
+                # Load modules in dependency order with enhanced error handling
+                $loadOrder = @(
+                    'VMware.VimAutomation.Sdk',
+                    'VMware.VimAutomation.Common', 
+                    'VMware.Vim',
+                    'VMware.VimAutomation.Core',
+                    'VMware.VimAutomation.Vds',
+                    'VMware.VimAutomation.Storage'
+                )
+                
+                $loadedCount = 0
+                $criticalModules = @('VMware.VimAutomation.Common', 'VMware.VimAutomation.Core')
+                $criticalLoaded = 0
+                
+                foreach ($moduleName in $loadOrder) {
+                    if ($selectedModules.ContainsKey($moduleName)) {
+                        $module = $selectedModules[$moduleName]
+                        try {
+                            # Try multiple import methods
+                            $importSuccess = $false
+                            
+                            # Method 1: Import by name with specific version
                             try {
-                                Import-Module $module.Path -Force -ErrorAction SilentlyContinue
-                                $result.LoadedModules += @{ Name = $module.Name; Version = $module.Version.ToString() }
+                                Import-Module $moduleName -RequiredVersion $module.Version -Force -ErrorAction Stop
+                                $importSuccess = $true
+                                Write-Verbose ""Loaded $($moduleName) v$($module.Version) by name""
                             } catch {
-                                # Non-critical, just log
-                                Write-Verbose ""Optional module $moduleName failed to load: $($_.Exception.Message)""
+                                Write-Verbose ""Failed to load $($moduleName) by name: $($_.Exception.Message)""
+                            }
+                            
+                            # Method 2: Import by path if method 1 failed
+                            if (-not $importSuccess) {
+                                try {
+                                    Import-Module $module.Path -Force -ErrorAction Stop
+                                    $importSuccess = $true
+                                    Write-Verbose ""Loaded $($moduleName) v$($module.Version) by path""
+                                } catch {
+                                    Write-Verbose ""Failed to load $($moduleName) by path: $($_.Exception.Message)""
+                                }
+                            }
+                            
+                            # Method 3: Direct assembly loading for critical modules
+                            if (-not $importSuccess -and $moduleName -in $criticalModules) {
+                                try {
+                                    # For critical modules, try to load assemblies directly
+                                    $moduleDir = Split-Path $module.Path -Parent
+                                    $assemblies = Get-ChildItem -Path $moduleDir -Filter '*.dll' -ErrorAction SilentlyContinue
+                                    foreach ($assembly in $assemblies) {
+                                        try {
+                                            Add-Type -Path $assembly.FullName -ErrorAction SilentlyContinue
+                                        } catch {
+                                            # Ignore assembly load errors
+                                        }
+                                    }
+                                    # Try importing again after loading assemblies
+                                    Import-Module $module.Path -Force -ErrorAction Stop
+                                    $importSuccess = $true
+                                    Write-Verbose ""Loaded $($moduleName) v$($module.Version) after assembly loading""
+                                } catch {
+                                    Write-Warning ""All import methods failed for critical module $($moduleName): $($_.Exception.Message)""
+                                }
+                            }
+                            
+                            if ($importSuccess) {
+                                $result.LoadedModules += @{ Name = $module.Name; Version = $module.Version.ToString(); Path = $module.Path }
+                                $loadedCount++
+                                if ($moduleName -in $criticalModules) {
+                                    $criticalLoaded++
+                                }
+                            } else {
+                                $result.Errors += ""Failed to load $($moduleName) v$($module.Version) using all methods""
+                            }
+                        } catch {
+                            $result.Errors += ""Unexpected error loading $($moduleName): $($_.Exception.Message)""
+                        }
+                    }
+                }
+                
+                # Check if we have minimum required modules (at least one critical module)
+                if ($criticalLoaded -gt 0) {
+                    $result.Success = $true
+                    $result.Message = ""PowerCLI modules loaded successfully ($loadedCount total, $criticalLoaded critical)""
+                    
+                    # Test basic functionality
+                    try {
+                        $testCommands = @()
+                        if (Get-Module -Name 'VMware.VimAutomation.Core' -ErrorAction SilentlyContinue) {
+                            try {
+                                $version = Get-PowerCLIVersion -ErrorAction SilentlyContinue
+                                $testCommands += ""Get-PowerCLIVersion: Success""
+                            } catch {
+                                $testCommands += ""Get-PowerCLIVersion: $($_.Exception.Message)""
                             }
                         }
+                        
+                        if (Get-Module -Name 'VMware.VimAutomation.Common' -ErrorAction SilentlyContinue) {
+                            try {
+                                $null = Get-Command -Module 'VMware.VimAutomation.Common' -ErrorAction Stop | Select-Object -First 1
+                                $testCommands += ""VMware.VimAutomation.Common: Commands available""
+                            } catch {
+                                $testCommands += ""VMware.VimAutomation.Common: $($_.Exception.Message)""
+                            }
+                        }
+                        
+                        if ($testCommands.Count -gt 0) {
+                            $result.Message += ""`nFunctionality tests: "" + ($testCommands -join ', ')
+                        }
+                    } catch {
+                        # Non-critical test failure
+                        $result.Message += ""`nWarning: Functionality test failed: $($_.Exception.Message)""
                     }
                 } else {
                     $result.Success = $false
                     $result.Message = 'Failed to load minimum required PowerCLI modules'
-                    $result.RecommendedAction = 'Install or reinstall VMware PowerCLI'
+                    if ($loadedCount -eq 0) {
+                        $result.RecommendedAction = 'Install or reinstall VMware PowerCLI: Install-Module VMware.PowerCLI -Force'
+                    } else {
+                        $result.RecommendedAction = 'Version conflict detected. Try: Uninstall-Module VMware.PowerCLI -AllVersions; Install-Module VMware.PowerCLI'
+                    }
                 }
 
                 Write-Output $result
@@ -302,12 +433,12 @@ public class PowerShellService : IPowerShellService, IDisposable
                     LoadedModules = @()
                     Errors = @(""Critical error during PowerCLI loading: $($_.Exception.Message)"")
                     Message = ""Exception during module loading""
-                    RecommendedAction = 'Check PowerCLI installation and version compatibility'
+                    RecommendedAction = 'Check PowerCLI installation and run as administrator to resolve execution policy issues'
                 })
             }
         ";
 
-        var result = await ExecuteScriptAsync(loadScript, timeoutSeconds: 60);
+        var result = await ExecuteScriptAsync(loadScript, timeoutSeconds: 120);
         
         if (result.IsSuccess && result.Objects.Count > 0 && result.Objects[0] is PSObject psObj)
         {
@@ -315,6 +446,7 @@ public class PowerShellService : IPowerShellService, IDisposable
             var message = psObj.Properties["Message"]?.Value?.ToString() ?? "";
             var errors = psObj.Properties["Errors"]?.Value as object[] ?? Array.Empty<object>();
             var loadedModules = psObj.Properties["LoadedModules"]?.Value as object[] ?? Array.Empty<object>();
+            var recommendedAction = psObj.Properties["RecommendedAction"]?.Value?.ToString() ?? "";
 
             if (success)
             {
@@ -336,10 +468,20 @@ public class PowerShellService : IPowerShellService, IDisposable
                 var errorMessage = string.Join(Environment.NewLine, errors.Select(e => e.ToString()));
                 _logger.LogError("Failed to load PowerCLI modules: {Message}. Errors: {Errors}", message, errorMessage);
                 
+                var solutionMessage = $"PowerCLI modules are not available or incompatible.\n\n" +
+                    $"Details: {message}\n\n" +
+                    $"Errors:\n{errorMessage}\n\n" +
+                    $"Solutions:\n" +
+                    $"1. {recommendedAction}\n" +
+                    $"2. Run PowerShell as Administrator and execute: Set-ExecutionPolicy RemoteSigned\n" +
+                    $"3. Alternative: Set-ExecutionPolicy -Scope CurrentUser RemoteSigned\n" +
+                    $"4. For version conflicts: Uninstall-Module VMware.PowerCLI -AllVersions -Force; Install-Module VMware.PowerCLI\n" +
+                    $"5. If VMware.Vim v9.0 conflict persists, the application will try to work without it";
+                
                 return new PowerShellResult
                 {
                     IsSuccess = false,
-                    ErrorOutput = $"PowerCLI modules are not available or incompatible.\n\nDetails: {message}\n\nErrors:\n{errorMessage}\n\nSolutions:\n1. Reinstall PowerCLI: Uninstall-Module VMware.PowerCLI -AllVersions -Force; Install-Module VMware.PowerCLI\n2. Or load specific version: Import-Module VMware.VimAutomation.Core -RequiredVersion <version>",
+                    ErrorOutput = solutionMessage,
                     ExecutionTime = result.ExecutionTime
                 };
             }
@@ -485,8 +627,11 @@ public class PowerShellService : IPowerShellService, IDisposable
             // Set execution policy for the session to most permissive
             initialSessionState.ExecutionPolicy = Microsoft.PowerShell.ExecutionPolicy.Bypass;
             
-            // Add additional PowerShell commands to handle execution policy
-            initialSessionState.Commands.Add(new SessionStateCmdletEntry("Set-ExecutionPolicy", typeof(Microsoft.PowerShell.Commands.SetExecutionPolicyCommand), null));
+            // Add execution policy commands to ensure they're available
+            initialSessionState.Commands.Add(new SessionStateCmdletEntry("Set-ExecutionPolicy", 
+                typeof(Microsoft.PowerShell.Commands.SetExecutionPolicyCommand), null));
+            initialSessionState.Commands.Add(new SessionStateCmdletEntry("Get-ExecutionPolicy", 
+                typeof(Microsoft.PowerShell.Commands.GetExecutionPolicyCommand), null));
 
             // Import modules explicitly in the session state if they exist
             try

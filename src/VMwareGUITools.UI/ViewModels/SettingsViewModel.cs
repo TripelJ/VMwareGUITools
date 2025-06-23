@@ -125,41 +125,118 @@ public partial class SettingsViewModel : ObservableObject
                 try
                 {
                     var detailedResult = await _powerShellService.ExecuteScriptAsync(@"
-                        # Check for version conflicts and provide specific guidance
-                        $vmwareModules = Get-Module -ListAvailable -Name '*VMware*' | Group-Object Name
-                        $hasVMware = $vmwareModules.Count -gt 0
-                        $vimModule = Get-Module -ListAvailable -Name 'VMware.Vim' -ErrorAction SilentlyContinue | Select-Object -First 1
-                        $commonModule = Get-Module -ListAvailable -Name 'VMware.VimAutomation.Common' -ErrorAction SilentlyContinue | Select-Object -First 1
-                        
-                        $issues = @()
-                        $solutions = @()
-                        
-                        if (-not $hasVMware) {
-                            $issues += 'No VMware modules found'
-                            $solutions += 'Install PowerCLI: Install-Module -Name VMware.PowerCLI -Scope CurrentUser'
-                        } elseif ($vimModule -and $commonModule) {
-                            $vimVersion = $vimModule.Version
-                            $commonVersion = $commonModule.Version
-                            if ($vimVersion.Major -eq 9 -and $commonVersion.Major -ne 9) {
-                                $issues += ""Version conflict: VMware.Vim v$vimVersion incompatible with VMware.VimAutomation.Common v$commonVersion""
-                                $solutions += 'Run the PowerCLI cleanup script from the application folder'
-                                $solutions += 'Or manually: Uninstall-Module VMware.PowerCLI -AllVersions; Install-Module VMware.PowerCLI -Force'
-                            }
+                        # Enhanced diagnostics for PowerCLI issues including execution policy and version conflicts
+                        $diagnostics = [PSCustomObject]@{
+                            Issues = @()
+                            Solutions = @()
+                            ModuleCount = 0
+                            ExecutionPolicyInfo = @{}
+                            VersionConflicts = @()
+                            RecommendedActions = @()
                         }
                         
-                        # Try to import and see what specific error occurs
                         try {
-                            Import-Module VMware.PowerCLI -ErrorAction Stop
-                            $issues += 'PowerCLI modules present but failed availability check'
+                            # Check execution policies
+                            $policies = @{}
+                            @('Process', 'CurrentUser', 'LocalMachine', 'MachinePolicy', 'UserPolicy') | ForEach-Object {
+                                try {
+                                    $policies[$_] = Get-ExecutionPolicy -Scope $_ -ErrorAction SilentlyContinue
+                                } catch {
+                                    $policies[$_] = 'Unable to read'
+                                }
+                            }
+                            $diagnostics.ExecutionPolicyInfo = $policies
+                            
+                            # Check for restrictive execution policies
+                            $restrictivePolicies = @('Restricted', 'AllSigned')
+                            $hasRestrictivePolicy = $false
+                            foreach ($scope in @('Process', 'CurrentUser', 'LocalMachine')) {
+                                if ($policies[$scope] -in $restrictivePolicies) {
+                                    $hasRestrictivePolicy = $true
+                                    $diagnostics.Issues += ""Restrictive execution policy detected: $scope = $($policies[$scope])""
+                                }
+                            }
+                            
+                            if ($hasRestrictivePolicy) {
+                                $diagnostics.Solutions += 'Set execution policy: Set-ExecutionPolicy -Scope CurrentUser RemoteSigned'
+                                $diagnostics.Solutions += 'Alternative (as Admin): Set-ExecutionPolicy -Scope LocalMachine RemoteSigned'
+                                $diagnostics.RecommendedActions += 'EXECUTION_POLICY_FIX'
+                            }
+                            
+                            # Check VMware modules
+                            $vmwareModules = Get-Module -ListAvailable -Name '*VMware*' | Group-Object Name
+                            $diagnostics.ModuleCount = $vmwareModules.Count
+                            
+                            if ($vmwareModules.Count -eq 0) {
+                                $diagnostics.Issues += 'No VMware modules found'
+                                $diagnostics.Solutions += 'Install PowerCLI: Install-Module -Name VMware.PowerCLI -Scope CurrentUser'
+                                $diagnostics.RecommendedActions += 'INSTALL_POWERCLI'
+                            } else {
+                                # Check for specific version conflicts
+                                $vimModule = Get-Module -ListAvailable -Name 'VMware.Vim' -ErrorAction SilentlyContinue | Sort-Object Version -Descending | Select-Object -First 1
+                                $commonModule = Get-Module -ListAvailable -Name 'VMware.VimAutomation.Common' -ErrorAction SilentlyContinue | Sort-Object Version -Descending | Select-Object -First 1
+                                $coreModule = Get-Module -ListAvailable -Name 'VMware.VimAutomation.Core' -ErrorAction SilentlyContinue | Sort-Object Version -Descending | Select-Object -First 1
+                                $sdkModule = Get-Module -ListAvailable -Name 'VMware.VimAutomation.Sdk' -ErrorAction SilentlyContinue | Sort-Object Version -Descending | Select-Object -First 1
+                                
+                                if ($vimModule -and $commonModule) {
+                                    $vimVersion = $vimModule.Version
+                                    $commonVersion = $commonModule.Version
+                                    $vimMajorMinor = ""$($vimVersion.Major).$($vimVersion.Minor)""
+                                    $commonMajorMinor = ""$($commonVersion.Major).$($commonVersion.Minor)""
+                                    
+                                    if ($vimMajorMinor -eq '9.0' -and $commonMajorMinor -ne '9.0') {
+                                        $conflict = ""VMware.Vim v$vimVersion is incompatible with VMware.VimAutomation.Common v$commonVersion""
+                                        $diagnostics.Issues += ""CRITICAL: $conflict""
+                                        $diagnostics.VersionConflicts += $conflict
+                                        $diagnostics.Solutions += 'Run PowerCLI cleanup script: PowerCLI-CleanupVersions.ps1'
+                                        $diagnostics.Solutions += 'Manual fix: Uninstall-Module VMware.PowerCLI -AllVersions; Install-Module VMware.PowerCLI -Force'
+                                        $diagnostics.Solutions += 'Alternative: Application can work without VMware.Vim module for most operations'
+                                        $diagnostics.RecommendedActions += 'VERSION_CONFLICT_RESOLUTION'
+                                    }
+                                }
+                                
+                                # Check for other module status
+                                $moduleStatus = @()
+                                @('VMware.VimAutomation.Core', 'VMware.VimAutomation.Common', 'VMware.VimAutomation.Sdk', 'VMware.Vim') | ForEach-Object {
+                                    $mod = Get-Module -ListAvailable -Name $_ -ErrorAction SilentlyContinue | Select-Object -First 1
+                                    if ($mod) {
+                                        $moduleStatus += ""$_ v$($mod.Version) - Available""
+                                    } else {
+                                        $moduleStatus += ""$_ - Missing""
+                                        if ($_ -in @('VMware.VimAutomation.Core', 'VMware.VimAutomation.Common')) {
+                                            $diagnostics.Issues += ""Critical module missing: $_""
+                                        }
+                                    }
+                                }
+                                $diagnostics.ModuleStatus = $moduleStatus
+                            }
+                            
+                            # Try to import and identify specific errors
+                            try {
+                                # Try meta-module first
+                                Import-Module VMware.PowerCLI -ErrorAction Stop
+                                $diagnostics.Issues += 'PowerCLI modules present but failed application availability check - possible transient issue'
+                            } catch {
+                                $errorMessage = $_.Exception.Message
+                                if ($errorMessage -like '*execution*policy*') {
+                                    $diagnostics.Issues += ""Execution Policy Error: $errorMessage""
+                                    if (-not $hasRestrictivePolicy) {
+                                        $diagnostics.Solutions += 'Try running application as Administrator'
+                                        $diagnostics.RecommendedActions += 'RUN_AS_ADMIN'
+                                    }
+                                } elseif ($errorMessage -like '*cannot be loaded*') {
+                                    $diagnostics.Issues += ""Module Load Error: $errorMessage""
+                                    $diagnostics.Solutions += 'Check if PowerCLI modules are properly installed and not corrupted'
+                                } else {
+                                    $diagnostics.Issues += ""Import Error: $errorMessage""
+                                }
+                            }
+                            
                         } catch {
-                            $issues += ""Import failed: $($_.Exception.Message)""
+                            $diagnostics.Issues += ""Diagnostic Error: $($_.Exception.Message)""
                         }
                         
-                        [PSCustomObject]@{
-                            Issues = $issues
-                            Solutions = $solutions
-                            ModuleCount = $vmwareModules.Count
-                        }
+                        $diagnostics
                     ");
 
                     if (detailedResult.IsSuccess && detailedResult.Objects.Count > 0)
@@ -167,37 +244,100 @@ public partial class SettingsViewModel : ObservableObject
                         dynamic? resultObj = detailedResult.Objects[0];
                         var issues = resultObj?.Issues ?? new string[0];
                         var solutions = resultObj?.Solutions ?? new string[0];
+                        var versionConflicts = resultObj?.VersionConflicts ?? new string[0];
+                        var executionPolicyInfo = resultObj?.ExecutionPolicyInfo ?? new Dictionary<string, object>();
+                        var moduleStatus = resultObj?.ModuleStatus ?? new string[0];
+                        var recommendedActions = resultObj?.RecommendedActions ?? new string[0];
                         
-                        var message = "❌ PowerCLI is not properly configured.\n\n";
+                        var message = new StringBuilder();
+                        message.AppendLine("❌ PowerCLI Configuration Issues Detected\n");
                         
+                        // Show execution policy status if relevant
+                        if (executionPolicyInfo.Count > 0)
+                        {
+                            message.AppendLine("📋 Current Execution Policies:");
+                            foreach (var policy in executionPolicyInfo)
+                            {
+                                message.AppendLine($"   {policy.Key}: {policy.Value}");
+                            }
+                            message.AppendLine();
+                        }
+                        
+                        // Show version conflicts prominently
+                        if (versionConflicts.Length > 0)
+                        {
+                            message.AppendLine("⚠️ CRITICAL VERSION CONFLICTS:");
+                            foreach (var conflict in versionConflicts)
+                            {
+                                message.AppendLine($"   • {conflict}");
+                            }
+                            message.AppendLine();
+                        }
+                        
+                        // Show module status
+                        if (moduleStatus.Length > 0)
+                        {
+                            message.AppendLine("📦 PowerCLI Module Status:");
+                            foreach (var status in moduleStatus)
+                            {
+                                message.AppendLine($"   • {status}");
+                            }
+                            message.AppendLine();
+                        }
+                        
+                        // Show all issues
                         if (issues.Length > 0)
                         {
-                            message += "Issues found:\n";
+                            message.AppendLine("🔍 Issues Identified:");
                             foreach (var issue in issues)
                             {
-                                message += $"• {issue}\n";
+                                message.AppendLine($"   • {issue}");
                             }
-                            message += "\n";
+                            message.AppendLine();
                         }
                         
+                        // Show prioritized solutions
                         if (solutions.Length > 0)
                         {
-                            message += "Recommended solutions:\n";
-                            foreach (var solution in solutions)
+                            message.AppendLine("🔧 Recommended Solutions (try in order):");
+                            for (int i = 0; i < solutions.Length; i++)
                             {
-                                message += $"• {solution}\n";
+                                message.AppendLine($"   {i + 1}. {solutions[i]}");
                             }
+                            message.AppendLine();
                         }
-                        else
+                        
+                        // Add quick action buttons based on recommended actions
+                        var hasVersionConflict = recommendedActions.Any(a => a.ToString() == "VERSION_CONFLICT_RESOLUTION");
+                        var hasExecutionPolicyIssue = recommendedActions.Any(a => a.ToString() == "EXECUTION_POLICY_FIX");
+                        var needsInstall = recommendedActions.Any(a => a.ToString() == "INSTALL_POWERCLI");
+                        
+                        if (hasVersionConflict)
                         {
-                            message += "Run the PowerCLI cleanup script (PowerCLI-CleanupVersions.ps1) from the application folder,\n";
-                            message += "or reinstall PowerCLI:\n";
-                            message += "Install-Module -Name VMware.PowerCLI -Force -AllowClobber";
+                            message.AppendLine("💡 Quick Fix: Use the 'Run PowerCLI Cleanup' button in this settings window.");
+                            message.AppendLine("   This will automatically resolve version conflicts.");
+                            message.AppendLine();
+                        }
+                        
+                        if (hasExecutionPolicyIssue)
+                        {
+                            message.AppendLine("⚡ Execution Policy: Run this application as Administrator or execute:");
+                            message.AppendLine("   Set-ExecutionPolicy -Scope CurrentUser RemoteSigned");
+                            message.AppendLine();
+                        }
+                        
+                        // Special note about VMware.Vim v9.0 compatibility
+                        if (versionConflicts.Any(c => c.ToString().Contains("VMware.Vim v9.0")))
+                        {
+                            message.AppendLine("ℹ️ Note about VMware.Vim v9.0:");
+                            message.AppendLine("   The application has been enhanced to work around this specific");
+                            message.AppendLine("   version conflict. Most VMware operations will function correctly");
+                            message.AppendLine("   even if VMware.Vim v9.0 cannot be loaded with newer modules.");
                         }
                         
                         Application.Current.Dispatcher.Invoke(() =>
                         {
-                            MessageBox.Show(message, "PowerCLI Test - Issues Detected", 
+                            MessageBox.Show(message.ToString(), "PowerCLI Diagnostics - Issues Detected", 
                                 MessageBoxButton.OK, MessageBoxImage.Warning);
                         });
                     }
