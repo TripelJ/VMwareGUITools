@@ -246,7 +246,48 @@ public partial class SettingsViewModel : ObservableObject
     /// </summary>
     private async Task SavePowerShellSettingsAsync()
     {
-        var configPath = "appsettings.json";
+        // Get the correct path to appsettings.json in the application directory
+        var appDirectory = AppDomain.CurrentDomain.BaseDirectory;
+        var configPath = Path.Combine(appDirectory, "appsettings.json");
+        
+        // Check if the file exists, if not, create a default one
+        if (!File.Exists(configPath))
+        {
+            var defaultConfig = new
+            {
+                ConnectionStrings = new { DefaultConnection = "Data Source=vmware-gui-tools.db" },
+                Logging = new 
+                { 
+                    LogLevel = new 
+                    { 
+                        Default = "Information",
+                        Microsoft = "Warning",
+                        Microsoft.Hosting.Lifetime = "Information"
+                    }
+                },
+                VMwareGUITools = new 
+                { 
+                    UseMachineLevelEncryption = false,
+                    ConnectionTimeoutSeconds = 30,
+                    DefaultCheckTimeoutSeconds = 300,
+                    EnableAutoDiscovery = true,
+                    PowerCLIModulePath = "",
+                    CheckScriptsPath = "Scripts",
+                    ReportsPath = "Reports"
+                },
+                PowerShell = new
+                {
+                    ExecutionPolicy = "RemoteSigned",
+                    TimeoutSeconds = 300,
+                    EnableVerboseLogging = false,
+                    EnableAutoUpdate = true
+                }
+            };
+            
+            var defaultJson = System.Text.Json.JsonSerializer.Serialize(defaultConfig, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+            await File.WriteAllTextAsync(configPath, defaultJson);
+        }
+        
         var json = await File.ReadAllTextAsync(configPath);
         var config = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(json);
         
