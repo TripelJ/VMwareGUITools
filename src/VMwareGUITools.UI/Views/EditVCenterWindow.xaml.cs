@@ -27,6 +27,34 @@ public partial class EditVCenterWindow : Window
         if (DataContext is EditVCenterViewModel viewModel)
         {
             viewModel.DialogResultRequested += (result) => DialogResult = result;
+            
+            // Handle password binding manually due to security restrictions
+            PasswordBox.PasswordChanged += (sender, args) => 
+            {
+                viewModel.Password = PasswordBox.Password;
+            };
+            
+            // Set initial password value
+            PasswordBox.Password = viewModel.Password;
+        }
+    }
+    
+    protected override void OnDataContextChanged(DependencyPropertyChangedEventArgs e)
+    {
+        base.OnDataContextChanged(e);
+        
+        if (DataContext is EditVCenterViewModel viewModel)
+        {
+            viewModel.DialogResultRequested += (result) => DialogResult = result;
+            
+            // Handle password binding manually
+            PasswordBox.PasswordChanged += (sender, args) => 
+            {
+                viewModel.Password = PasswordBox.Password;
+            };
+            
+            // Set initial password value
+            PasswordBox.Password = viewModel.Password;
         }
     }
 } 

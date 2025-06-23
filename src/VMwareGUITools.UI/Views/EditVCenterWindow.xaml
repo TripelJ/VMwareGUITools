@@ -36,7 +36,7 @@
                 </Grid.ColumnDefinitions>
                 
                 <materialDesign:PackIcon Grid.Column="0"
-                                         Kind="ServerEdit" 
+                                         Kind="Server" 
                                          Height="32" Width="32"
                                          VerticalAlignment="Center"
                                          Foreground="White"
@@ -70,13 +70,11 @@
                 <TextBox materialDesign:HintAssist.Hint="Display Name"
                          Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
                          Style="{StaticResource MaterialDesignFloatingHintTextBox}"
-                         materialDesign:ValidationAssist.UsePopup="True"
                          Margin="0,0,0,16"/>
 
                 <TextBox materialDesign:HintAssist.Hint="vCenter Server URL (https://vcenter.company.com)"
                          Text="{Binding Url, UpdateSourceTrigger=PropertyChanged}"
                          Style="{StaticResource MaterialDesignFloatingHintTextBox}"
-                         materialDesign:ValidationAssist.UsePopup="True"
                          Margin="0,0,0,16"/>
 
                 <!-- Credentials -->
@@ -88,13 +86,11 @@
                 <TextBox materialDesign:HintAssist.Hint="Username (administrator@vsphere.local)"
                          Text="{Binding Username, UpdateSourceTrigger=PropertyChanged}"
                          Style="{StaticResource MaterialDesignFloatingHintTextBox}"
-                         materialDesign:ValidationAssist.UsePopup="True"
                          Margin="0,0,0,16"/>
 
-                <PasswordBox materialDesign:HintAssist.Hint="Password"
-                             materialDesign:PasswordBoxAssist.Password="{Binding Password, UpdateSourceTrigger=PropertyChanged}"
+                <PasswordBox x:Name="PasswordBox"
+                             materialDesign:HintAssist.Hint="Password"
                              Style="{StaticResource MaterialDesignFloatingHintPasswordBox}"
-                             materialDesign:ValidationAssist.UsePopup="True"
                              Margin="0,0,0,16"/>
 
                 <!-- Options -->
