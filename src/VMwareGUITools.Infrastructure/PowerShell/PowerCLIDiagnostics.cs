@@ -530,13 +530,4 @@ public enum IssueSeverity
     Critical
 }
 
-/// <summary>
-/// Result of PowerCLI repair operations
-/// </summary>
-public class PowerCLIRepairResult
-{
-    public bool IsSuccessful { get; set; }
-    public List<string> ActionsPerformed { get; set; } = new();
-    public List<string> Issues { get; set; } = new();
-    public string? ErrorMessage { get; set; }
-} 
+ 
