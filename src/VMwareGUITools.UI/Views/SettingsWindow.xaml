@@ -219,12 +219,12 @@
                                        FontWeight="Medium"
                                        Margin="0,16,0,8"/>
 
-                            <CheckBox Content="Hardware Health" IsChecked="True" Margin="0,4"/>
-                            <CheckBox Content="Network Configuration" IsChecked="True" Margin="0,4"/>
-                            <CheckBox Content="Storage Health" IsChecked="True" Margin="0,4"/>
-                            <CheckBox Content="Security Settings" IsChecked="True" Margin="0,4"/>
-                            <CheckBox Content="vSAN Health" IsChecked="False" Margin="0,4"/>
-                            <CheckBox Content="NSX Configuration" IsChecked="False" Margin="0,4"/>
+                            <CheckBox Content="Hardware Health" IsChecked="{Binding HardwareHealthEnabled}" Margin="0,4"/>
+                            <CheckBox Content="Network Configuration" IsChecked="{Binding NetworkConfigurationEnabled}" Margin="0,4"/>
+                            <CheckBox Content="Storage Health" IsChecked="{Binding StorageHealthEnabled}" Margin="0,4"/>
+                            <CheckBox Content="Security Settings" IsChecked="{Binding SecuritySettingsEnabled}" Margin="0,4"/>
+                            <CheckBox Content="vSAN Health" IsChecked="{Binding VsanHealthEnabled}" Margin="0,4"/>
+                            <CheckBox Content="NSX Configuration" IsChecked="{Binding NsxConfigurationEnabled}" Margin="0,4"/>
                         </StackPanel>
                     </materialDesign:Card>
                 </Grid>

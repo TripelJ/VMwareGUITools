@@ -449,35 +449,48 @@ public partial class SettingsViewModel : ObservableObject
     /// </summary>
     private void AddDefaultHostProfiles()
     {
-        var profiles = new[]
+        var standardProfile = new HostProfileSetting
         {
-            new HostProfileSetting
-            {
-                Name = "Standard ESXi Host",
-                Description = "Standard configuration checks for ESXi hosts",
-                IsEnabled = true,
-                CheckCategories = new List<string> { "Hardware", "Network", "Storage", "Security" }
-            },
-            new HostProfileSetting
-            {
-                Name = "vSAN Host",
-                Description = "Additional checks for vSAN-enabled hosts",
-                IsEnabled = true,
-                CheckCategories = new List<string> { "Hardware", "Network", "Storage", "Security", "vSAN" }
-            },
-            new HostProfileSetting
-            {
-                Name = "NSX Host",
-                Description = "Additional checks for NSX-enabled hosts",
-                IsEnabled = false,
-                CheckCategories = new List<string> { "Hardware", "Network", "Storage", "Security", "NSX" }
-            }
+            Name = "Standard ESXi Host",
+            Description = "Standard configuration checks for ESXi hosts",
+            IsEnabled = true,
+            HardwareHealthEnabled = true,
+            NetworkConfigurationEnabled = true,
+            StorageHealthEnabled = true,
+            SecuritySettingsEnabled = true,
+            VsanHealthEnabled = false,
+            NsxConfigurationEnabled = false
         };
 
-        foreach (var profile in profiles)
+        var vsanProfile = new HostProfileSetting
         {
-            HostProfiles.Add(profile);
-        }
+            Name = "vSAN Host",
+            Description = "Additional checks for vSAN-enabled hosts",
+            IsEnabled = true,
+            HardwareHealthEnabled = true,
+            NetworkConfigurationEnabled = true,
+            StorageHealthEnabled = true,
+            SecuritySettingsEnabled = true,
+            VsanHealthEnabled = true,
+            NsxConfigurationEnabled = false
+        };
+
+        var nsxProfile = new HostProfileSetting
+        {
+            Name = "NSX Host",
+            Description = "Additional checks for NSX-enabled hosts",
+            IsEnabled = false,
+            HardwareHealthEnabled = true,
+            NetworkConfigurationEnabled = true,
+            StorageHealthEnabled = true,
+            SecuritySettingsEnabled = true,
+            VsanHealthEnabled = false,
+            NsxConfigurationEnabled = true
+        };
+
+        HostProfiles.Add(standardProfile);
+        HostProfiles.Add(vsanProfile);
+        HostProfiles.Add(nsxProfile);
 
         SelectedHostProfile = HostProfiles.FirstOrDefault();
     }
@@ -486,10 +499,56 @@ public partial class SettingsViewModel : ObservableObject
 /// <summary>
 /// Host profile setting model
 /// </summary>
-public class HostProfileSetting
+public partial class HostProfileSetting : ObservableObject
 {
-    public string Name { get; set; } = string.Empty;
-    public string Description { get; set; } = string.Empty;
-    public bool IsEnabled { get; set; }
-    public List<string> CheckCategories { get; set; } = new();
+    [ObservableProperty]
+    private string _name = string.Empty;
+    
+    [ObservableProperty]
+    private string _description = string.Empty;
+    
+    [ObservableProperty]
+    private bool _isEnabled;
+    
+    [ObservableProperty]
+    private bool _hardwareHealthEnabled;
+    
+    [ObservableProperty]
+    private bool _networkConfigurationEnabled;
+    
+    [ObservableProperty]
+    private bool _storageHealthEnabled;
+    
+    [ObservableProperty]
+    private bool _securitySettingsEnabled;
+    
+    [ObservableProperty]
+    private bool _vsanHealthEnabled;
+    
+    [ObservableProperty]
+    private bool _nsxConfigurationEnabled;
+    
+    public List<string> CheckCategories
+    {
+        get
+        {
+            var categories = new List<string>();
+            if (HardwareHealthEnabled) categories.Add("Hardware Health");
+            if (NetworkConfigurationEnabled) categories.Add("Network Configuration");
+            if (StorageHealthEnabled) categories.Add("Storage Health");
+            if (SecuritySettingsEnabled) categories.Add("Security Settings");
+            if (VsanHealthEnabled) categories.Add("vSAN Health");
+            if (NsxConfigurationEnabled) categories.Add("NSX Configuration");
+            return categories;
+        }
+        set
+        {
+            HardwareHealthEnabled = value.Contains("Hardware Health");
+            NetworkConfigurationEnabled = value.Contains("Network Configuration");
+            StorageHealthEnabled = value.Contains("Storage Health");
+            SecuritySettingsEnabled = value.Contains("Security Settings");
+            VsanHealthEnabled = value.Contains("vSAN Health");
+            NsxConfigurationEnabled = value.Contains("NSX Configuration");
+        }
+    }
 } 
