@@ -275,17 +275,101 @@ public class PowerShellService : IPowerShellService, IDisposable
             
             // Set execution policy for the session
             initialSessionState.ExecutionPolicy = Microsoft.PowerShell.ExecutionPolicy.Bypass;
+            
+            // Add additional PowerShell commands to handle execution policy
+            initialSessionState.Commands.Add(new SessionStateCmdletEntry("Set-ExecutionPolicy", typeof(Microsoft.PowerShell.Commands.SetExecutionPolicyCommand), null));
 
             // Create runspace pool
             _runspacePool = RunspaceFactory.CreateRunspacePool(1, _options.MaxConcurrentSessions, initialSessionState, null);
             _runspacePool.Open();
 
-            // Test basic PowerShell functionality
-            var testScript = "Get-Date";
-            var result = await ExecuteScriptAsync(testScript, timeoutSeconds: 30, cancellationToken: cancellationToken);
+            // Test basic PowerShell functionality and set execution policy
+            var initScript = @"
+                # Set execution policy for this session
+                try {
+                    Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force -ErrorAction SilentlyContinue
+                } catch {
+                    Write-Warning ""Could not set execution policy: $($_.Exception.Message)""
+                }
+                
+                # Test basic functionality
+                Get-Date
+            ";
+            
+            var result = await ExecuteScriptAsync(initScript, timeoutSeconds: 30, cancellationToken: cancellationToken);
 
             if (result.IsSuccess)
             {
+                // Test PowerCLI module availability with better error reporting
+                var moduleTestScript = @"
+                    try {
+                        # Check current execution policy
+                        $currentPolicy = Get-ExecutionPolicy -Scope Process
+                        Write-Output ""Current execution policy (Process): $currentPolicy""
+                        
+                        $userPolicy = Get-ExecutionPolicy -Scope CurrentUser
+                        Write-Output ""Current execution policy (CurrentUser): $userPolicy""
+                        
+                        $systemPolicy = Get-ExecutionPolicy -Scope LocalMachine
+                        Write-Output ""Current execution policy (LocalMachine): $systemPolicy""
+                        
+                        # Try to import VMware modules
+                        $modules = @('VMware.VimAutomation.Core', 'VMware.VimAutomation.Common')
+                        $moduleResults = @()
+                        
+                        foreach ($moduleName in $modules) {
+                            try {
+                                $module = Get-Module -ListAvailable -Name $moduleName -ErrorAction Stop | Select-Object -First 1
+                                if ($module) {
+                                    Import-Module $moduleName -ErrorAction Stop
+                                    $moduleResults += ""$moduleName - Successfully loaded (Version: $($module.Version))""
+                                } else {
+                                    $moduleResults += ""$moduleName - Not found""
+                                }
+                            } catch {
+                                $moduleResults += ""$moduleName - Failed to load: $($_.Exception.Message)""
+                            }
+                        }
+                        
+                        return [PSCustomObject]@{
+                            Success = $true
+                            ExecutionPolicies = @{
+                                Process = $currentPolicy
+                                CurrentUser = $userPolicy
+                                LocalMachine = $systemPolicy
+                            }
+                            ModuleResults = $moduleResults
+                        }
+                    } catch {
+                        return [PSCustomObject]@{
+                            Success = $false
+                            Error = $_.Exception.Message
+                            ExecutionPolicies = @{}
+                            ModuleResults = @()
+                        }
+                    }
+                ";
+                
+                var moduleResult = await ExecuteScriptAsync(moduleTestScript, timeoutSeconds: 60, cancellationToken: cancellationToken);
+                
+                if (moduleResult.IsSuccess && moduleResult.Objects.Count > 0 && moduleResult.Objects[0] is PSObject psObj)
+                {
+                    var success = bool.Parse(psObj.Properties["Success"]?.Value?.ToString() ?? "false");
+                    var moduleResults = ((object[])psObj.Properties["ModuleResults"]?.Value)?.Cast<string>().ToArray() ?? Array.Empty<string>();
+                    
+                    foreach (var moduleResult in moduleResults)
+                    {
+                        _logger.LogInformation("PowerCLI Module Status: {ModuleStatus}", moduleResult);
+                    }
+                    
+                    if (!success)
+                    {
+                        var error = psObj.Properties["Error"]?.Value?.ToString();
+                        _logger.LogError("PowerCLI initialization failed: {Error}", error);
+                        _logger.LogError("This usually indicates a PowerShell execution policy issue. Please run 'Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force' in PowerShell as an administrator.");
+                    }
+                }
+
                 _isInitialized = true;
                 _logger.LogInformation("PowerCLI session initialized successfully");
                 return true;
@@ -293,12 +377,14 @@ public class PowerShellService : IPowerShellService, IDisposable
             else
             {
                 _logger.LogError("Failed to initialize PowerCLI session: {Error}", result.ErrorOutput);
+                _logger.LogError("This usually indicates a PowerShell execution policy issue. Please run 'Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force' in PowerShell.");
                 return false;
             }
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to initialize PowerCLI session");
+            _logger.LogError("This usually indicates a PowerShell execution policy issue. Please run 'Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force' in PowerShell.");
             return false;
         }
         finally

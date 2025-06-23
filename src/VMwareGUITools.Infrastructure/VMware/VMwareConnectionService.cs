@@ -46,6 +46,18 @@ public class VMwareConnectionService : IVMwareConnectionService
                 };
             }
 
+            // Check if PowerCLI is available first
+            if (!await _powerShellService.IsPowerCLIAvailableAsync())
+            {
+                _logger.LogError("PowerCLI modules are not available. This is typically due to PowerShell execution policy restrictions.");
+                return new VCenterConnectionResult
+                {
+                    IsSuccessful = false,
+                    ErrorMessage = "PowerCLI modules are not available. This is typically due to PowerShell execution policy restrictions. Please run 'Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force' in PowerShell to fix this issue.",
+                    ResponseTime = stopwatch.Elapsed
+                };
+            }
+
             // Test PowerCLI connection
             var script = @"
                 param($Server, $Username, $Password)
@@ -81,9 +93,17 @@ public class VMwareConnectionService : IVMwareConnectionService
                         }
                     }
                 } catch {
-                    return [PSCustomObject]@{
-                        IsConnected = $false
-                        Error = $_.Exception.Message
+                    # Check if the error is related to PowerCLI availability
+                    if ($_.Exception.Message -like '*not recognized*' -or $_.Exception.Message -like '*cannot be loaded*') {
+                        return [PSCustomObject]@{
+                            IsConnected = $false
+                            Error = ""PowerCLI cmdlets are not available. This is typically due to PowerShell execution policy restrictions. Error: $($_.Exception.Message)""
+                        }
+                    } else {
+                        return [PSCustomObject]@{
+                            IsConnected = $false
+                            Error = $_.Exception.Message
+                        }
                     }
                 }
             ";
@@ -127,6 +147,13 @@ public class VMwareConnectionService : IVMwareConnectionService
                     {
                         var error = psObj.Properties["Error"]?.Value?.ToString() ?? "Unknown error";
                         _logger.LogWarning("Failed to connect to vCenter: {VCenterUrl} - {Error}", vcenterUrl, error);
+                        
+                        // Enhance error message if it's related to PowerCLI
+                        if (error.Contains("PowerCLI") || error.Contains("not recognized") || error.Contains("cannot be loaded"))
+                        {
+                            error += "\n\nTo fix this issue, please run the following command in PowerShell:\nSet-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force";
+                        }
+                        
                         return new VCenterConnectionResult
                         {
                             IsSuccessful = false,
@@ -137,11 +164,23 @@ public class VMwareConnectionService : IVMwareConnectionService
                 }
             }
 
-            _logger.LogError("Failed to test connection to vCenter: {VCenterUrl} - {Error}", vcenterUrl, psResult.ErrorOutput);
+            var errorMessage = psResult.ErrorOutput;
+            
+            // Enhance error message if it's related to execution policy
+            if (errorMessage.Contains("cannot be loaded because running scripts is disabled") || 
+                errorMessage.Contains("execution of scripts is disabled") ||
+                errorMessage.Contains("ExecutionPolicy"))
+            {
+                errorMessage = "PowerShell execution policy is preventing PowerCLI modules from loading. " +
+                              "Please run 'Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force' in PowerShell to fix this issue.\n\n" +
+                              "Original error: " + errorMessage;
+            }
+
+            _logger.LogError("Failed to test connection to vCenter: {VCenterUrl} - {Error}", vcenterUrl, errorMessage);
             return new VCenterConnectionResult
             {
                 IsSuccessful = false,
-                ErrorMessage = psResult.ErrorOutput,
+                ErrorMessage = errorMessage,
                 ResponseTime = stopwatch.Elapsed
             };
         }
