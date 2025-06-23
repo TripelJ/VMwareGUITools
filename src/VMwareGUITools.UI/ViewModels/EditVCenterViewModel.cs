@@ -119,7 +119,7 @@ public partial class EditVCenterViewModel : ObservableValidator
     /// <summary>
     /// Initialize the view model with existing vCenter data
     /// </summary>
-    public async Task InitializeAsync(VCenter vCenter)
+    public Task InitializeAsync(VCenter vCenter)
     {
         _originalVCenter = vCenter;
         
@@ -139,6 +139,8 @@ public partial class EditVCenterViewModel : ObservableValidator
             _logger.LogError(ex, "Failed to decrypt credentials for vCenter: {VCenterName}", vCenter.Name);
             // Leave username/password empty if decryption fails
         }
+        
+        return Task.CompletedTask;
     }
 
     /// <summary>
