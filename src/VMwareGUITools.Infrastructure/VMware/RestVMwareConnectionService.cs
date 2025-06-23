@@ -255,10 +255,10 @@ public class RestVMwareConnectionService : IVMwareConnectionService
         }
     }
 
-    public async Task<bool> IsPowerCLIAvailableAsync()
+    public Task<bool> IsPowerCLIAvailableAsync()
     {
         // REST API doesn't need PowerCLI
-        return true;
+        return Task.FromResult(true);
     }
 
     public async Task<VCenterVersionInfo> GetVCenterVersionAsync(VMwareSession session, CancellationToken cancellationToken = default)

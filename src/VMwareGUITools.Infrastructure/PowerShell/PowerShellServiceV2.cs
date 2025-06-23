@@ -49,7 +49,7 @@ public class PowerShellServiceV2 : IPowerShellService
                 {
                     IsSuccess = externalResult.IsSuccess,
                     Output = externalResult.StandardOutput,
-                    ErrorMessage = externalResult.ErrorMessage,
+                    ErrorOutput = externalResult.ErrorMessage ?? string.Empty,
                     ExecutionTime = externalResult.ExecutionTime,
                     Objects = new List<object>()
                 };
@@ -83,7 +83,7 @@ public class PowerShellServiceV2 : IPowerShellService
                     return new PowerShellResult
                     {
                         IsSuccess = false,
-                        ErrorMessage = $"External PowerShell execution failed: {ex.Message}",
+                        ErrorOutput = $"External PowerShell execution failed: {ex.Message}",
                         ExecutionTime = TimeSpan.Zero
                     };
                 }
@@ -113,7 +113,7 @@ public class PowerShellServiceV2 : IPowerShellService
                 {
                     IsSuccess = externalResult.IsSuccess,
                     Output = externalResult.StandardOutput,
-                    ErrorMessage = externalResult.ErrorMessage,
+                    ErrorOutput = externalResult.ErrorMessage ?? string.Empty,
                     ExecutionTime = externalResult.ExecutionTime,
                     Objects = new List<object>()
                 };
@@ -147,7 +147,7 @@ public class PowerShellServiceV2 : IPowerShellService
                     return new PowerShellResult
                     {
                         IsSuccess = false,
-                        ErrorMessage = $"External PowerCLI execution failed: {ex.Message}",
+                        ErrorOutput = $"External PowerCLI execution failed: {ex.Message}",
                         ExecutionTime = TimeSpan.Zero
                     };
                 }
