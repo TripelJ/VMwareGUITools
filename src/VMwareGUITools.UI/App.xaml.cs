@@ -116,9 +116,20 @@ public partial class App : Application
             options.UseSqlite(connectionString);
         });
 
-        // PowerShell and PowerCLI Services
-        services.AddSingleton<IPowerShellService, PowerShellService>();
-        services.Configure<PowerShellOptions>(configuration.GetSection(PowerShellOptions.SectionName));
+        // PowerShell Services - NEW: Uses external PowerShell execution to bypass execution policy issues
+        services.Configure<ExternalPowerShellOptions>(configuration.GetSection(ExternalPowerShellOptions.SectionName));
+        services.Configure<PowerShellV2Options>(configuration.GetSection(PowerShellV2Options.SectionName));
+        services.AddScoped<IExternalPowerShellService, ExternalPowerShellService>();
+        services.AddScoped<PowerShellService>(); // Keep as fallback
+        services.AddScoped<IPowerShellService>(provider => 
+        {
+            var logger = provider.GetRequiredService<Microsoft.Extensions.Logging.ILogger<PowerShellServiceV2>>();
+            var externalService = provider.GetRequiredService<IExternalPowerShellService>();
+            var fallbackService = provider.GetRequiredService<PowerShellService>();
+            var options = provider.GetRequiredService<Microsoft.Extensions.Options.IOptions<PowerShellV2Options>>();
+            
+            return new PowerShellServiceV2(logger, externalService, fallbackService, options);
+        });
         
         // Enhanced PowerCLI Services
         services.Configure<PowerCLIOptions>(configuration.GetSection(PowerCLIOptions.SectionName));

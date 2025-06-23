@@ -89,6 +89,21 @@ public class Program
             options.UseSqlite(connectionString);
         });
         
+        // PowerShell Services - NEW: Uses external PowerShell execution to bypass execution policy issues
+        services.Configure<ExternalPowerShellOptions>(configuration.GetSection(ExternalPowerShellOptions.SectionName));
+        services.Configure<PowerShellV2Options>(configuration.GetSection(PowerShellV2Options.SectionName));
+        services.AddScoped<IExternalPowerShellService, ExternalPowerShellService>();
+        services.AddScoped<PowerShellService>(); // Keep as fallback
+        services.AddScoped<IPowerShellService>(provider => 
+        {
+            var logger = provider.GetRequiredService<Microsoft.Extensions.Logging.ILogger<PowerShellServiceV2>>();
+            var externalService = provider.GetRequiredService<IExternalPowerShellService>();
+            var fallbackService = provider.GetRequiredService<PowerShellService>();
+            var options = provider.GetRequiredService<Microsoft.Extensions.Options.IOptions<PowerShellV2Options>>();
+            
+            return new PowerShellServiceV2(logger, externalService, fallbackService, options);
+        });
+        
         // PowerCLI Services
         services.Configure<PowerCLIOptions>(configuration.GetSection(PowerCLIOptions.SectionName));
         services.AddSingleton<IPowerCLIService, PowerCLIService>();
@@ -97,7 +112,6 @@ public class Program
         // Infrastructure services
         services.AddScoped<ICredentialService, CredentialService>();
         services.AddScoped<IVMwareConnectionService, EnhancedVMwareConnectionService>();
-        services.AddScoped<IPowerShellService, PowerShellService>();
         services.AddScoped<ICheckEngine, PowerCLICheckEngine>();
         services.AddScoped<ICheckExecutionService, CheckExecutionService>();
         services.AddScoped<INotificationService, NotificationService>();
