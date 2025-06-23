@@ -354,7 +354,7 @@ public partial class SettingsViewModel : ObservableObject
                     Margin = new Thickness(10, 0, 10, 10),
                     HorizontalAlignment = HorizontalAlignment.Right,
                     VerticalAlignment = VerticalAlignment.Bottom,
-                    Padding = new Thickness(15, 5)
+                    Padding = new Thickness(15, 5, 15, 5)
                 };
 
                 copyButton.Click += (s, e) =>
