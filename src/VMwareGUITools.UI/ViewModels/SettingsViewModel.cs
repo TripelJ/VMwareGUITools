@@ -121,15 +121,114 @@ public partial class SettingsViewModel : ObservableObject
             }
             else
             {
-                var message = "❌ PowerCLI modules are not available or not properly installed.\n\n" +
-                            "Please install VMware PowerCLI using:\n" +
-                            "Install-Module -Name VMware.PowerCLI -Scope CurrentUser";
-                
-                Application.Current.Dispatcher.Invoke(() =>
+                // Try to get more detailed error information
+                try
                 {
-                    MessageBox.Show(message, "PowerCLI Test - Failed", 
-                        MessageBoxButton.OK, MessageBoxImage.Warning);
-                });
+                    var detailedResult = await _powerShellService.ExecuteScriptAsync(@"
+                        # Check for version conflicts and provide specific guidance
+                        $vmwareModules = Get-Module -ListAvailable -Name '*VMware*' | Group-Object Name
+                        $hasVMware = $vmwareModules.Count -gt 0
+                        $vimModule = Get-Module -ListAvailable -Name 'VMware.Vim' -ErrorAction SilentlyContinue | Select-Object -First 1
+                        $commonModule = Get-Module -ListAvailable -Name 'VMware.VimAutomation.Common' -ErrorAction SilentlyContinue | Select-Object -First 1
+                        
+                        $issues = @()
+                        $solutions = @()
+                        
+                        if (-not $hasVMware) {
+                            $issues += 'No VMware modules found'
+                            $solutions += 'Install PowerCLI: Install-Module -Name VMware.PowerCLI -Scope CurrentUser'
+                        } elseif ($vimModule -and $commonModule) {
+                            $vimVersion = $vimModule.Version
+                            $commonVersion = $commonModule.Version
+                            if ($vimVersion.Major -eq 9 -and $commonVersion.Major -ne 9) {
+                                $issues += ""Version conflict: VMware.Vim v$vimVersion incompatible with VMware.VimAutomation.Common v$commonVersion""
+                                $solutions += 'Run the PowerCLI cleanup script from the application folder'
+                                $solutions += 'Or manually: Uninstall-Module VMware.PowerCLI -AllVersions; Install-Module VMware.PowerCLI -Force'
+                            }
+                        }
+                        
+                        # Try to import and see what specific error occurs
+                        try {
+                            Import-Module VMware.PowerCLI -ErrorAction Stop
+                            $issues += 'PowerCLI modules present but failed availability check'
+                        } catch {
+                            $issues += ""Import failed: $($_.Exception.Message)""
+                        }
+                        
+                        [PSCustomObject]@{
+                            Issues = $issues
+                            Solutions = $solutions
+                            ModuleCount = $vmwareModules.Count
+                        }
+                    ");
+
+                    if (detailedResult.IsSuccess && detailedResult.Objects.Count > 0)
+                    {
+                        dynamic? resultObj = detailedResult.Objects[0];
+                        var issues = resultObj?.Issues ?? new string[0];
+                        var solutions = resultObj?.Solutions ?? new string[0];
+                        
+                        var message = "❌ PowerCLI is not properly configured.\n\n";
+                        
+                        if (issues.Length > 0)
+                        {
+                            message += "Issues found:\n";
+                            foreach (var issue in issues)
+                            {
+                                message += $"• {issue}\n";
+                            }
+                            message += "\n";
+                        }
+                        
+                        if (solutions.Length > 0)
+                        {
+                            message += "Recommended solutions:\n";
+                            foreach (var solution in solutions)
+                            {
+                                message += $"• {solution}\n";
+                            }
+                        }
+                        else
+                        {
+                            message += "Run the PowerCLI cleanup script (PowerCLI-CleanupVersions.ps1) from the application folder,\n";
+                            message += "or reinstall PowerCLI:\n";
+                            message += "Install-Module -Name VMware.PowerCLI -Force -AllowClobber";
+                        }
+                        
+                        Application.Current.Dispatcher.Invoke(() =>
+                        {
+                            MessageBox.Show(message, "PowerCLI Test - Issues Detected", 
+                                MessageBoxButton.OK, MessageBoxImage.Warning);
+                        });
+                    }
+                    else
+                    {
+                        // Fallback message
+                        var message = "❌ PowerCLI modules are not available or not properly configured.\n\n" +
+                                    "Try these solutions:\n" +
+                                    "1. Run PowerCLI-CleanupVersions.ps1 script as Administrator\n" +
+                                    "2. Or manually reinstall: Install-Module -Name VMware.PowerCLI -Force -AllowClobber";
+                        
+                        Application.Current.Dispatcher.Invoke(() =>
+                        {
+                            MessageBox.Show(message, "PowerCLI Test - Failed", 
+                                MessageBoxButton.OK, MessageBoxImage.Warning);
+                        });
+                    }
+                }
+                catch
+                {
+                    // Fallback if detailed analysis fails
+                    var message = "❌ PowerCLI modules are not available or not properly installed.\n\n" +
+                                "Please install VMware PowerCLI using:\n" +
+                                "Install-Module -Name VMware.PowerCLI -Scope CurrentUser";
+                    
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        MessageBox.Show(message, "PowerCLI Test - Failed", 
+                            MessageBoxButton.OK, MessageBoxImage.Warning);
+                    });
+                }
                 
                 _logger.LogWarning("PowerCLI test failed: Modules not available");
             }
@@ -145,6 +244,190 @@ public partial class SettingsViewModel : ObservableObject
             });
             
             _logger.LogError(ex, "Failed to test PowerCLI configuration");
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    /// <summary>
+    /// Command to run PowerCLI cleanup and reinstall
+    /// </summary>
+    [RelayCommand]
+    private async Task RunPowerCLICleanupAsync()
+    {
+        try
+        {
+            IsLoading = true;
+            _logger.LogInformation("Running PowerCLI cleanup and reinstall...");
+
+            var confirmResult = MessageBox.Show(
+                "This will:\n" +
+                "1. Uninstall all VMware PowerCLI modules\n" +
+                "2. Clean up any remaining files\n" +
+                "3. Reinstall the latest PowerCLI\n\n" +
+                "This process may take several minutes.\n\n" +
+                "Do you want to continue?",
+                "PowerCLI Cleanup Confirmation",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+
+            if (confirmResult != MessageBoxResult.Yes)
+            {
+                return;
+            }
+
+            var cleanupScript = @"
+                # PowerCLI Cleanup and Reinstall
+                Write-Host 'Starting PowerCLI cleanup and reinstall...' -ForegroundColor Green
+                
+                $result = [PSCustomObject]@{
+                    Success = $false
+                    Steps = @()
+                    Errors = @()
+                    Message = ''
+                }
+                
+                try {
+                    # Step 1: Uninstall all VMware modules
+                    $result.Steps += 'Uninstalling VMware modules...'
+                    Write-Host 'Uninstalling VMware modules...' -ForegroundColor Yellow
+                    
+                    $vmwareModules = Get-InstalledModule | Where-Object { $_.Name -like '*VMware*' }
+                    foreach ($module in $vmwareModules) {
+                        try {
+                            Uninstall-Module -Name $module.Name -AllVersions -Force -ErrorAction SilentlyContinue
+                            Write-Host ""  Uninstalled: $($module.Name)"" -ForegroundColor Gray
+                        } catch {
+                            $result.Errors += ""Failed to uninstall $($module.Name): $($_.Exception.Message)""
+                        }
+                    }
+                    
+                    # Step 2: Clean module paths
+                    $result.Steps += 'Cleaning module directories...'
+                    Write-Host 'Cleaning module directories...' -ForegroundColor Yellow
+                    
+                    $modulePaths = $env:PSModulePath -split ';'
+                    $vmwareDirectories = @()
+                    foreach ($path in $modulePaths) {
+                        if (Test-Path $path) {
+                            $vmwareDirs = Get-ChildItem $path -Directory | Where-Object { $_.Name -like '*VMware*' }
+                            $vmwareDirectories += $vmwareDirs
+                        }
+                    }
+                    
+                    foreach ($dir in $vmwareDirectories) {
+                        try {
+                            Remove-Item $dir.FullName -Recurse -Force -ErrorAction SilentlyContinue
+                            Write-Host ""  Removed: $($dir.FullName)"" -ForegroundColor Gray
+                        } catch {
+                            $result.Errors += ""Failed to remove directory $($dir.FullName): $($_.Exception.Message)""
+                        }
+                    }
+                    
+                    # Step 3: Install latest PowerCLI
+                    $result.Steps += 'Installing latest PowerCLI...'
+                    Write-Host 'Installing latest PowerCLI...' -ForegroundColor Yellow
+                    
+                    # Ensure PSGallery is trusted
+                    Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction SilentlyContinue
+                    
+                    Install-Module -Name VMware.PowerCLI -AllowClobber -Force -SkipPublisherCheck -ErrorAction Stop
+                    
+                    # Step 4: Verify installation
+                    $result.Steps += 'Verifying installation...'
+                    Write-Host 'Verifying installation...' -ForegroundColor Yellow
+                    
+                    Import-Module VMware.PowerCLI -Force -ErrorAction Stop
+                    $version = Get-PowerCLIVersion
+                    
+                    $result.Success = $true
+                    $result.Message = ""PowerCLI cleanup and reinstall completed successfully! Version: $($version.PowerCLIVersion)""
+                    
+                    Write-Host 'PowerCLI cleanup and reinstall completed successfully!' -ForegroundColor Green
+                    Write-Host ""Version: $($version.PowerCLIVersion)"" -ForegroundColor Green
+                    
+                } catch {
+                    $result.Success = $false
+                    $result.Errors += ""Installation failed: $($_.Exception.Message)""
+                    $result.Message = 'PowerCLI cleanup and reinstall failed'
+                    Write-Error ""Installation failed: $($_.Exception.Message)""
+                }
+                
+                Write-Output $result
+            ";
+
+            var result = await _powerShellService.ExecuteScriptAsync(cleanupScript, timeoutSeconds: 600); // 10 minutes timeout
+
+            if (result.IsSuccess && result.Objects.Count > 0)
+            {
+                dynamic? resultObj = result.Objects[0];
+                bool success = resultObj?.Success ?? false;
+                var steps = resultObj?.Steps ?? new string[0];
+                var errors = resultObj?.Errors ?? new string[0];
+                var message = resultObj?.Message ?? "Cleanup completed";
+
+                var displayMessage = $"{message}\n\n";
+                
+                if (steps.Length > 0)
+                {
+                    displayMessage += "Steps completed:\n";
+                    foreach (var step in steps)
+                    {
+                        displayMessage += $"✓ {step}\n";
+                    }
+                    displayMessage += "\n";
+                }
+
+                if (errors.Length > 0)
+                {
+                    displayMessage += "Warnings/Errors:\n";
+                    foreach (var error in errors)
+                    {
+                        displayMessage += $"⚠ {error}\n";
+                    }
+                }
+
+                var icon = success ? MessageBoxImage.Information : MessageBoxImage.Warning;
+                var title = success ? "PowerCLI Cleanup - Success" : "PowerCLI Cleanup - Completed with Warnings";
+
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    MessageBox.Show(displayMessage, title, MessageBoxButton.OK, icon);
+                });
+
+                _logger.LogInformation("PowerCLI cleanup completed: Success={Success}", success);
+            }
+            else
+            {
+                var errorMessage = "❌ PowerCLI cleanup failed.\n\n";
+                if (!string.IsNullOrEmpty(result.ErrorOutput))
+                {
+                    errorMessage += $"Error: {result.ErrorOutput}\n\n";
+                }
+                errorMessage += "You may need to run the cleanup manually as Administrator.";
+
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    MessageBox.Show(errorMessage, "PowerCLI Cleanup - Failed", 
+                        MessageBoxButton.OK, MessageBoxImage.Error);
+                });
+
+                _logger.LogError("PowerCLI cleanup failed: {Error}", result.ErrorOutput);
+            }
+        }
+        catch (Exception ex)
+        {
+            var message = $"❌ Failed to run PowerCLI cleanup:\n\n{ex.Message}";
+            
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                MessageBox.Show(message, "PowerCLI Cleanup - Error", 
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            });
+            
+            _logger.LogError(ex, "Failed to run PowerCLI cleanup");
         }
         finally
         {

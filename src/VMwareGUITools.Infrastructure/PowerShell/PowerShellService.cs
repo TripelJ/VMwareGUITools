@@ -198,98 +198,112 @@ public class PowerShellService : IPowerShellService, IDisposable
                     LoadedModules = @()
                     Errors = @()
                     Message = ''
+                    RecommendedAction = ''
                 }
 
-                # Check if PowerCLI is already loaded
-                $coreModule = Get-Module -Name 'VMware.VimAutomation.Core' -ErrorAction SilentlyContinue
-                if ($coreModule) {
-                    $result.Success = $true
-                    $result.Message = ""PowerCLI already loaded (Version: $($coreModule.Version))""
-                    $result.LoadedModules += ""VMware.VimAutomation.Core v$($coreModule.Version)""
-                    return $result
+                # Check if VMware.PowerCLI meta-module is available (preferred method)
+                $powerCLIModule = Get-Module -ListAvailable -Name 'VMware.PowerCLI' -ErrorAction SilentlyContinue | Select-Object -First 1
+                
+                if ($powerCLIModule) {
+                    # Try to load the meta-module first (simplest approach)
+                    try {
+                        Import-Module VMware.PowerCLI -Force -ErrorAction Stop
+                        $result.Success = $true
+                        $result.Message = 'PowerCLI loaded successfully via meta-module'
+                        $result.LoadedModules = @(Get-Module -Name '*VMware*' | Select-Object Name, Version)
+                        Write-Output $result
+                        return
+                    } catch {
+                        $result.Errors += ""Meta-module load failed: $($_.Exception.Message)""
+                        # Continue to try manual loading
+                    }
                 }
 
-                # Get all available VMware modules
-                $availableModules = Get-Module -ListAvailable | Where-Object { $_.Name -like '*VMware*' }
+                # Manual loading approach with version compatibility
+                Write-Verbose 'Attempting manual PowerCLI module loading...'
                 
-                # Group by version families to find compatible sets
-                $coreModules = $availableModules | Where-Object { $_.Name -eq 'VMware.VimAutomation.Core' } | Sort-Object Version -Descending
-                $commonModules = $availableModules | Where-Object { $_.Name -eq 'VMware.VimAutomation.Common' } | Sort-Object Version -Descending
+                # Get all available VMware modules and sort by version
+                $availableModules = Get-Module -ListAvailable -Name '*VMware*' | 
+                    Group-Object Name | 
+                    ForEach-Object { $_.Group | Sort-Object Version -Descending | Select-Object -First 1 }
                 
-                $result.Message += ""Found $($coreModules.Count) Core modules and $($commonModules.Count) Common modules. ""
+                # Find core modules first
+                $coreModules = @(
+                    'VMware.VimAutomation.Sdk',
+                    'VMware.VimAutomation.Common', 
+                    'VMware.VimAutomation.Core'
+                )
                 
-                if ($coreModules.Count -eq 0) {
-                    $result.Errors += ""VMware.VimAutomation.Core module not found. Please install PowerCLI: Install-Module -Name VMware.PowerCLI""
-                    return $result
-                }
-
-                # Try to find and load compatible versions
-                $loaded = $false
-                foreach ($coreModule in $coreModules) {
-                    $majorMinor = ""$($coreModule.Version.Major).$($coreModule.Version.Minor)""
+                # Check for version conflicts (specifically VMware.Vim issue)
+                $vimModule = $availableModules | Where-Object { $_.Name -eq 'VMware.Vim' }
+                $commonModule = $availableModules | Where-Object { $_.Name -eq 'VMware.VimAutomation.Common' }
+                
+                if ($vimModule -and $commonModule) {
+                    # Check for known incompatible combinations
+                    $vimMajorMinor = ""$($vimModule.Version.Major).$($vimModule.Version.Minor)""
+                    $commonMajorMinor = ""$($commonModule.Version.Major).$($commonModule.Version.Minor)""
                     
-                    # Find compatible Common module
-                    $compatibleCommon = $commonModules | Where-Object { 
-                        ""$($_.Version.Major).$($_.Version.Minor)"" -eq $majorMinor 
-                    } | Select-Object -First 1
-                    
-                    if ($compatibleCommon) {
+                    if ($vimMajorMinor -eq '9.0' -and $commonMajorMinor -ne '9.0') {
+                        $result.Errors += ""Version conflict detected: VMware.Vim v$($vimModule.Version) is incompatible with VMware.VimAutomation.Common v$($commonModule.Version)""
+                        $result.RecommendedAction = 'Run PowerCLI cleanup script to resolve version conflicts'
+                        $result.Success = $false
+                        Write-Output $result
+                        return
+                    }
+                }
+                
+                # Try to load core modules in order
+                $loadedCount = 0
+                foreach ($moduleName in $coreModules) {
+                    $module = $availableModules | Where-Object { $_.Name -eq $moduleName }
+                    if ($module) {
                         try {
-                            # Remove any loaded VMware modules first to avoid conflicts
-                            Get-Module | Where-Object { $_.Name -like '*VMware*' } | Remove-Module -Force -ErrorAction SilentlyContinue
-                            
-                            # Load Common first (dependency), then Core
-                            Import-Module $compatibleCommon.Path -Force -ErrorAction Stop
-                            Import-Module $coreModule.Path -Force -ErrorAction Stop
-                            
-                            $result.Success = $true
-                            $result.Message += ""Successfully loaded compatible PowerCLI modules: Core v$($coreModule.Version), Common v$($compatibleCommon.Version)""
-                            $result.LoadedModules += ""VMware.VimAutomation.Core v$($coreModule.Version)""
-                            $result.LoadedModules += ""VMware.VimAutomation.Common v$($compatibleCommon.Version)""
-                            
-                            # Try to load optional modules from the same version family
-                            @('VMware.VimAutomation.Vds', 'VMware.VimAutomation.Storage') | ForEach-Object {
-                                $optionalModule = $availableModules | Where-Object { 
-                                    $_.Name -eq $_ -and ""$($_.Version.Major).$($_.Version.Minor)"" -eq $majorMinor 
-                                } | Select-Object -First 1
-                                
-                                if ($optionalModule) {
-                                    try {
-                                        Import-Module $optionalModule.Path -Force -ErrorAction Stop
-                                        $result.LoadedModules += ""$($optionalModule.Name) v$($optionalModule.Version)""
-                                    } catch {
-                                        $result.Message += "" (Warning: Could not load optional module $($optionalModule.Name): $($_.Exception.Message))""
-                                    }
-                                }
-                            }
-                            
-                            $loaded = $true
-                            break
+                            Import-Module $module.Path -Force -ErrorAction Stop
+                            $result.LoadedModules += @{ Name = $module.Name; Version = $module.Version.ToString() }
+                            $loadedCount++
+                            Write-Verbose ""Loaded $($module.Name) v$($module.Version)""
                         } catch {
-                            $result.Errors += ""Failed to load PowerCLI v$($coreModule.Version): $($_.Exception.Message)""
-                            continue
+                            $result.Errors += ""Failed to load $($module.Name): $($_.Exception.Message)""
                         }
                     } else {
-                        $result.Errors += ""No compatible Common module found for Core v$($coreModule.Version)""
+                        $result.Errors += ""Module $moduleName not found""
                     }
                 }
-
-                if (-not $loaded) {
-                    $result.Message += ""Failed to load any compatible PowerCLI version set.""
-                    if ($coreModules.Count -gt 1 -or $commonModules.Count -gt 1) {
-                        $result.Message += "" This may be due to multiple PowerCLI versions being installed. Consider removing older versions or manually loading specific versions.""
-                        $result.Errors += ""Multiple PowerCLI versions detected. Run 'Get-Module -ListAvailable | Where-Object { `$_.Name -like \""*VMware*\"" } | Select-Object Name, Version, Path' to see all versions""
+                
+                # Check if we have minimum required modules
+                if ($loadedCount -ge 2) { # At least Common and Core
+                    $result.Success = $true
+                    $result.Message = ""PowerCLI core modules loaded successfully ($loadedCount modules)""
+                    
+                    # Try to load additional modules (non-critical)
+                    $additionalModules = @('VMware.VimAutomation.Vds', 'VMware.VimAutomation.Storage')
+                    foreach ($moduleName in $additionalModules) {
+                        $module = $availableModules | Where-Object { $_.Name -eq $moduleName }
+                        if ($module) {
+                            try {
+                                Import-Module $module.Path -Force -ErrorAction SilentlyContinue
+                                $result.LoadedModules += @{ Name = $module.Name; Version = $module.Version.ToString() }
+                            } catch {
+                                # Non-critical, just log
+                                Write-Verbose ""Optional module $moduleName failed to load: $($_.Exception.Message)""
+                            }
+                        }
                     }
+                } else {
+                    $result.Success = $false
+                    $result.Message = 'Failed to load minimum required PowerCLI modules'
+                    $result.RecommendedAction = 'Install or reinstall VMware PowerCLI'
                 }
 
-                return $result
+                Write-Output $result
             } catch {
-                return [PSCustomObject]@{
+                Write-Output ([PSCustomObject]@{
                     Success = $false
                     LoadedModules = @()
                     Errors = @(""Critical error during PowerCLI loading: $($_.Exception.Message)"")
                     Message = ""Exception during module loading""
-                }
+                    RecommendedAction = 'Check PowerCLI installation and version compatibility'
+                })
             }
         ";
 
