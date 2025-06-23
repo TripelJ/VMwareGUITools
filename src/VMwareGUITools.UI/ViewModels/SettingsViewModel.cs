@@ -308,9 +308,12 @@ public partial class SettingsViewModel : ObservableObject
                         }
                         
                         // Add quick action buttons based on recommended actions
-                        var hasVersionConflict = recommendedActions.Any(a => a.ToString() == "VERSION_CONFLICT_RESOLUTION");
-                        var hasExecutionPolicyIssue = recommendedActions.Any(a => a.ToString() == "EXECUTION_POLICY_FIX");
-                        var needsInstall = recommendedActions.Any(a => a.ToString() == "INSTALL_POWERCLI");
+                        var recommendedActionsArray = (recommendedActions as object[])?.Select(a => a?.ToString() ?? "").ToArray() ?? Array.Empty<string>();
+                        var versionConflictsArray = (versionConflicts as object[])?.Select(c => c?.ToString() ?? "").ToArray() ?? Array.Empty<string>();
+                        
+                        var hasVersionConflict = recommendedActionsArray.Contains("VERSION_CONFLICT_RESOLUTION");
+                        var hasExecutionPolicyIssue = recommendedActionsArray.Contains("EXECUTION_POLICY_FIX");
+                        var needsInstall = recommendedActionsArray.Contains("INSTALL_POWERCLI");
                         
                         if (hasVersionConflict)
                         {
@@ -327,7 +330,7 @@ public partial class SettingsViewModel : ObservableObject
                         }
                         
                         // Special note about VMware.Vim v9.0 compatibility
-                        if (versionConflicts.Any(c => c.ToString().Contains("VMware.Vim v9.0")))
+                        if (versionConflictsArray.Any(c => c.Contains("VMware.Vim v9.0")))
                         {
                             message.AppendLine("ℹ️ Note about VMware.Vim v9.0:");
                             message.AppendLine("   The application has been enhanced to work around this specific");
