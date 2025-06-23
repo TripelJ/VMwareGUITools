@@ -89,9 +89,14 @@ public class Program
             options.UseSqlite(connectionString);
         });
         
+        // PowerCLI Services
+        services.Configure<PowerCLIOptions>(configuration.GetSection(PowerCLIOptions.SectionName));
+        services.AddSingleton<IPowerCLIService, PowerCLIService>();
+        services.AddScoped<PowerCLIDiagnosticsService>();
+        
         // Infrastructure services
         services.AddScoped<ICredentialService, CredentialService>();
-        services.AddScoped<IVMwareConnectionService, VMwareConnectionService>();
+        services.AddScoped<IVMwareConnectionService, EnhancedVMwareConnectionService>();
         services.AddScoped<IPowerShellService, PowerShellService>();
         services.AddScoped<ICheckEngine, PowerCLICheckEngine>();
         services.AddScoped<ICheckExecutionService, CheckExecutionService>();

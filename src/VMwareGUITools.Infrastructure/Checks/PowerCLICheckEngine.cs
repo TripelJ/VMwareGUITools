@@ -14,6 +14,7 @@ public class PowerCLICheckEngine : ICheckEngine
 {
     private readonly ILogger<PowerCLICheckEngine> _logger;
     private readonly IPowerShellService _powerShellService;
+    private readonly IPowerCLIService _powerCLIService;
     private readonly ICredentialService _credentialService;
 
     public string ExecutionType => "PowerCLI";
@@ -21,10 +22,12 @@ public class PowerCLICheckEngine : ICheckEngine
     public PowerCLICheckEngine(
         ILogger<PowerCLICheckEngine> logger,
         IPowerShellService powerShellService,
+        IPowerCLIService powerCLIService,
         ICredentialService credentialService)
     {
         _logger = logger;
         _powerShellService = powerShellService;
+        _powerCLIService = powerCLIService;
         _credentialService = credentialService;
     }
 
@@ -246,7 +249,8 @@ public class PowerCLICheckEngine : ICheckEngine
     {
         try
         {
-            return await _powerShellService.IsPowerCLIAvailableAsync();
+            var validation = await _powerCLIService.ValidatePowerCLIAsync();
+            return validation.IsValid;
         }
         catch (Exception ex)
         {

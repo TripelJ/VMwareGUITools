@@ -119,10 +119,15 @@ public partial class App : Application
         // PowerShell and PowerCLI Services
         services.AddSingleton<IPowerShellService, PowerShellService>();
         services.Configure<PowerShellOptions>(configuration.GetSection(PowerShellOptions.SectionName));
+        
+        // Enhanced PowerCLI Services
+        services.Configure<PowerCLIOptions>(configuration.GetSection(PowerCLIOptions.SectionName));
+        services.AddSingleton<IPowerCLIService, PowerCLIService>();
+        services.AddScoped<PowerCLIDiagnosticsService>();
 
         // Infrastructure Services
         services.AddSingleton<ICredentialService, CredentialService>();
-        services.AddScoped<IVMwareConnectionService, VMwareConnectionService>();
+        services.AddScoped<IVMwareConnectionService, EnhancedVMwareConnectionService>();
 
         // Check Engine Services
         services.AddScoped<ICheckExecutionService, CheckExecutionService>();
