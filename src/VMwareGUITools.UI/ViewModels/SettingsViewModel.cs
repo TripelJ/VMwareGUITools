@@ -868,7 +868,7 @@ public partial class SettingsViewModel : ObservableObject
         {
             _logger.LogError(ex, "Failed to load check categories from database");
             // Add default categories if database load fails
-            await AddDefaultCheckCategories();
+            AddDefaultCheckCategories();
         }
     }
 
