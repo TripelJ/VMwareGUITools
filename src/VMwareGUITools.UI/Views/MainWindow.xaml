@@ -403,7 +403,7 @@
                                                     </Grid.ColumnDefinitions>
                                                     
                                                     <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                                        <TextBlock Text="Infrastructure Overview"
+                                                        <TextBlock Text="vCenter Overview"
                                                                    FontSize="18"
                                                                    FontWeight="Medium"/>
                                                         <TextBlock Text="Real-time resource utilization and inventory"

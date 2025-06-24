@@ -73,21 +73,8 @@ public partial class VCenterOverviewViewModel : ObservableObject, IDisposable
 
             _logger.LogInformation("Loading overview data for vCenter: {VCenterName}", vCenter.Name);
 
-            // First ensure we have an active connection
-            var session = await _vmwareService.ConnectAsync(vCenter);
-            
-            // Convert VMwareSession to VSphereSession for the REST API
-            _currentSession = new VSphereSession
-            {
-                SessionId = session.SessionId,
-                VCenterUrl = session.VCenterUrl,
-                Username = session.Username,
-                CreatedAt = session.CreatedAt,
-                LastActivity = session.LastActivity,
-                IsActive = session.IsActive,
-                SessionToken = "", // Will be handled internally by the service
-                VersionInfo = session.VersionInfo
-            };
+            // First ensure we have an active connection using REST API service
+            _currentSession = await _restApiService.ConnectAsync(vCenter);
 
             // Get overview data (always live, never from database)
             var freshOverviewData = await _restApiService.GetOverviewDataAsync(_currentSession);
