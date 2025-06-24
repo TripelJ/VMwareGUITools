@@ -116,7 +116,9 @@ public partial class App : Application
         });
 
         // vSphere REST API Services - Replaces PowerShell/PowerCLI to avoid execution policy issues
+        services.Configure<VSphereRestAPIOptions>(configuration.GetSection(VSphereRestAPIOptions.SectionName));
         services.AddHttpClient();
+        services.AddScoped<IVSphereRestAPIService, VSphereRestAPIService>();
         
         // Infrastructure Services
         services.AddSingleton<ICredentialService, CredentialService>();
@@ -147,6 +149,7 @@ public partial class App : Application
         // ViewModels
         services.AddTransient<MainWindowViewModel>();
         services.AddTransient<VCenterListViewModel>();
+        services.AddTransient<VCenterOverviewViewModel>();
         services.AddTransient<AddVCenterViewModel>();
         services.AddTransient<EditVCenterViewModel>();
         services.AddTransient<SettingsViewModel>();

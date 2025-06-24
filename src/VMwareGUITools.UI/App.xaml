@@ -19,6 +19,7 @@
             <!-- Custom Brushes -->
             <SolidColorBrush x:Key="VMwareBlueBrush" Color="#2D4F8C"/>
             <SolidColorBrush x:Key="VMwareOrangeBrush" Color="#F47B20"/>
+            <SolidColorBrush x:Key="VMwareGreenBrush" Color="#4CAF50"/>
             <SolidColorBrush x:Key="SuccessBrush" Color="#4CAF50"/>
             <SolidColorBrush x:Key="WarningBrush" Color="#FF9800"/>
             <SolidColorBrush x:Key="ErrorBrush" Color="#F44336"/>

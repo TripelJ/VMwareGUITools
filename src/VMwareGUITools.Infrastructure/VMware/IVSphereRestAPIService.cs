@@ -41,4 +41,9 @@ public interface IVSphereRestAPIService : IDisposable
     /// Executes a check on a host using REST API
     /// </summary>
     Task<VSphereApiResult> ExecuteCheckAsync(VSphereSession session, string hostMoId, string checkType, Dictionary<string, object>? parameters = null, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Gets comprehensive overview data for the vCenter including clusters, hosts, VMs, and resource usage
+    /// </summary>
+    Task<VCenterOverview> GetOverviewDataAsync(VSphereSession session, CancellationToken cancellationToken = default);
 } 

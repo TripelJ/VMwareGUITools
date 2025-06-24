@@ -23,6 +23,7 @@ public partial class MainWindowViewModel : ObservableObject
     private readonly ILogger<MainWindowViewModel> _logger;
     private readonly VMwareDbContext _context;
     private readonly IVMwareConnectionService _vmwareService;
+    private readonly IVSphereRestAPIService _restApiService;
     private readonly IServiceProvider _serviceProvider;
     private readonly System.Timers.Timer _clockTimer;
 
@@ -47,15 +48,20 @@ public partial class MainWindowViewModel : ObservableObject
     [ObservableProperty]
     private bool _isLoading = false;
 
+    [ObservableProperty]
+    private VCenterOverview? _overviewData;
+
     public MainWindowViewModel(
         ILogger<MainWindowViewModel> logger,
         VMwareDbContext context,
         IVMwareConnectionService vmwareService,
+        IVSphereRestAPIService restApiService,
         IServiceProvider serviceProvider)
     {
         _logger = logger;
         _context = context;
         _vmwareService = vmwareService;
+        _restApiService = restApiService;
         _serviceProvider = serviceProvider;
 
         // Setup clock timer
@@ -308,6 +314,46 @@ public partial class MainWindowViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Command to load overview data for the selected vCenter
+    /// </summary>
+    [RelayCommand]
+    private async Task LoadOverviewDataAsync()
+    {
+        if (SelectedVCenter == null)
+        {
+            OverviewData = null;
+            return;
+        }
+
+        try
+        {
+            IsLoading = true;
+            StatusMessage = $"Loading overview data for {SelectedVCenter.DisplayName}...";
+
+            _logger.LogInformation("Loading overview data for vCenter: {VCenterName}", SelectedVCenter.Name);
+
+            // Connect to vCenter using REST API service directly
+            var restSession = await _restApiService.ConnectAsync(SelectedVCenter);
+
+            // Get overview data
+            OverviewData = await _restApiService.GetOverviewDataAsync(restSession);
+            StatusMessage = $"Overview data loaded successfully for {SelectedVCenter.DisplayName}";
+
+            _logger.LogInformation("Overview data loaded successfully for vCenter: {VCenterName}", SelectedVCenter.Name);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to load overview data for vCenter: {VCenterName}", SelectedVCenter?.Name);
+            StatusMessage = $"Failed to load overview data: {ex.Message}";
+            OverviewData = null;
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    /// <summary>
     /// Initialize the view model and load data
     /// </summary>
     public async Task InitializeAsync()
@@ -425,6 +471,12 @@ public partial class MainWindowViewModel : ObservableObject
         if (value != null)
         {
             _logger.LogDebug("Selected vCenter changed to: {VCenterName}", value.Name);
+            // Automatically load overview data when a vCenter is selected
+            _ = LoadOverviewDataAsync();
+        }
+        else
+        {
+            OverviewData = null;
         }
     }
 
