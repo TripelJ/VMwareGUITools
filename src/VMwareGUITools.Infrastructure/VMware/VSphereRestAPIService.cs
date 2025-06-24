@@ -385,8 +385,8 @@ public class VSphereRestAPIService : IVSphereRestAPIService
             {
                 Version = versionData.GetProperty("version").GetString() ?? "Unknown",
                 Build = versionData.GetProperty("build").GetString() ?? "Unknown",
-                Product = versionData.GetProperty("product").GetString() ?? "vCenter Server",
-                Summary = versionData.GetProperty("summary").GetString() ?? "VMware vCenter Server"
+                ProductName = versionData.GetProperty("product").GetString() ?? "vCenter Server",
+                ApiVersion = versionData.GetProperty("summary").GetString() ?? "VMware vCenter Server"
             };
         }
         catch (Exception ex)
@@ -396,8 +396,8 @@ public class VSphereRestAPIService : IVSphereRestAPIService
             {
                 Version = "Unknown",
                 Build = "Unknown",
-                Product = "vCenter Server",
-                Summary = "VMware vCenter Server"
+                ProductName = "vCenter Server",
+                ApiVersion = "Unknown"
             };
         }
     }
@@ -428,6 +428,7 @@ public class VSphereRestAPIService : IVSphereRestAPIService
         }
 
         // TODO: Implement session refresh if needed
+        await Task.CompletedTask;
     }
 
     private async Task<List<ClusterInfo>> GetClustersAsync(string vcenterUrl, string sessionToken, CancellationToken cancellationToken)
