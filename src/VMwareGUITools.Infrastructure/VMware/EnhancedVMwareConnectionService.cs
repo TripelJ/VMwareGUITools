@@ -334,7 +334,7 @@ public class EnhancedVMwareConnectionService : IVMwareConnectionService
                         @{{N='ProcessorType'; E={{$_.Hardware.CpuInfo.Name}}}},
                         @{{N='MemorySize'; E={{$_.Hardware.MemorySize}}}},
                         @{{N='CpuCores'; E={{$_.Hardware.CpuInfo.NumCpuCores}}}},
-                        @{{N='SshEnabled'; E={{($_ | Get-VMHostService | Where-Object {{$_.Key -eq 'TSM-SSH'}}).Running}}}},
+                        @{{N='SshEnabled'; E={{ ($_ | Get-VMHostService | Where-Object {{$_.Key -eq 'TSM-SSH'}}).Running}}}},
                         @{{N='Type'; E={{'Standard'}}}}
                 }}
             ";
@@ -392,43 +392,63 @@ public class EnhancedVMwareConnectionService : IVMwareConnectionService
     {
         try
         {
+            _logger.LogInformation("Getting vCenter version for session: {SessionId}", session.SessionId);
+
             if (!_activeSessions.TryGetValue(session.SessionId, out var enhancedSession))
             {
                 throw new InvalidOperationException("Session not found or inactive");
             }
 
-            var command = @"
-                $si = Get-View ServiceInstance
-                $si.Content.About | Select-Object Version, Build, ApiVersion, InstanceUuid, Name
-            ";
-
-            var result = await _powerCLIService.ExecuteCommandAsync(enhancedSession.PowerCLISession, command, timeoutSeconds: 30);
-            
-            if (!result.IsSuccess)
+            // Use cached version info if available
+            if (enhancedSession.VersionInfo != null)
             {
-                throw new InvalidOperationException($"Failed to get vCenter version: {result.ErrorMessage}");
+                enhancedSession.LastActivity = DateTime.UtcNow;
+                return enhancedSession.VersionInfo;
             }
 
+            // Otherwise get from PowerCLI session
+            var versionInfo = new VCenterVersionInfo
+            {
+                Version = enhancedSession.PowerCLISession.ServerVersion ?? "Unknown",
+                ApiVersion = enhancedSession.PowerCLISession.ApiVersion ?? "Unknown",
+                ProductName = "VMware vCenter Server"
+            };
+
+            enhancedSession.VersionInfo = versionInfo;
             enhancedSession.LastActivity = DateTime.UtcNow;
 
-            if (result.Objects.Count > 0 && result.Objects[0] is PSObject obj)
-            {
-                return new VCenterVersionInfo
-                {
-                    Version = GetPropertyValue<string>(obj, "Version") ?? "",
-                    Build = GetPropertyValue<string>(obj, "Build") ?? "",
-                    ApiVersion = GetPropertyValue<string>(obj, "ApiVersion") ?? "",
-                    InstanceUuid = GetPropertyValue<string>(obj, "InstanceUuid") ?? "",
-                    ProductName = GetPropertyValue<string>(obj, "Name") ?? ""
-                };
-            }
-
-            return new VCenterVersionInfo();
+            return versionInfo;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to get vCenter version for session: {SessionId}", session.SessionId);
             throw;
+        }
+    }
+
+    public async Task<bool> TestConnectionHealthAsync(VCenter vCenter, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            _logger.LogInformation("Testing connection health for vCenter: {VCenterUrl}", vCenter.Url);
+
+            // Decrypt credentials
+            var (username, password) = _credentialService.DecryptCredentials(vCenter.EncryptedCredentials);
+
+            // Use a quick PowerCLI health check
+            var connectionResult = await _powerCLIService.TestConnectionAsync(vCenter.Url, username, password, 30);
+            
+            var isHealthy = connectionResult.IsSuccessful;
+            
+            _logger.LogInformation("Connection health check for vCenter {VCenterUrl}: {IsHealthy}", 
+                vCenter.Url, isHealthy ? "Healthy" : "Unhealthy");
+
+            return isHealthy;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Connection health check failed for vCenter: {VCenterUrl}", vCenter.Url);
+            return false;
         }
     }
 

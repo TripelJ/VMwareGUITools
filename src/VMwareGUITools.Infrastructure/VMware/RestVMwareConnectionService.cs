@@ -265,12 +265,23 @@ public class RestVMwareConnectionService : IVMwareConnectionService
     {
         try
         {
+            _logger.LogInformation("Getting vCenter version via REST API for session: {SessionId}", session.SessionId);
+
             if (!_activeSessions.TryGetValue(session.SessionId, out var restSession))
             {
                 throw new InvalidOperationException("Session not found or inactive");
             }
 
+            // Use cached version info if available
+            if (restSession.VersionInfo != null)
+            {
+                restSession.LastActivity = DateTime.UtcNow;
+                return restSession.VersionInfo;
+            }
+
+            // Otherwise get from REST API
             var versionInfo = await GetVersionInfoAsync(restSession.VCenterUrl, restSession.SessionToken, cancellationToken);
+            restSession.VersionInfo = versionInfo;
             restSession.LastActivity = DateTime.UtcNow;
 
             return versionInfo;
@@ -279,6 +290,38 @@ public class RestVMwareConnectionService : IVMwareConnectionService
         {
             _logger.LogError(ex, "Failed to get vCenter version via REST API for session: {SessionId}", session.SessionId);
             throw;
+        }
+    }
+
+    public async Task<bool> TestConnectionHealthAsync(VCenter vCenter, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            _logger.LogInformation("Testing connection health via REST API for vCenter: {VCenterUrl}", vCenter.Url);
+
+            // Decrypt credentials
+            var (username, password) = _credentialService.DecryptCredentials(vCenter.EncryptedCredentials);
+
+            // Use a quick authentication test
+            var authResult = await AuthenticateAsync(vCenter.Url, username, password, cancellationToken);
+            
+            if (authResult.IsSuccessful)
+            {
+                // Clean up test session
+                await LogoutAsync(vCenter.Url, authResult.SessionToken!, cancellationToken);
+            }
+
+            var isHealthy = authResult.IsSuccessful;
+            
+            _logger.LogInformation("Connection health check via REST API for vCenter {VCenterUrl}: {IsHealthy}", 
+                vCenter.Url, isHealthy ? "Healthy" : "Unhealthy");
+
+            return isHealthy;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Connection health check via REST API failed for vCenter: {VCenterUrl}", vCenter.Url);
+            return false;
         }
     }
 
