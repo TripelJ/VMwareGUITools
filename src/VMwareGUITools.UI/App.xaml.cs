@@ -9,7 +9,6 @@ using Serilog;
 using VMwareGUITools.Data;
 using VMwareGUITools.Infrastructure.Checks;
 using VMwareGUITools.Infrastructure.Notifications;
-using VMwareGUITools.Infrastructure.PowerShell;
 using VMwareGUITools.Infrastructure.Scheduling;
 using VMwareGUITools.Infrastructure.Security;
 using VMwareGUITools.Infrastructure.VMware;
@@ -116,33 +115,16 @@ public partial class App : Application
             options.UseSqlite(connectionString);
         });
 
-        // PowerShell Services - NEW: Uses external PowerShell execution to bypass execution policy issues
-        services.Configure<ExternalPowerShellOptions>(configuration.GetSection(ExternalPowerShellOptions.SectionName));
-        services.Configure<PowerShellV2Options>(configuration.GetSection(PowerShellV2Options.SectionName));
-        services.AddScoped<IExternalPowerShellService, ExternalPowerShellService>();
-        services.AddScoped<PowerShellService>(); // Keep as fallback
-        services.AddScoped<IPowerShellService>(provider => 
-        {
-            var logger = provider.GetRequiredService<Microsoft.Extensions.Logging.ILogger<PowerShellServiceV2>>();
-            var externalService = provider.GetRequiredService<IExternalPowerShellService>();
-            var fallbackService = provider.GetRequiredService<PowerShellService>();
-            var options = provider.GetRequiredService<Microsoft.Extensions.Options.IOptions<PowerShellV2Options>>();
-            
-            return new PowerShellServiceV2(logger, externalService, fallbackService, options);
-        });
+        // vSphere REST API Services - Replaces PowerShell/PowerCLI to avoid execution policy issues
+        services.AddHttpClient();
         
-        // Enhanced PowerCLI Services
-        services.Configure<PowerCLIOptions>(configuration.GetSection(PowerCLIOptions.SectionName));
-        services.AddSingleton<IPowerCLIService, PowerCLIService>();
-        services.AddScoped<PowerCLIDiagnosticsService>();
-
         // Infrastructure Services
         services.AddSingleton<ICredentialService, CredentialService>();
-        services.AddScoped<IVMwareConnectionService, EnhancedVMwareConnectionService>();
+        services.AddScoped<IVMwareConnectionService, RestVMwareConnectionService>();
 
-        // Check Engine Services
+        // Check Engine Services  
         services.AddScoped<ICheckExecutionService, CheckExecutionService>();
-        services.AddScoped<ICheckEngine, PowerCLICheckEngine>();
+        services.AddScoped<ICheckEngine, RestAPICheckEngine>();
         services.Configure<CheckExecutionOptions>(configuration.GetSection(CheckExecutionOptions.SectionName));
 
         // Notification Services

@@ -363,19 +363,19 @@ public partial class MainWindowViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Check if PowerCLI is available
+    /// Check if VMware connectivity is available (using REST API)
     /// </summary>
     private async Task CheckPowerCLIAsync()
     {
         try
         {
-            _logger.LogDebug("Checking PowerCLI availability");
+            _logger.LogDebug("Checking VMware REST API connectivity availability");
             IsPowerCLIAvailable = await _vmwareService.IsPowerCLIAvailableAsync();
-            _logger.LogDebug("PowerCLI availability: {Available}", IsPowerCLIAvailable);
+            _logger.LogDebug("VMware REST API availability: {Available}", IsPowerCLIAvailable);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to check PowerCLI availability");
+            _logger.LogError(ex, "Failed to check VMware REST API availability");
             IsPowerCLIAvailable = false;
         }
     }

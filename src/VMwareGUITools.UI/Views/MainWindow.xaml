@@ -222,7 +222,7 @@
                             </ListBox.ItemTemplate>
                         </ListBox>
 
-                        <!-- PowerCLI Status -->
+                        <!-- VMware API Status -->
                         <Border Grid.Row="2" 
                                 BorderBrush="{DynamicResource MaterialDesignDivider}"
                                 BorderThickness="0,1,0,0"
@@ -234,7 +234,7 @@
                                 </Grid.ColumnDefinitions>
                                 
                                 <materialDesign:PackIcon Grid.Column="0"
-                                                         Kind="PowerShell"
+                                                         Kind="CloudSync"
                                                          Height="16" Width="16"
                                                          VerticalAlignment="Center"
                                                          Margin="0,0,8,0">
@@ -259,11 +259,11 @@
                                         <Style TargetType="TextBlock">
                                             <Style.Triggers>
                                                 <DataTrigger Binding="{Binding IsPowerCLIAvailable}" Value="True">
-                                                    <Setter Property="Text" Value="PowerCLI Available"/>
+                                                    <Setter Property="Text" Value="VMware REST API Ready"/>
                                                     <Setter Property="Foreground" Value="{StaticResource SuccessBrush}"/>
                                                 </DataTrigger>
                                                 <DataTrigger Binding="{Binding IsPowerCLIAvailable}" Value="False">
-                                                    <Setter Property="Text" Value="PowerCLI Not Found"/>
+                                                    <Setter Property="Text" Value="VMware API Not Available"/>
                                                     <Setter Property="Foreground" Value="{StaticResource ErrorBrush}"/>
                                                 </DataTrigger>
                                             </Style.Triggers>
