@@ -788,86 +788,112 @@
                                                                                 <!-- TreeView -->
                                 <TreeView ItemsSource="{Binding InfrastructureViewModel.InfrastructureItems}"
                                           Style="{StaticResource MaterialDesignTreeView}"
-                                          Visibility="{Binding InfrastructureViewModel.IsLoading, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=True}">
-                                                    <TreeView.ItemTemplate>
-                                                        <HierarchicalDataTemplate ItemsSource="{Binding Children}">
-                                                            <Border Padding="4,2" 
-                                                                    CornerRadius="2"
-                                                                    ToolTip="{Binding ToolTip}">
-                                                                <Grid>
-                                                                    <Grid.ColumnDefinitions>
-                                                                        <ColumnDefinition Width="Auto"/>
-                                                                        <ColumnDefinition Width="Auto"/>
-                                                                        <ColumnDefinition Width="*"/>
-                                                                    </Grid.ColumnDefinitions>
+                                          Padding="8">
+                                    <TreeView.Style>
+                                        <Style TargetType="TreeView" BasedOn="{StaticResource MaterialDesignTreeView}">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding InfrastructureViewModel.IsLoading}" Value="True">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding InfrastructureViewModel.InfrastructureItems.Count}" Value="0">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TreeView.Style>
+                                    <TreeView.ItemTemplate>
+                                        <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+                                            <Border Padding="4,2" 
+                                                    CornerRadius="2"
+                                                    ToolTip="{Binding ToolTip}">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
 
-                                                                    <!-- Status Indicator -->
-                                                                    <Ellipse Grid.Column="0"
-                                                                             Width="8" Height="8"
+                                                    <!-- Status Indicator -->
+                                                    <Ellipse Grid.Column="0"
+                                                             Width="8" Height="8"
+                                                             VerticalAlignment="Center"
+                                                             Margin="0,0,6,0"
+                                                             Fill="{Binding StatusColor}"/>
+
+                                                    <!-- Icon -->
+                                                    <materialDesign:PackIcon Grid.Column="1"
+                                                                             Kind="{Binding Icon}"
+                                                                             Height="16" Width="16"
                                                                              VerticalAlignment="Center"
-                                                                             Margin="0,0,6,0"
-                                                                             Fill="{Binding StatusColor}"/>
+                                                                             Margin="0,0,6,0">
+                                                        <materialDesign:PackIcon.Style>
+                                                            <Style TargetType="materialDesign:PackIcon">
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding Type}" Value="Cluster">
+                                                                        <Setter Property="Foreground" Value="#2196F3"/>
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding Type}" Value="Host">
+                                                                        <Setter Property="Foreground" Value="#FF9800"/>
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding Type}" Value="DatastoresFolder">
+                                                                        <Setter Property="Foreground" Value="#4CAF50"/>
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding Type}" Value="Datastore">
+                                                                        <Setter Property="Foreground" Value="#9C27B0"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </materialDesign:PackIcon.Style>
+                                                    </materialDesign:PackIcon>
 
-                                                                    <!-- Icon -->
-                                                                    <materialDesign:PackIcon Grid.Column="1"
-                                                                                             Kind="{Binding Icon}"
-                                                                                             Height="16" Width="16"
-                                                                                             VerticalAlignment="Center"
-                                                                                             Margin="0,0,6,0">
-                                                                        <materialDesign:PackIcon.Style>
-                                                                            <Style TargetType="materialDesign:PackIcon">
-                                                                                <Style.Triggers>
-                                                                                    <DataTrigger Binding="{Binding Type}" Value="Cluster">
-                                                                                        <Setter Property="Foreground" Value="#2196F3"/>
-                                                                                    </DataTrigger>
-                                                                                    <DataTrigger Binding="{Binding Type}" Value="Host">
-                                                                                        <Setter Property="Foreground" Value="#FF9800"/>
-                                                                                    </DataTrigger>
-                                                                                    <DataTrigger Binding="{Binding Type}" Value="DatastoresFolder">
-                                                                                        <Setter Property="Foreground" Value="#4CAF50"/>
-                                                                                    </DataTrigger>
-                                                                                    <DataTrigger Binding="{Binding Type}" Value="Datastore">
-                                                                                        <Setter Property="Foreground" Value="#9C27B0"/>
-                                                                                    </DataTrigger>
-                                                                                </Style.Triggers>
-                                                                            </Style>
-                                                                        </materialDesign:PackIcon.Style>
-                                                                    </materialDesign:PackIcon>
+                                                    <!-- Name -->
+                                                    <TextBlock Grid.Column="2"
+                                                               Text="{Binding Name}"
+                                                               VerticalAlignment="Center"
+                                                               TextTrimming="CharacterEllipsis">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding Type}" Value="Cluster">
+                                                                        <Setter Property="FontWeight" Value="Medium"/>
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding Type}" Value="DatastoresFolder">
+                                                                        <Setter Property="FontWeight" Value="Medium"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
+                                                </Grid>
+                                            </Border>
+                                        </HierarchicalDataTemplate>
+                                    </TreeView.ItemTemplate>
+                                    <TreeView.ItemContainerStyle>
+                                        <Style TargetType="TreeViewItem" BasedOn="{StaticResource MaterialDesignTreeViewItem}">
+                                            <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
+                                            <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}"/>
+                                        </Style>
+                                    </TreeView.ItemContainerStyle>
+                                </TreeView>
 
-                                                                    <!-- Name -->
-                                                                    <TextBlock Grid.Column="2"
-                                                                               Text="{Binding Name}"
-                                                                               VerticalAlignment="Center"
-                                                                               TextTrimming="CharacterEllipsis">
-                                                                        <TextBlock.Style>
-                                                                            <Style TargetType="TextBlock">
-                                                                                <Style.Triggers>
-                                                                                    <DataTrigger Binding="{Binding Type}" Value="Cluster">
-                                                                                        <Setter Property="FontWeight" Value="Medium"/>
-                                                                                    </DataTrigger>
-                                                                                    <DataTrigger Binding="{Binding Type}" Value="DatastoresFolder">
-                                                                                        <Setter Property="FontWeight" Value="Medium"/>
-                                                                                    </DataTrigger>
-                                                                                </Style.Triggers>
-                                                                            </Style>
-                                                                        </TextBlock.Style>
-                                                                    </TextBlock>
-                                                                </Grid>
-                                                            </Border>
-                                                        </HierarchicalDataTemplate>
-                                                    </TreeView.ItemTemplate>
-                                                    <TreeView.ItemContainerStyle>
-                                                        <Style TargetType="TreeViewItem" BasedOn="{StaticResource MaterialDesignTreeViewItem}">
-                                                            <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
-                                                            <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}"/>
-                                                        </Style>
-                                                    </TreeView.ItemContainerStyle>
-                                                </TreeView>
-
-                                                <!-- Empty State -->
-                                                <StackPanel VerticalAlignment="Center" 
-                                                            HorizontalAlignment="Center"
-                                                            Visibility="{Binding InfrastructureViewModel.InfrastructureItems.Count, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=True}">
+                                <!-- Empty State -->
+                                <StackPanel VerticalAlignment="Center" 
+                                            HorizontalAlignment="Center">
+                                    <StackPanel.Style>
+                                        <Style TargetType="StackPanel">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Style.Triggers>
+                                                <MultiDataTrigger>
+                                                    <MultiDataTrigger.Conditions>
+                                                        <Condition Binding="{Binding InfrastructureViewModel.IsLoading}" Value="False"/>
+                                                        <Condition Binding="{Binding InfrastructureViewModel.InfrastructureItems.Count}" Value="0"/>
+                                                    </MultiDataTrigger.Conditions>
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </MultiDataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </StackPanel.Style>
                                                     <materialDesign:PackIcon Kind="ServerNetwork" 
                                                                              Height="48" Width="48"
                                                                              HorizontalAlignment="Center"

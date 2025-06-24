@@ -309,6 +309,14 @@ public partial class InfrastructureItemViewModel : ObservableObject
     /// Gets whether this item has children
     /// </summary>
     public bool HasChildren => Children.Any();
+    
+    /// <summary>
+    /// Notify when children collection changes
+    /// </summary>
+    public InfrastructureItemViewModel()
+    {
+        Children.CollectionChanged += (s, e) => OnPropertyChanged(nameof(HasChildren));
+    }
 }
 
 /// <summary>
