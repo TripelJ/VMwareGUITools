@@ -112,11 +112,13 @@ public class CheckDefinition
 /// </summary>
 public enum CheckExecutionType
 {
+    [Obsolete("PowerCLI is deprecated. Use vSphereRestAPI instead.")]
     PowerCLI,
     SSH,
     vSphereAPI,
     WinRM,
-    Custom
+    Custom,
+    vSphereRestAPI
 }
 
 /// <summary>
