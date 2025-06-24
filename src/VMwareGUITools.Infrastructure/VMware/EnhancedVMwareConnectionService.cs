@@ -388,7 +388,7 @@ public class EnhancedVMwareConnectionService : IVMwareConnectionService
         return validation.IsValid;
     }
 
-    public async Task<VCenterVersionInfo> GetVCenterVersionAsync(VMwareSession session, CancellationToken cancellationToken = default)
+    public Task<VCenterVersionInfo> GetVCenterVersionAsync(VMwareSession session, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -403,7 +403,7 @@ public class EnhancedVMwareConnectionService : IVMwareConnectionService
             if (enhancedSession.VersionInfo != null)
             {
                 enhancedSession.LastActivity = DateTime.UtcNow;
-                return enhancedSession.VersionInfo;
+                return Task.FromResult(enhancedSession.VersionInfo);
             }
 
             // Otherwise get from PowerCLI session
@@ -417,7 +417,7 @@ public class EnhancedVMwareConnectionService : IVMwareConnectionService
             enhancedSession.VersionInfo = versionInfo;
             enhancedSession.LastActivity = DateTime.UtcNow;
 
-            return versionInfo;
+            return Task.FromResult(versionInfo);
         }
         catch (Exception ex)
         {

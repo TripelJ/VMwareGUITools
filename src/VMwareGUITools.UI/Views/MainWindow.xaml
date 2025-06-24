@@ -787,7 +787,6 @@
 
                                                                                 <!-- TreeView -->
                                 <TreeView ItemsSource="{Binding InfrastructureViewModel.InfrastructureItems}"
-                                          Style="{StaticResource MaterialDesignTreeView}"
                                           Padding="8">
                                     <TreeView.Style>
                                         <Style TargetType="TreeView" BasedOn="{StaticResource MaterialDesignTreeView}">
