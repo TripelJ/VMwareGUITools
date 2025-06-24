@@ -71,7 +71,7 @@ public partial class MainWindowViewModel : ObservableObject
         // Initialize view models
         _infrastructureViewModel = new InfrastructureViewModel(
             _serviceProvider.GetRequiredService<ILogger<InfrastructureViewModel>>(),
-            context);
+            restApiService);
 
         // Setup clock timer
         _clockTimer = new System.Timers.Timer(1000);
@@ -572,5 +572,6 @@ public partial class MainWindowViewModel : ObservableObject
     {
         _clockTimer?.Dispose();
         _connectionMonitorTimer?.Dispose();
+        _infrastructureViewModel?.Dispose();
     }
 } 

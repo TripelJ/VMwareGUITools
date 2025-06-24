@@ -1,20 +1,21 @@
 using System.Collections.ObjectModel;
+using System.Timers;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using VMwareGUITools.Core.Models;
-using VMwareGUITools.Data;
+using VMwareGUITools.Infrastructure.VMware;
 
 namespace VMwareGUITools.UI.ViewModels;
 
 /// <summary>
-/// View model for the infrastructure tree showing clusters, hosts, and datastores
+/// View model for the infrastructure tree showing clusters, hosts, and datastores from live REST API data
 /// </summary>
-public partial class InfrastructureViewModel : ObservableObject
+public partial class InfrastructureViewModel : ObservableObject, IDisposable
 {
     private readonly ILogger<InfrastructureViewModel> _logger;
-    private readonly VMwareDbContext _context;
+    private readonly IVSphereRestAPIService _restApiService;
+    private readonly System.Timers.Timer _refreshTimer;
 
     [ObservableProperty]
     private ObservableCollection<InfrastructureItemViewModel> _infrastructureItems = new();
@@ -28,20 +29,33 @@ public partial class InfrastructureViewModel : ObservableObject
     [ObservableProperty]
     private VCenter? _currentVCenter;
 
-    public InfrastructureViewModel(ILogger<InfrastructureViewModel> logger, VMwareDbContext context)
+    [ObservableProperty]
+    private DateTime _lastUpdated;
+
+    [ObservableProperty]
+    private string _statusMessage = "Ready";
+
+    public InfrastructureViewModel(ILogger<InfrastructureViewModel> logger, IVSphereRestAPIService restApiService)
     {
         _logger = logger;
-        _context = context;
+        _restApiService = restApiService;
+
+        // Setup auto-refresh timer (30 seconds)
+        _refreshTimer = new System.Timers.Timer(30000);
+        _refreshTimer.Elapsed += async (sender, e) => await AutoRefreshAsync();
+        _refreshTimer.AutoReset = true;
     }
 
     /// <summary>
-    /// Load infrastructure data for the specified vCenter
+    /// Load live infrastructure data for the specified vCenter using REST API
     /// </summary>
     public async Task LoadInfrastructureAsync(VCenter? vCenter)
     {
         if (vCenter == null)
         {
             InfrastructureItems.Clear();
+            _refreshTimer.Stop();
+            StatusMessage = "No vCenter selected";
             return;
         }
 
@@ -49,53 +63,67 @@ public partial class InfrastructureViewModel : ObservableObject
         {
             IsLoading = true;
             CurrentVCenter = vCenter;
+            StatusMessage = "Loading infrastructure...";
 
-            _logger.LogInformation("Loading infrastructure for vCenter: {VCenterName}", vCenter.Name);
+            _logger.LogInformation("Loading live infrastructure data for vCenter: {VCenterName}", vCenter.Name);
 
-            // Load clusters with their hosts
-            var clusters = await _context.Clusters
-                .Include(c => c.Hosts)
-                .Where(c => c.VCenterId == vCenter.Id && c.Enabled)
-                .OrderBy(c => c.Name)
-                .ToListAsync();
-
-            // Load datastores for this vCenter
-            var datastores = await _context.Set<Datastore>()
-                .Where(d => d.VCenterId == vCenter.Id && d.Accessible)
-                .OrderBy(d => d.Name)
-                .ToListAsync();
+            // Establish REST API session
+            var session = await _restApiService.ConnectAsync(vCenter);
 
             // Clear existing items
             InfrastructureItems.Clear();
 
-            // Create cluster items with their hosts
-            foreach (var cluster in clusters)
+            // Get live data from REST API
+            var clustersTask = _restApiService.DiscoverClustersAsync(session);
+            var datastoresTask = _restApiService.DiscoverDatastoresAsync(session);
+
+            await Task.WhenAll(clustersTask, datastoresTask);
+
+            var clusters = await clustersTask;
+            var datastores = await datastoresTask;
+
+            // Build cluster tree with hosts
+            foreach (var cluster in clusters.OrderBy(c => c.Name))
             {
                 var clusterItem = new InfrastructureItemViewModel
                 {
                     Name = cluster.Name,
                     Type = InfrastructureItemType.Cluster,
                     Icon = "Cube",
-                    ToolTip = $"Cluster: {cluster.Name} ({cluster.HostCount} hosts)",
+                    ToolTip = $"Cluster: {cluster.Name} - DRS: {(cluster.DrsEnabled ? "Enabled" : "Disabled")}, HA: {(cluster.HaEnabled ? "Enabled" : "Disabled")}",
                     Data = cluster,
-                    IsExpanded = true
+                    IsExpanded = true,
+                    StatusColor = GetClusterStatusColor(cluster)
                 };
 
-                // Add hosts under each cluster
-                foreach (var host in cluster.Hosts.Where(h => h.Enabled).OrderBy(h => h.Name))
+                // Get hosts for this cluster
+                try
                 {
-                    var hostItem = new InfrastructureItemViewModel
+                    var hosts = await _restApiService.DiscoverHostsAsync(session, cluster.MoId);
+                    
+                    foreach (var host in hosts.OrderBy(h => h.Name))
                     {
-                        Name = host.Name,
-                        Type = InfrastructureItemType.Host,
-                        Icon = "Server",
-                        ToolTip = $"Host: {host.Name} ({host.IpAddress}) - {host.HealthStatus}",
-                        Data = host,
-                        Parent = clusterItem,
-                        StatusColor = GetStatusColor(host.HealthStatus)
-                    };
+                        var hostItem = new InfrastructureItemViewModel
+                        {
+                            Name = host.Name,
+                            Type = InfrastructureItemType.Host,
+                            Icon = "Server",
+                            ToolTip = $"Host: {host.Name} - State: {host.ConnectionState}, Power: {host.PowerState}{(host.InMaintenanceMode ? " (Maintenance)" : "")}",
+                            Data = host,
+                            Parent = clusterItem,
+                            StatusColor = GetHostStatusColor(host)
+                        };
 
-                    clusterItem.Children.Add(hostItem);
+                        clusterItem.Children.Add(hostItem);
+                    }
+
+                    // Update cluster tooltip with actual host count
+                    clusterItem.ToolTip = $"Cluster: {cluster.Name} ({hosts.Count} hosts) - DRS: {(cluster.DrsEnabled ? "Enabled" : "Disabled")}, HA: {(cluster.HaEnabled ? "Enabled" : "Disabled")}";
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to load hosts for cluster {ClusterName}", cluster.Name);
+                    clusterItem.StatusColor = "#FF9800"; // Orange for warning
                 }
 
                 InfrastructureItems.Add(clusterItem);
@@ -110,10 +138,11 @@ public partial class InfrastructureViewModel : ObservableObject
                     Type = InfrastructureItemType.DatastoresFolder,
                     Icon = "Database",
                     ToolTip = $"Datastores ({datastores.Count})",
-                    IsExpanded = true
+                    IsExpanded = true,
+                    StatusColor = "#2196F3" // Blue
                 };
 
-                foreach (var datastore in datastores)
+                foreach (var datastore in datastores.Where(d => d.Accessible).OrderBy(d => d.Name))
                 {
                     var datastoreItem = new InfrastructureItemViewModel
                     {
@@ -132,19 +161,21 @@ public partial class InfrastructureViewModel : ObservableObject
                 InfrastructureItems.Add(datastoresSection);
             }
 
-            // Successfully loaded infrastructure data - update connection status
-            if (clusters.Any() || datastores.Any())
-            {
-                vCenter.UpdateConnectionStatus(true);
-            }
+            // Successfully loaded infrastructure data
+            LastUpdated = DateTime.Now;
+            StatusMessage = $"Infrastructure loaded successfully at {LastUpdated:HH:mm:ss} ({clusters.Count} clusters, {datastores.Count} datastores)";
+            
+            // Start auto-refresh timer
+            _refreshTimer.Start();
 
-            _logger.LogInformation("Loaded {ClusterCount} clusters and {DatastoreCount} datastores for vCenter: {VCenterName}", 
+            _logger.LogInformation("Loaded live infrastructure data: {ClusterCount} clusters, {DatastoreCount} datastores for vCenter: {VCenterName}", 
                 clusters.Count, datastores.Count, vCenter.Name);
         }
         catch (Exception ex)
         {
-            vCenter?.UpdateConnectionStatus(false);
-            _logger.LogError(ex, "Failed to load infrastructure for vCenter: {VCenterName}", vCenter?.Name);
+            _logger.LogError(ex, "Failed to load live infrastructure data for vCenter: {VCenterName}", vCenter?.Name);
+            StatusMessage = $"Failed to load infrastructure: {ex.Message}";
+            _refreshTimer.Stop();
         }
         finally
         {
@@ -153,26 +184,67 @@ public partial class InfrastructureViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Refresh the infrastructure data
+    /// Auto-refresh handler that runs every 30 seconds
+    /// </summary>
+    private async Task AutoRefreshAsync()
+    {
+        if (CurrentVCenter != null && !IsLoading)
+        {
+            try
+            {
+                _logger.LogDebug("Auto-refreshing infrastructure data for vCenter: {VCenterName}", CurrentVCenter.Name);
+                await LoadInfrastructureAsync(CurrentVCenter);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Auto-refresh failed for vCenter: {VCenterName}", CurrentVCenter?.Name);
+                StatusMessage = $"Auto-refresh failed at {DateTime.Now:HH:mm:ss}: {ex.Message}";
+            }
+        }
+    }
+
+    /// <summary>
+    /// Manual refresh command
     /// </summary>
     [RelayCommand]
     private async Task RefreshAsync()
     {
-        await LoadInfrastructureAsync(CurrentVCenter);
+        if (CurrentVCenter != null)
+        {
+            _refreshTimer.Stop(); // Stop auto-refresh during manual refresh
+            await LoadInfrastructureAsync(CurrentVCenter);
+            // Timer will be restarted in LoadInfrastructureAsync if successful
+        }
     }
 
     /// <summary>
-    /// Get status color based on health status
+    /// Get status color based on cluster configuration
     /// </summary>
-    private static string GetStatusColor(HealthStatus status)
+    private static string GetClusterStatusColor(ClusterInfo cluster)
     {
-        return status switch
+        if (cluster.DrsEnabled && cluster.HaEnabled)
+            return "#4CAF50"; // Green - fully configured
+        else if (cluster.DrsEnabled || cluster.HaEnabled)
+            return "#FF9800"; // Orange - partially configured
+        else
+            return "#2196F3"; // Blue - basic configuration
+    }
+
+    /// <summary>
+    /// Get status color based on host state
+    /// </summary>
+    private static string GetHostStatusColor(HostInfo host)
+    {
+        if (host.InMaintenanceMode)
+            return "#9E9E9E"; // Gray - maintenance mode
+        
+        return host.ConnectionState.ToLower() switch
         {
-            HealthStatus.Healthy => "#4CAF50", // Green
-            HealthStatus.Warning => "#FF9800", // Orange
-            HealthStatus.Critical => "#F44336", // Red
-            HealthStatus.Stale => "#9E9E9E", // Gray
-            _ => "#2196F3" // Blue (Unknown)
+            "connected" when host.PowerState.ToLower() == "poweredon" => "#4CAF50", // Green - healthy
+            "connected" => "#FF9800", // Orange - connected but not powered on
+            "disconnected" => "#F44336", // Red - disconnected
+            "notresponding" => "#F44336", // Red - not responding
+            _ => "#2196F3" // Blue - unknown state
         };
     }
 
@@ -183,11 +255,20 @@ public partial class InfrastructureViewModel : ObservableObject
     {
         return usagePercentage switch
         {
-            >= 90 => "#F44336", // Red
-            >= 80 => "#FF9800", // Orange
-            >= 70 => "#FFC107", // Amber
-            _ => "#4CAF50" // Green
+            >= 90 => "#F44336", // Red - critical usage
+            >= 80 => "#FF9800", // Orange - high usage
+            >= 70 => "#FFC107", // Amber - moderate usage
+            _ => "#4CAF50" // Green - normal usage
         };
+    }
+
+    /// <summary>
+    /// Dispose resources
+    /// </summary>
+    public void Dispose()
+    {
+        _refreshTimer?.Stop();
+        _refreshTimer?.Dispose();
     }
 }
 

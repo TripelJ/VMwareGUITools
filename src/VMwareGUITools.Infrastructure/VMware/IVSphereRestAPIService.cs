@@ -33,6 +33,11 @@ public interface IVSphereRestAPIService : IDisposable
     Task<List<HostInfo>> DiscoverHostsAsync(VSphereSession session, string clusterMoId, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Discovers datastores using REST API
+    /// </summary>
+    Task<List<DatastoreInfo>> DiscoverDatastoresAsync(VSphereSession session, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Gets detailed host information using REST API
     /// </summary>
     Task<HostDetailInfo> GetHostDetailsAsync(VSphereSession session, string hostMoId, CancellationToken cancellationToken = default);

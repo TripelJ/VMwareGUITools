@@ -716,12 +716,16 @@
                                                 Margin="0,0,0,16"
                                                 Padding="16,12">
                                             <Grid>
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="Auto"/>
+                                                    <RowDefinition Height="Auto"/>
+                                                </Grid.RowDefinitions>
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="*"/>
                                                     <ColumnDefinition Width="Auto"/>
                                                 </Grid.ColumnDefinitions>
                                                 
-                                                <StackPanel Grid.Column="0" Orientation="Horizontal">
+                                                <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal">
                                                     <materialDesign:PackIcon Kind="Server" 
                                                                              Height="20" Width="20"
                                                                              VerticalAlignment="Center"
@@ -730,20 +734,35 @@
                                                                FontWeight="Medium"
                                                                FontSize="16"
                                                                VerticalAlignment="Center"/>
-                                                    <TextBlock Text="Clusters, Hosts &amp; Datastores"
+                                                    <TextBlock Text="Live Data - Auto-refreshes every 30s"
                                                                FontSize="12"
                                                                Foreground="{DynamicResource MaterialDesignBodyLight}"
                                                                VerticalAlignment="Center"
                                                                Margin="8,0,0,0"/>
                                                 </StackPanel>
                                                 
-                                                <Button Grid.Column="1"
+                                                <Button Grid.Row="0" Grid.Column="1"
                                                         Style="{StaticResource MaterialDesignIconButton}"
                                                         Command="{Binding InfrastructureViewModel.RefreshCommand}"
                                                         ToolTip="Refresh Infrastructure"
                                                         Height="32" Width="32">
                                                     <materialDesign:PackIcon Kind="Refresh" Height="16" Width="16"/>
                                                 </Button>
+
+                                                <!-- Status and Last Updated -->
+                                                <StackPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" 
+                                                            Orientation="Horizontal" 
+                                                            Margin="0,8,0,0">
+                                                    <TextBlock Text="{Binding InfrastructureViewModel.StatusMessage}"
+                                                               FontSize="12"
+                                                               Foreground="{DynamicResource MaterialDesignBodyLight}"
+                                                               VerticalAlignment="Center"/>
+                                                    <TextBlock Text="{Binding InfrastructureViewModel.LastUpdated, StringFormat=' | Last Updated: {0:HH:mm:ss}'}"
+                                                               FontSize="12"
+                                                               Foreground="{DynamicResource MaterialDesignBodyLight}"
+                                                               VerticalAlignment="Center"
+                                                               Visibility="{Binding InfrastructureViewModel.LastUpdated, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                                </StackPanel>
                                             </Grid>
                                         </Border>
 

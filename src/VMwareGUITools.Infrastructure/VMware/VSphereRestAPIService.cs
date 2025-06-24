@@ -273,6 +273,28 @@ public class VSphereRestAPIService : IVSphereRestAPIService
         }
     }
 
+    public async Task<List<DatastoreInfo>> DiscoverDatastoresAsync(VSphereSession session, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            _logger.LogInformation("Discovering datastores via vSphere REST API for session: {SessionId}", session.SessionId);
+
+            await EnsureSessionValidAsync(session, cancellationToken);
+
+            var datastores = await GetDatastoresAsync(session.VCenterUrl, session.SessionToken, cancellationToken);
+            session.LastActivity = DateTime.UtcNow;
+
+            _logger.LogInformation("Discovered {DatastoreCount} datastores for session: {SessionId}", 
+                datastores.Count, session.SessionId);
+            return datastores;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to discover datastores for session: {SessionId}", session.SessionId);
+            throw;
+        }
+    }
+
     public async Task<HostDetailInfo> GetHostDetailsAsync(VSphereSession session, string hostMoId, CancellationToken cancellationToken = default)
     {
         try
@@ -494,6 +516,63 @@ public class VSphereRestAPIService : IVSphereRestAPIService
         }
 
         return hosts;
+    }
+
+    private async Task<List<DatastoreInfo>> GetDatastoresAsync(string vcenterUrl, string sessionToken, CancellationToken cancellationToken)
+    {
+        var baseUrl = vcenterUrl.TrimEnd('/');
+        var datastoresUrl = $"{baseUrl}/api/vcenter/datastore";
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, datastoresUrl);
+        request.Headers.Add("vmware-api-session-id", sessionToken);
+
+        var response = await _httpClient.SendAsync(request, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        var content = await response.Content.ReadAsStringAsync();
+        var datastoresData = JsonSerializer.Deserialize<JsonElement>(content);
+
+        var datastores = new List<DatastoreInfo>();
+        foreach (var datastore in datastoresData.EnumerateArray())
+        {
+            var datastoreInfo = new DatastoreInfo
+            {
+                MoId = datastore.GetProperty("datastore").GetString() ?? "",
+                Name = datastore.GetProperty("name").GetString() ?? "",
+                Type = datastore.GetProperty("type").GetString() ?? "",
+                Accessible = datastore.TryGetProperty("accessible", out var accessible) ? accessible.GetBoolean() : true
+            };
+
+            // Get additional datastore details
+            try
+            {
+                var detailUrl = $"{baseUrl}/api/vcenter/datastore/{datastoreInfo.MoId}";
+                using var detailRequest = new HttpRequestMessage(HttpMethod.Get, detailUrl);
+                detailRequest.Headers.Add("vmware-api-session-id", sessionToken);
+
+                var detailResponse = await _httpClient.SendAsync(detailRequest, cancellationToken);
+                if (detailResponse.IsSuccessStatusCode)
+                {
+                    var detailContent = await detailResponse.Content.ReadAsStringAsync();
+                    var detailData = JsonSerializer.Deserialize<JsonElement>(detailContent);
+
+                    if (detailData.TryGetProperty("capacity", out var capacity))
+                        datastoreInfo.CapacityMB = capacity.GetInt64() / (1024 * 1024); // Convert from bytes to MB
+
+                    if (detailData.TryGetProperty("free_space", out var freeSpace))
+                        datastoreInfo.FreeMB = freeSpace.GetInt64() / (1024 * 1024); // Convert from bytes to MB
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to get detailed info for datastore {DatastoreName}", datastoreInfo.Name);
+                // Continue with basic info
+            }
+
+            datastores.Add(datastoreInfo);
+        }
+
+        return datastores;
     }
 
     private async Task<HostDetailInfo> GetHostDetailInfoAsync(string vcenterUrl, string sessionToken, string hostMoId, CancellationToken cancellationToken)
