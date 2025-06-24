@@ -20,7 +20,7 @@ public class CheckDefinition
     [StringLength(500)]
     public string Description { get; set; } = string.Empty;
 
-    public CheckExecutionType ExecutionType { get; set; } = CheckExecutionType.PowerCLI;
+    public CheckExecutionType ExecutionType { get; set; } = CheckExecutionType.vSphereRestAPI;
 
     [Required]
     public string ScriptPath { get; set; } = string.Empty;

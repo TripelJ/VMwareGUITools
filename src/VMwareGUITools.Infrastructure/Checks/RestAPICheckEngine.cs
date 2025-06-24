@@ -302,7 +302,7 @@ public class RestAPICheckEngine : ICheckEngine
                 var thresholdKey = threshold.Key.ToLower();
                 var thresholdValue = threshold.Value;
 
-                if (apiResult.Properties.TryGetValue(thresholdKey, out var actualValue))
+                if (apiResult.Properties?.TryGetValue(thresholdKey, out var actualValue) == true)
                 {
                     // Compare values based on type
                     if (actualValue is int intValue && thresholdValue is JsonElement jsonElement && jsonElement.ValueKind == JsonValueKind.Number)
@@ -322,7 +322,7 @@ public class RestAPICheckEngine : ICheckEngine
             {
                 // Simple criteria evaluation - can be enhanced with expression parsing
                 var criteria = checkDefinition.ThresholdCriteria.ToLower();
-                if (criteria.Contains("error") && result.Output.ToLower().Contains("error"))
+                if (criteria.Contains("error") && !string.IsNullOrEmpty(result.Output) && result.Output.ToLower().Contains("error"))
                 {
                     result.IsSuccess = false;
                     result.ErrorMessage = "Threshold criteria matched: error condition detected";
