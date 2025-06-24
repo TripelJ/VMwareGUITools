@@ -77,7 +77,7 @@ public partial class SettingsViewModel : ObservableObject
     {
         if (value != null)
         {
-            LoadCheckDefinitionsForCategory(value.Id);
+            _ = LoadCheckDefinitionsForCategory(value.Id);
         }
         else
         {
@@ -875,7 +875,7 @@ public partial class SettingsViewModel : ObservableObject
     /// <summary>
     /// Load check definitions for a specific category
     /// </summary>
-    private async void LoadCheckDefinitionsForCategory(int categoryId)
+    private async Task LoadCheckDefinitionsForCategory(int categoryId)
     {
         try
         {
@@ -902,7 +902,7 @@ public partial class SettingsViewModel : ObservableObject
     /// <summary>
     /// Add default check categories if none exist
     /// </summary>
-    private async Task AddDefaultCheckCategories()
+    private void AddDefaultCheckCategories()
     {
         try
         {
@@ -1060,7 +1060,7 @@ public partial class SettingsViewModel : ObservableObject
             // Fallback to default profiles if database load fails
             AddDefaultHostProfiles();
             // Fallback to default check categories if database load fails
-            await AddDefaultCheckCategories();
+            AddDefaultCheckCategories();
         }
     }
 

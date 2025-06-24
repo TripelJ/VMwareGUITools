@@ -302,7 +302,7 @@ public class RestAPICheckEngine : ICheckEngine
                 var thresholdKey = threshold.Key?.ToLower() ?? string.Empty;
                 var thresholdValue = threshold.Value;
 
-                if (!string.IsNullOrEmpty(thresholdKey) && apiResult.Properties != null && apiResult.Properties.TryGetValue(thresholdKey, out var actualValue))
+                if (!string.IsNullOrEmpty(thresholdKey) && apiResult.Properties?.TryGetValue(thresholdKey, out var actualValue) == true)
                 {
                     // Compare values based on type
                     if (actualValue is int intValue && thresholdValue is JsonElement jsonElement && jsonElement.ValueKind == JsonValueKind.Number)

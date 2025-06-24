@@ -23,6 +23,6 @@ public partial class SettingsWindow : Window
         viewModel.DialogResultRequested += (result) => DialogResult = result;
         
         // Refresh settings when window is loaded
-        Loaded += (sender, args) => viewModel.RefreshSettings();
+        Loaded += async (sender, args) => await viewModel.RefreshSettings();
     }
 } 
