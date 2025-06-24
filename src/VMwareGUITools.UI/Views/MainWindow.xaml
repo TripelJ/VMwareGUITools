@@ -388,7 +388,6 @@
                                                 <RowDefinition Height="Auto"/>
                                                 <RowDefinition Height="Auto"/>
                                                 <RowDefinition Height="Auto"/>
-                                                <RowDefinition Height="*"/>
                                             </Grid.RowDefinitions>
 
                                             <!-- Header with Refresh Button -->
@@ -700,118 +699,6 @@
                                                     </Border>
                                                 </materialDesign:Card>
                                             </Grid>
-
-                                            <!-- Cluster Details -->
-                                            <materialDesign:Card Grid.Row="3" 
-                                                                 materialDesign:ElevationAssist.Elevation="Dp2">
-                                                <Grid>
-                                                    <Grid.RowDefinitions>
-                                                        <RowDefinition Height="Auto"/>
-                                                        <RowDefinition Height="*"/>
-                                                    </Grid.RowDefinitions>
-                                                    
-                                                    <!-- Header -->
-                                                    <Border Grid.Row="0"
-                                                            Background="{DynamicResource MaterialDesignChipBackground}"
-                                                            Padding="16,12">
-                                                        <TextBlock Text="Cluster Summary"
-                                                                   FontSize="16"
-                                                                   FontWeight="Medium"/>
-                                                    </Border>
-                                                    
-                                                    <!-- Cluster List -->
-                                                    <ScrollViewer Grid.Row="1" 
-                                                                  VerticalScrollBarVisibility="Auto"
-                                                                  MaxHeight="300">
-                                                        <ItemsControl ItemsSource="{Binding OverviewData.Clusters}"
-                                                                      Margin="8">
-                                                            <ItemsControl.ItemTemplate>
-                                                                <DataTemplate>
-                                                                    <materialDesign:Card Margin="8" 
-                                                                                         materialDesign:ElevationAssist.Elevation="Dp1">
-                                                                        <Border Padding="16">
-                                                                        <Grid>
-                                                                            <Grid.ColumnDefinitions>
-                                                                                <ColumnDefinition Width="*"/>
-                                                                                <ColumnDefinition Width="Auto"/>
-                                                                                <ColumnDefinition Width="Auto"/>
-                                                                                <ColumnDefinition Width="Auto"/>
-                                                                            </Grid.ColumnDefinitions>
-                                                                            
-                                                                            <!-- Cluster Info -->
-                                                                            <StackPanel Grid.Column="0">
-                                                                                <TextBlock Text="{Binding Name}"
-                                                                                           FontWeight="Medium"
-                                                                                           FontSize="14"/>
-                                                                                <TextBlock FontSize="11" Opacity="0.7">
-                                                                                    <Run Text="{Binding HostCount}"/>
-                                                                                    <Run Text="hosts,"/>
-                                                                                    <Run Text="{Binding VmCount}"/>
-                                                                                    <Run Text="VMs"/>
-                                                                                </TextBlock>
-                                                                            </StackPanel>
-                                                                            
-                                                                            <!-- Feature Icons -->
-                                                                            <StackPanel Grid.Column="1" 
-                                                                                        Orientation="Horizontal"
-                                                                                        VerticalAlignment="Center"
-                                                                                        Margin="8,0">
-                                                                                <materialDesign:PackIcon Kind="Sync" 
-                                                                                                         Width="16" Height="16"
-                                                                                                         ToolTip="DRS Enabled"
-                                                                                                         Foreground="{StaticResource SuccessBrush}"
-                                                                                                         Visibility="{Binding DrsEnabled, Converter={StaticResource BooleanToVisibilityConverter}}"
-                                                                                                         Margin="2"/>
-                                                                                <materialDesign:PackIcon Kind="Shield" 
-                                                                                                         Width="16" Height="16"
-                                                                                                         ToolTip="HA Enabled"
-                                                                                                         Foreground="{StaticResource SuccessBrush}"
-                                                                                                         Visibility="{Binding HaEnabled, Converter={StaticResource BooleanToVisibilityConverter}}"
-                                                                                                         Margin="2"/>
-                                                                                <materialDesign:PackIcon Kind="Harddisk" 
-                                                                                                         Width="16" Height="16"
-                                                                                                         ToolTip="vSAN Enabled"
-                                                                                                         Foreground="{StaticResource SuccessBrush}"
-                                                                                                         Visibility="{Binding VsanEnabled, Converter={StaticResource BooleanToVisibilityConverter}}"
-                                                                                                         Margin="2"/>
-                                                                            </StackPanel>
-                                                                            
-                                                                            <!-- CPU Usage -->
-                                                                            <StackPanel Grid.Column="2" 
-                                                                                        VerticalAlignment="Center"
-                                                                                        Margin="8,0">
-                                                                                <TextBlock Text="CPU"
-                                                                                           FontSize="10"
-                                                                                           HorizontalAlignment="Center"
-                                                                                           Opacity="0.7"/>
-                                                                                <TextBlock Text="{Binding CpuUsage.UsagePercentage, StringFormat='{}{0:F0}%', Mode=OneWay}"
-                                                                                           FontSize="12"
-                                                                                           FontWeight="Medium"
-                                                                                           HorizontalAlignment="Center"/>
-                                                                            </StackPanel>
-                                                                            
-                                                                            <!-- Memory Usage -->
-                                                                            <StackPanel Grid.Column="3" 
-                                                                                        VerticalAlignment="Center"
-                                                                                        Margin="8,0">
-                                                                                <TextBlock Text="MEM"
-                                                                                           FontSize="10"
-                                                                                           HorizontalAlignment="Center"
-                                                                                           Opacity="0.7"/>
-                                                                                <TextBlock Text="{Binding MemoryUsage.UsagePercentage, StringFormat='{}{0:F0}%', Mode=OneWay}"
-                                                                                           FontSize="12"
-                                                                                           FontWeight="Medium"
-                                                                                           HorizontalAlignment="Center"/>
-                                                                            </StackPanel>
-                                                                        </Grid>
-                                                                        </Border>
-                                                                    </materialDesign:Card>
-                                                                </DataTemplate>
-                                                            </ItemsControl.ItemTemplate>
-                                                        </ItemsControl>
-                                                    </ScrollViewer>
-                                                </Grid>
-                                            </materialDesign:Card>
                                         </Grid>
                                     </ScrollViewer>
                                 </TabItem>
