@@ -319,9 +319,13 @@ public partial class InfrastructureViewModel : ObservableObject, IDisposable
         if (host.InMaintenanceMode)
             return "#9E9E9E"; // Gray - maintenance mode
         
-        return host.ConnectionState.ToLower() switch
+        var connectionState = host.ConnectionState?.ToLower() ?? "";
+        var powerState = host.PowerState?.ToLower() ?? "";
+        var isPoweredOn = powerState == "poweredon" || powerState == "powered_on";
+        
+        return connectionState switch
         {
-            "connected" when host.PowerState.ToLower() == "poweredon" => "#4CAF50", // Green - healthy
+            "connected" when isPoweredOn => "#4CAF50", // Green - healthy
             "connected" => "#FF9800", // Orange - connected but not powered on
             "disconnected" => "#F44336", // Red - disconnected
             "notresponding" => "#F44336", // Red - not responding
@@ -349,8 +353,11 @@ public partial class InfrastructureViewModel : ObservableObject, IDisposable
     private static void SetHostStatusProperties(InfrastructureItemViewModel hostItem, HostInfo host)
     {
         // Set status color and flashing based on connection and power state
-        var isConnected = host.ConnectionState.ToLower() == "connected";
-        var isPoweredOn = host.PowerState.ToLower() == "poweredon";
+        var connectionState = host.ConnectionState?.ToLower() ?? "";
+        var powerState = host.PowerState?.ToLower() ?? "";
+        
+        var isConnected = connectionState == "connected";
+        var isPoweredOn = powerState == "poweredon" || powerState == "powered_on";
         
         if (host.InMaintenanceMode)
         {
