@@ -16,6 +16,7 @@ public class VMwareDbContext : DbContext
     public DbSet<VCenter> VCenters { get; set; }
     public DbSet<Cluster> Clusters { get; set; }
     public DbSet<Host> Hosts { get; set; }
+    public DbSet<Datastore> Datastores { get; set; }
     public DbSet<HostProfile> HostProfiles { get; set; }
     public DbSet<CheckCategory> CheckCategories { get; set; }
     public DbSet<CheckDefinition> CheckDefinitions { get; set; }
@@ -82,6 +83,23 @@ public class VMwareDbContext : DbContext
                 
             entity.HasIndex(e => new { e.ClusterId, e.MoId }).IsUnique();
             entity.HasIndex(e => e.IpAddress);
+        });
+
+        // Configure Datastore entity
+        modelBuilder.Entity<Datastore>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.MoId).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.Type).IsRequired().HasMaxLength(20);
+            
+            entity.HasOne(e => e.VCenter)
+                .WithMany()
+                .HasForeignKey(e => e.VCenterId)
+                .OnDelete(DeleteBehavior.Cascade);
+                
+            entity.HasIndex(e => new { e.VCenterId, e.MoId }).IsUnique();
+            entity.HasIndex(e => e.Name);
         });
 
         // Configure HostProfile entity

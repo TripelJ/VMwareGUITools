@@ -51,6 +51,9 @@ public partial class MainWindowViewModel : ObservableObject
     [ObservableProperty]
     private VCenterOverview? _overviewData;
 
+    [ObservableProperty]
+    private InfrastructureViewModel _infrastructureViewModel;
+
     public MainWindowViewModel(
         ILogger<MainWindowViewModel> logger,
         VMwareDbContext context,
@@ -63,6 +66,11 @@ public partial class MainWindowViewModel : ObservableObject
         _vmwareService = vmwareService;
         _restApiService = restApiService;
         _serviceProvider = serviceProvider;
+
+        // Initialize view models
+        _infrastructureViewModel = new InfrastructureViewModel(
+            _serviceProvider.GetRequiredService<ILogger<InfrastructureViewModel>>(),
+            context);
 
         // Setup clock timer
         _clockTimer = new System.Timers.Timer(1000);
@@ -473,10 +481,14 @@ public partial class MainWindowViewModel : ObservableObject
             _logger.LogDebug("Selected vCenter changed to: {VCenterName}", value.Name);
             // Automatically load overview data when a vCenter is selected
             _ = LoadOverviewDataAsync();
+            
+            // Load infrastructure data
+            _ = InfrastructureViewModel.LoadInfrastructureAsync(value);
         }
         else
         {
             OverviewData = null;
+            InfrastructureViewModel.InfrastructureItems.Clear();
         }
     }
 

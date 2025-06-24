@@ -702,22 +702,172 @@
                                         </Grid>
                                     </ScrollViewer>
                                 </TabItem>
-                                <TabItem Header="Clusters">
+                                <TabItem Header="Infrastructure">
                                     <Grid Margin="16">
-                                        <TextBlock Text="Cluster Management - Coming Soon"
-                                                   VerticalAlignment="Center"
-                                                   HorizontalAlignment="Center"
-                                                   FontSize="16"
-                                                   Foreground="{DynamicResource MaterialDesignBodyLight}"/>
-                                    </Grid>
-                                </TabItem>
-                                <TabItem Header="Hosts">
-                                    <Grid Margin="16">
-                                        <TextBlock Text="Host Management - Coming Soon"
-                                                   VerticalAlignment="Center"
-                                                   HorizontalAlignment="Center"
-                                                   FontSize="16"
-                                                   Foreground="{DynamicResource MaterialDesignBodyLight}"/>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="*"/>
+                                        </Grid.RowDefinitions>
+
+                                        <!-- Header with Refresh Button -->
+                                        <Border Grid.Row="0" 
+                                                Background="{DynamicResource MaterialDesignChipBackground}"
+                                                CornerRadius="4"
+                                                Margin="0,0,0,16"
+                                                Padding="16,12">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                
+                                                <StackPanel Grid.Column="0" Orientation="Horizontal">
+                                                    <materialDesign:PackIcon Kind="Server" 
+                                                                             Height="20" Width="20"
+                                                                             VerticalAlignment="Center"
+                                                                             Margin="0,0,8,0"/>
+                                                    <TextBlock Text="Infrastructure Overview"
+                                                               FontWeight="Medium"
+                                                               FontSize="16"
+                                                               VerticalAlignment="Center"/>
+                                                    <TextBlock Text="Clusters, Hosts &amp; Datastores"
+                                                               FontSize="12"
+                                                               Foreground="{DynamicResource MaterialDesignBodyLight}"
+                                                               VerticalAlignment="Center"
+                                                               Margin="8,0,0,0"/>
+                                                </StackPanel>
+                                                
+                                                <Button Grid.Column="1"
+                                                        Style="{StaticResource MaterialDesignIconButton}"
+                                                        Command="{Binding InfrastructureViewModel.RefreshCommand}"
+                                                        ToolTip="Refresh Infrastructure"
+                                                        Height="32" Width="32">
+                                                    <materialDesign:PackIcon Kind="Refresh" Height="16" Width="16"/>
+                                                </Button>
+                                            </Grid>
+                                        </Border>
+
+                                        <!-- Infrastructure Tree View -->
+                                        <materialDesign:Card Grid.Row="1" 
+                                                             materialDesign:ElevationAssist.Elevation="Dp1"
+                                                             Padding="0">
+                                            <Grid>
+                                                <!-- Loading Indicator -->
+                                                <Grid Visibility="{Binding InfrastructureViewModel.IsLoading, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                                    <StackPanel VerticalAlignment="Center" 
+                                                                HorizontalAlignment="Center">
+                                                        <ProgressBar Style="{StaticResource MaterialDesignCircularProgressBar}"
+                                                                     Width="48" Height="48"
+                                                                     IsIndeterminate="True"
+                                                                     Margin="0,0,0,16"/>
+                                                        <TextBlock Text="Loading Infrastructure..."
+                                                                   HorizontalAlignment="Center"
+                                                                   Foreground="{DynamicResource MaterialDesignBodyLight}"/>
+                                                    </StackPanel>
+                                                </Grid>
+
+                                                <!-- TreeView -->
+                                                <TreeView ItemsSource="{Binding InfrastructureViewModel.InfrastructureItems}"
+                                                          SelectedItem="{Binding InfrastructureViewModel.SelectedItem}"
+                                                          Style="{StaticResource MaterialDesignTreeView}"
+                                                          Visibility="{Binding InfrastructureViewModel.IsLoading, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=True}">
+                                                    <TreeView.ItemTemplate>
+                                                        <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+                                                            <Border Padding="4,2" 
+                                                                    CornerRadius="2"
+                                                                    ToolTip="{Binding ToolTip}">
+                                                                <Grid>
+                                                                    <Grid.ColumnDefinitions>
+                                                                        <ColumnDefinition Width="Auto"/>
+                                                                        <ColumnDefinition Width="Auto"/>
+                                                                        <ColumnDefinition Width="*"/>
+                                                                    </Grid.ColumnDefinitions>
+
+                                                                    <!-- Status Indicator -->
+                                                                    <Ellipse Grid.Column="0"
+                                                                             Width="8" Height="8"
+                                                                             VerticalAlignment="Center"
+                                                                             Margin="0,0,6,0"
+                                                                             Fill="{Binding StatusColor}"/>
+
+                                                                    <!-- Icon -->
+                                                                    <materialDesign:PackIcon Grid.Column="1"
+                                                                                             Kind="{Binding Icon}"
+                                                                                             Height="16" Width="16"
+                                                                                             VerticalAlignment="Center"
+                                                                                             Margin="0,0,6,0">
+                                                                        <materialDesign:PackIcon.Style>
+                                                                            <Style TargetType="materialDesign:PackIcon">
+                                                                                <Style.Triggers>
+                                                                                    <DataTrigger Binding="{Binding Type}" Value="Cluster">
+                                                                                        <Setter Property="Foreground" Value="#2196F3"/>
+                                                                                    </DataTrigger>
+                                                                                    <DataTrigger Binding="{Binding Type}" Value="Host">
+                                                                                        <Setter Property="Foreground" Value="#FF9800"/>
+                                                                                    </DataTrigger>
+                                                                                    <DataTrigger Binding="{Binding Type}" Value="DatastoresFolder">
+                                                                                        <Setter Property="Foreground" Value="#4CAF50"/>
+                                                                                    </DataTrigger>
+                                                                                    <DataTrigger Binding="{Binding Type}" Value="Datastore">
+                                                                                        <Setter Property="Foreground" Value="#9C27B0"/>
+                                                                                    </DataTrigger>
+                                                                                </Style.Triggers>
+                                                                            </Style>
+                                                                        </materialDesign:PackIcon.Style>
+                                                                    </materialDesign:PackIcon>
+
+                                                                    <!-- Name -->
+                                                                    <TextBlock Grid.Column="2"
+                                                                               Text="{Binding Name}"
+                                                                               VerticalAlignment="Center"
+                                                                               TextTrimming="CharacterEllipsis">
+                                                                        <TextBlock.Style>
+                                                                            <Style TargetType="TextBlock">
+                                                                                <Style.Triggers>
+                                                                                    <DataTrigger Binding="{Binding Type}" Value="Cluster">
+                                                                                        <Setter Property="FontWeight" Value="Medium"/>
+                                                                                    </DataTrigger>
+                                                                                    <DataTrigger Binding="{Binding Type}" Value="DatastoresFolder">
+                                                                                        <Setter Property="FontWeight" Value="Medium"/>
+                                                                                    </DataTrigger>
+                                                                                </Style.Triggers>
+                                                                            </Style>
+                                                                        </TextBlock.Style>
+                                                                    </TextBlock>
+                                                                </Grid>
+                                                            </Border>
+                                                        </HierarchicalDataTemplate>
+                                                    </TreeView.ItemTemplate>
+                                                    <TreeView.ItemContainerStyle>
+                                                        <Style TargetType="TreeViewItem" BasedOn="{StaticResource MaterialDesignTreeViewItem}">
+                                                            <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
+                                                            <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}"/>
+                                                        </Style>
+                                                    </TreeView.ItemContainerStyle>
+                                                </TreeView>
+
+                                                <!-- Empty State -->
+                                                <StackPanel VerticalAlignment="Center" 
+                                                            HorizontalAlignment="Center"
+                                                            Visibility="{Binding InfrastructureViewModel.InfrastructureItems.Count, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=True}">
+                                                    <materialDesign:PackIcon Kind="ServerNetwork" 
+                                                                             Height="48" Width="48"
+                                                                             HorizontalAlignment="Center"
+                                                                             Foreground="{DynamicResource MaterialDesignBodyLight}"
+                                                                             Margin="0,0,0,16"/>
+                                                    <TextBlock Text="No infrastructure data available"
+                                                               FontSize="16"
+                                                               HorizontalAlignment="Center"
+                                                               Margin="0,0,0,4"/>
+                                                    <TextBlock Text="Connect to a vCenter server to view clusters, hosts, and datastores"
+                                                               FontSize="12"
+                                                               Foreground="{DynamicResource MaterialDesignBodyLight}"
+                                                               HorizontalAlignment="Center"
+                                                               TextWrapping="Wrap"
+                                                               MaxWidth="300"/>
+                                                </StackPanel>
+                                            </Grid>
+                                        </materialDesign:Card>
                                     </Grid>
                                 </TabItem>
                                 <TabItem Header="Checks">
