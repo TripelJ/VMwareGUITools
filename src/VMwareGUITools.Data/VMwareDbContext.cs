@@ -35,6 +35,10 @@ public class VMwareDbContext : DbContext
             entity.Property(e => e.EncryptedCredentials).IsRequired().HasMaxLength(500);
             entity.HasIndex(e => e.Url).IsUnique();
             entity.HasIndex(e => e.Name);
+            
+            // Ignore properties that are not persisted to database
+            entity.Ignore(e => e.IsCurrentlyConnected);
+            entity.Ignore(e => e.LastSuccessfulConnection);
         });
 
         // Configure Cluster entity
