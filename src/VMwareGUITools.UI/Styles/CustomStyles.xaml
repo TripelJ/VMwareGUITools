@@ -3,6 +3,14 @@
 
     <!-- Custom styles for VMware GUI Tools application -->
     
+    <!-- VMware Color Brushes -->
+    <SolidColorBrush x:Key="VMwareBlueBrush" Color="#0091DA"/>
+    <SolidColorBrush x:Key="VMwareOrangeBrush" Color="#FF9500"/>
+    <SolidColorBrush x:Key="VMwareGreenBrush" Color="#00B04F"/>
+    <SolidColorBrush x:Key="SuccessBrush" Color="#4CAF50"/>
+    <SolidColorBrush x:Key="WarningBrush" Color="#FF9800"/>
+    <SolidColorBrush x:Key="ErrorBrush" Color="#F44336"/>
+    
     <!-- Custom Card Style -->
     <Style x:Key="VMwareCard" TargetType="Border">
         <Setter Property="Background" Value="{DynamicResource MaterialDesignPaper}"/>
