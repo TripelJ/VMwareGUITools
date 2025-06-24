@@ -152,9 +152,11 @@ public partial class InfrastructureViewModel : ObservableObject, IDisposable
                             Icon = "Server",
                             ToolTip = $"Host: {host.Name} - State: {host.ConnectionState}, Power: {host.PowerState}{(host.InMaintenanceMode ? " (Maintenance)" : "")}",
                             Data = host,
-                            Parent = clusterItem,
-                            StatusColor = GetHostStatusColor(host)
+                            Parent = clusterItem
                         };
+
+                        // Set status properties based on host state
+                        SetHostStatusProperties(hostItem, host);
 
                         clusterItem.Children.Add(hostItem);
                     }
@@ -194,9 +196,11 @@ public partial class InfrastructureViewModel : ObservableObject, IDisposable
                     Icon = "HardDisk",
                     ToolTip = $"Datastore: {datastore.Name} ({datastore.Type}) - {datastore.FormattedUsedSpace} / {datastore.FormattedCapacity} ({datastore.UsagePercentage:F1}%)",
                     Data = datastore,
-                    Parent = datastoresSection,
-                    StatusColor = GetDatastoreStatusColor(datastore.UsagePercentage)
+                    Parent = datastoresSection
                 };
+
+                // Set status and type properties based on datastore
+                SetDatastoreStatusProperties(datastoreItem, datastore);
 
                 datastoresSection.Children.Add(datastoreItem);
             }
@@ -266,8 +270,8 @@ public partial class InfrastructureViewModel : ObservableObject, IDisposable
 
                             if (hostItem != null)
                             {
-                                // Update host status
-                                hostItem.StatusColor = GetHostStatusColor(host);
+                                // Update host status and indicators
+                                SetHostStatusProperties(hostItem, host);
                                 hostItem.ToolTip = $"Host: {host.Name} - State: {host.ConnectionState}, Power: {host.PowerState}{(host.InMaintenanceMode ? " (Maintenance)" : "")}";
                                 hostItem.Data = host;
                             }
@@ -340,6 +344,93 @@ public partial class InfrastructureViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
+    /// Set status and type properties for a host item
+    /// </summary>
+    private static void SetHostStatusProperties(InfrastructureItemViewModel hostItem, HostInfo host)
+    {
+        // Set status color and flashing based on connection and power state
+        var isConnected = host.ConnectionState.ToLower() == "connected";
+        var isPoweredOn = host.PowerState.ToLower() == "poweredon";
+        
+        if (host.InMaintenanceMode)
+        {
+            hostItem.StatusColor = "#9E9E9E"; // Gray - maintenance mode
+            hostItem.ShouldFlash = false;
+        }
+        else if (isConnected && isPoweredOn)
+        {
+            hostItem.StatusColor = "#4CAF50"; // Green - healthy
+            hostItem.ShouldFlash = false;
+        }
+        else
+        {
+            hostItem.StatusColor = "#F44336"; // Red - problematic
+            hostItem.ShouldFlash = true; // Flash for attention
+        }
+
+        // Set type indicator for vSAN vs Standard hosts
+        switch (host.Type)
+        {
+            case HostType.VsanNode:
+                hostItem.TypeIndicator = "vSAN";
+                hostItem.TypeIndicatorColor = "#9C27B0"; // Purple for vSAN
+                break;
+            case HostType.Standard:
+                hostItem.TypeIndicator = "STD";
+                hostItem.TypeIndicatorColor = "#607D8B"; // Blue-gray for standard
+                break;
+            case HostType.ManagementCluster:
+                hostItem.TypeIndicator = "MGT";
+                hostItem.TypeIndicatorColor = "#FF5722"; // Deep orange for management
+                break;
+            case HostType.EdgeCluster:
+                hostItem.TypeIndicator = "EDGE";
+                hostItem.TypeIndicatorColor = "#795548"; // Brown for edge
+                break;
+            default:
+                hostItem.TypeIndicator = string.Empty;
+                hostItem.TypeIndicatorColor = "#666666";
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Set status and type properties for a datastore item
+    /// </summary>
+    private static void SetDatastoreStatusProperties(InfrastructureItemViewModel datastoreItem, DatastoreInfo datastore)
+    {
+        // Set status color based on usage
+        datastoreItem.StatusColor = GetDatastoreStatusColor(datastore.UsagePercentage);
+        datastoreItem.ShouldFlash = false; // Datastores don't flash
+
+        // Set type indicator based on datastore type
+        var type = datastore.Type.ToUpper();
+        switch (type)
+        {
+            case "VSAN":
+                datastoreItem.TypeIndicator = "vSAN";
+                datastoreItem.TypeIndicatorColor = "#9C27B0"; // Purple for vSAN
+                break;
+            case "NFS":
+                datastoreItem.TypeIndicator = "NFS";
+                datastoreItem.TypeIndicatorColor = "#FF9800"; // Orange for NFS
+                break;
+            case "VMFS":
+                datastoreItem.TypeIndicator = "VMFS";
+                datastoreItem.TypeIndicatorColor = "#2196F3"; // Blue for VMFS
+                break;
+            case "VVOL":
+                datastoreItem.TypeIndicator = "vVol";
+                datastoreItem.TypeIndicatorColor = "#4CAF50"; // Green for vVol
+                break;
+            default:
+                datastoreItem.TypeIndicator = type.Length > 4 ? type.Substring(0, 4) : type;
+                datastoreItem.TypeIndicatorColor = "#666666"; // Gray for unknown types
+                break;
+        }
+    }
+
+    /// <summary>
     /// Dispose resources
     /// </summary>
     public void Dispose()
@@ -374,6 +465,15 @@ public partial class InfrastructureItemViewModel : ObservableObject
 
     [ObservableProperty]
     private string _statusColor = "#2196F3";
+
+    [ObservableProperty]
+    private bool _shouldFlash = false;
+
+    [ObservableProperty]
+    private string _typeIndicator = string.Empty;
+
+    [ObservableProperty]
+    private string _typeIndicatorColor = "#666666";
 
     [ObservableProperty]
     private object? _data;

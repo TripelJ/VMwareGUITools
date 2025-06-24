@@ -811,14 +811,41 @@
                                                         <ColumnDefinition Width="Auto"/>
                                                         <ColumnDefinition Width="Auto"/>
                                                         <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
                                                     </Grid.ColumnDefinitions>
 
-                                                    <!-- Status Indicator -->
+                                                    <!-- Status Indicator with Animation -->
                                                     <Ellipse Grid.Column="0"
                                                              Width="8" Height="8"
                                                              VerticalAlignment="Center"
                                                              Margin="0,0,6,0"
-                                                             Fill="{Binding StatusColor}"/>
+                                                             Fill="{Binding StatusColor}">
+                                                        <Ellipse.Style>
+                                                            <Style TargetType="Ellipse">
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding ShouldFlash}" Value="True">
+                                                                        <DataTrigger.EnterActions>
+                                                                            <BeginStoryboard>
+                                                                                <Storyboard RepeatBehavior="Forever">
+                                                                                    <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                                                                     From="1.0" To="0.3" Duration="0:0:0.8"
+                                                                                                     AutoReverse="True"/>
+                                                                                </Storyboard>
+                                                                            </BeginStoryboard>
+                                                                        </DataTrigger.EnterActions>
+                                                                        <DataTrigger.ExitActions>
+                                                                            <BeginStoryboard>
+                                                                                <Storyboard>
+                                                                                    <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                                                                     To="1.0" Duration="0:0:0.2"/>
+                                                                                </Storyboard>
+                                                                            </BeginStoryboard>
+                                                                        </DataTrigger.ExitActions>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Ellipse.Style>
+                                                    </Ellipse>
 
                                                     <!-- Icon -->
                                                     <materialDesign:PackIcon Grid.Column="1"
@@ -864,6 +891,33 @@
                                                             </Style>
                                                         </TextBlock.Style>
                                                     </TextBlock>
+
+                                                    <!-- Type Indicator -->
+                                                    <Border Grid.Column="3"
+                                                            Background="{Binding TypeIndicatorColor}"
+                                                            CornerRadius="2"
+                                                            Padding="4,1"
+                                                            Margin="4,0,0,0"
+                                                            VerticalAlignment="Center">
+                                                        <Border.Style>
+                                                            <Style TargetType="Border">
+                                                                <Setter Property="Visibility" Value="Visible"/>
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding TypeIndicator}" Value="">
+                                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding TypeIndicator}" Value="{x:Null}">
+                                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Border.Style>
+                                                        <TextBlock Text="{Binding TypeIndicator}"
+                                                                   Foreground="White"
+                                                                   FontSize="10"
+                                                                   FontWeight="Medium"
+                                                                   TextAlignment="Center"/>
+                                                    </Border>
                                                 </Grid>
                                             </Border>
                                         </HierarchicalDataTemplate>
