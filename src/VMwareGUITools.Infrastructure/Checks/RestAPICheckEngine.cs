@@ -175,8 +175,8 @@ public class RestAPICheckEngine : ICheckEngine
                 {
                     var connectionResult = await _vsphereService.TestConnectionAsync(
                         vCenter.Url, 
-                        credentials.Username, 
-                        credentials.Password, 
+                        credentials?.Username ?? string.Empty, 
+                        credentials?.Password ?? string.Empty, 
                         cancellationToken);
 
                     if (!connectionResult.IsSuccessful)
@@ -299,7 +299,7 @@ public class RestAPICheckEngine : ICheckEngine
             // Simple threshold evaluation - can be enhanced based on needs
             foreach (var threshold in thresholds)
             {
-                var thresholdKey = threshold.Key?.ToLower();
+                var thresholdKey = threshold.Key?.ToLower() ?? string.Empty;
                 var thresholdValue = threshold.Value;
 
                 if (!string.IsNullOrEmpty(thresholdKey) && apiResult.Properties?.TryGetValue(thresholdKey, out var actualValue) == true)
