@@ -414,7 +414,7 @@
                                                     
                                                     <Button Grid.Column="1"
                                                             Style="{StaticResource MaterialDesignToolButton}"
-                                                            Command="{Binding LoadOverviewDataCommand}"
+                                                            Command="{Binding VCenterOverviewViewModel.RefreshCommand}"
                                                             ToolTip="Refresh Overview Data">
                                                         <materialDesign:PackIcon Kind="Refresh" Height="20" Width="20"/>
                                                     </Button>
@@ -449,7 +449,7 @@
                                                                                      Margin="0,0,0,8"/>
                                                             
                                                             <TextBlock Grid.Row="1"
-                                                                       Text="{Binding OverviewData.ClusterCount, FallbackValue=0}"
+                                                                       Text="{Binding VCenterOverviewViewModel.OverviewData.ClusterCount, FallbackValue=0}"
                                                                        FontSize="28"
                                                                        FontWeight="Bold"
                                                                        HorizontalAlignment="Center"
@@ -484,7 +484,7 @@
                                                                                      Margin="0,0,0,8"/>
                                                             
                                                             <TextBlock Grid.Row="1"
-                                                                       Text="{Binding OverviewData.HostCount, FallbackValue=0}"
+                                                                       Text="{Binding VCenterOverviewViewModel.OverviewData.HostCount, FallbackValue=0}"
                                                                        FontSize="28"
                                                                        FontWeight="Bold"
                                                                        HorizontalAlignment="Center"
@@ -519,7 +519,7 @@
                                                                                      Margin="0,0,0,8"/>
                                                             
                                                             <TextBlock Grid.Row="1"
-                                                                       Text="{Binding OverviewData.VmCount, FallbackValue=0}"
+                                                                       Text="{Binding VCenterOverviewViewModel.OverviewData.VmCount, FallbackValue=0}"
                                                                        FontSize="28"
                                                                        FontWeight="Bold"
                                                                        HorizontalAlignment="Center"
@@ -570,13 +570,13 @@
                                                                 <Grid>
                                                                     <!-- Progress Ring -->
                                                                     <ProgressBar Style="{StaticResource MaterialDesignCircularProgressBar}"
-                                                                                 Value="{Binding OverviewData.CpuUsage.UsagePercentage, Mode=OneWay, FallbackValue=0}"
+                                                                                 Value="{Binding VCenterOverviewViewModel.OverviewData.CpuUsage.UsagePercentage, Mode=OneWay, FallbackValue=0}"
                                                                                  Width="100" Height="100"
                                                                                  IsIndeterminate="False"
                                                                                  Foreground="{StaticResource VMwareBlueBrush}"/>
                                                                     
                                                                     <!-- Percentage Text -->
-                                                                    <TextBlock Text="{Binding OverviewData.CpuUsage.UsagePercentage, StringFormat='{}{0:F1}%', Mode=OneWay, FallbackValue='0%'}"
+                                                                    <TextBlock Text="{Binding VCenterOverviewViewModel.OverviewData.CpuUsage.UsagePercentage, StringFormat='{}{0:F1}%', Mode=OneWay, FallbackValue='0%'}"
                                                                                FontSize="18"
                                                                                FontWeight="Bold"
                                                                                HorizontalAlignment="Center"
@@ -586,7 +586,7 @@
                                                         </materialDesign:Card>
                                                         
                                                         <TextBlock Grid.Row="2"
-                                                                   Text="{Binding OverviewData.CpuUsage, Converter={StaticResource ResourceUsageConverter}, FallbackValue='N/A'}"
+                                                                   Text="{Binding VCenterOverviewViewModel.OverviewData.CpuUsage, Converter={StaticResource ResourceUsageConverter}, FallbackValue='N/A'}"
                                                                    FontSize="11"
                                                                    HorizontalAlignment="Center"
                                                                    Margin="0,8,0,0"
@@ -622,13 +622,13 @@
                                                                 <Grid>
                                                                     <!-- Progress Ring -->
                                                                     <ProgressBar Style="{StaticResource MaterialDesignCircularProgressBar}"
-                                                                                 Value="{Binding OverviewData.MemoryUsage.UsagePercentage, Mode=OneWay, FallbackValue=0}"
+                                                                                 Value="{Binding VCenterOverviewViewModel.OverviewData.MemoryUsage.UsagePercentage, Mode=OneWay, FallbackValue=0}"
                                                                                  Width="100" Height="100"
                                                                                  IsIndeterminate="False"
                                                                                  Foreground="{StaticResource VMwareOrangeBrush}"/>
                                                                     
                                                                     <!-- Percentage Text -->
-                                                                    <TextBlock Text="{Binding OverviewData.MemoryUsage.UsagePercentage, StringFormat='{}{0:F1}%', Mode=OneWay, FallbackValue='0%'}"
+                                                                    <TextBlock Text="{Binding VCenterOverviewViewModel.OverviewData.MemoryUsage.UsagePercentage, StringFormat='{}{0:F1}%', Mode=OneWay, FallbackValue='0%'}"
                                                                                FontSize="18"
                                                                                FontWeight="Bold"
                                                                                HorizontalAlignment="Center"
@@ -638,7 +638,7 @@
                                                         </materialDesign:Card>
                                                         
                                                         <TextBlock Grid.Row="2"
-                                                                   Text="{Binding OverviewData.MemoryUsage, Converter={StaticResource ResourceUsageConverter}, FallbackValue='N/A'}"
+                                                                   Text="{Binding VCenterOverviewViewModel.OverviewData.MemoryUsage, Converter={StaticResource ResourceUsageConverter}, FallbackValue='N/A'}"
                                                                    FontSize="11"
                                                                    HorizontalAlignment="Center"
                                                                    Margin="0,8,0,0"
@@ -674,13 +674,13 @@
                                                                 <Grid>
                                                                     <!-- Progress Ring -->
                                                                     <ProgressBar Style="{StaticResource MaterialDesignCircularProgressBar}"
-                                                                                 Value="{Binding OverviewData.StorageUsage.UsagePercentage, Mode=OneWay, FallbackValue=0}"
+                                                                                 Value="{Binding VCenterOverviewViewModel.OverviewData.StorageUsage.UsagePercentage, Mode=OneWay, FallbackValue=0}"
                                                                                  Width="100" Height="100"
                                                                                  IsIndeterminate="False"
                                                                                  Foreground="{StaticResource VMwareGreenBrush}"/>
                                                                     
                                                                     <!-- Percentage Text -->
-                                                                    <TextBlock Text="{Binding OverviewData.StorageUsage.UsagePercentage, StringFormat='{}{0:F1}%', Mode=OneWay, FallbackValue='0%'}"
+                                                                    <TextBlock Text="{Binding VCenterOverviewViewModel.OverviewData.StorageUsage.UsagePercentage, StringFormat='{}{0:F1}%', Mode=OneWay, FallbackValue='0%'}"
                                                                                FontSize="18"
                                                                                FontWeight="Bold"
                                                                                HorizontalAlignment="Center"
@@ -690,7 +690,7 @@
                                                         </materialDesign:Card>
                                                         
                                                         <TextBlock Grid.Row="2"
-                                                                   Text="{Binding OverviewData.StorageUsage, Converter={StaticResource ResourceUsageConverter}, FallbackValue='N/A'}"
+                                                                   Text="{Binding VCenterOverviewViewModel.OverviewData.StorageUsage, Converter={StaticResource ResourceUsageConverter}, FallbackValue='N/A'}"
                                                                    FontSize="11"
                                                                    HorizontalAlignment="Center"
                                                                    Margin="0,8,0,0"
@@ -734,7 +734,7 @@
                                                                FontWeight="Medium"
                                                                FontSize="16"
                                                                VerticalAlignment="Center"/>
-                                                    <TextBlock Text="Live Data - Auto-refreshes every 30s"
+                                                    <TextBlock Text="Live Data - Status updates every 2 minutes"
                                                                FontSize="12"
                                                                Foreground="{DynamicResource MaterialDesignBodyLight}"
                                                                VerticalAlignment="Center"

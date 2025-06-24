@@ -55,6 +55,9 @@ public partial class MainWindowViewModel : ObservableObject
     [ObservableProperty]
     private InfrastructureViewModel _infrastructureViewModel;
 
+    [ObservableProperty]
+    private VCenterOverviewViewModel _vCenterOverviewViewModel;
+
     public MainWindowViewModel(
         ILogger<MainWindowViewModel> logger,
         VMwareDbContext context,
@@ -71,6 +74,11 @@ public partial class MainWindowViewModel : ObservableObject
         // Initialize view models
         _infrastructureViewModel = new InfrastructureViewModel(
             _serviceProvider.GetRequiredService<ILogger<InfrastructureViewModel>>(),
+            restApiService);
+        
+        _vCenterOverviewViewModel = new VCenterOverviewViewModel(
+            _serviceProvider.GetRequiredService<ILogger<VCenterOverviewViewModel>>(),
+            vmwareService,
             restApiService);
 
         // Setup clock timer
@@ -329,52 +337,7 @@ public partial class MainWindowViewModel : ObservableObject
         }
     }
 
-    /// <summary>
-    /// Command to load overview data for the selected vCenter
-    /// </summary>
-    [RelayCommand]
-    private async Task LoadOverviewDataAsync()
-    {
-        if (SelectedVCenter == null)
-        {
-            OverviewData = null;
-            return;
-        }
 
-        try
-        {
-            IsLoading = true;
-            StatusMessage = $"Loading overview data for {SelectedVCenter.DisplayName}...";
-
-            _logger.LogInformation("Loading overview data for vCenter: {VCenterName}", SelectedVCenter.Name);
-
-            // Connect to vCenter using REST API service directly
-            var restSession = await _restApiService.ConnectAsync(SelectedVCenter);
-
-            // Update connection status since we successfully connected
-            SelectedVCenter.UpdateConnectionStatus(true);
-
-            // Get overview data
-            OverviewData = await _restApiService.GetOverviewDataAsync(restSession);
-            StatusMessage = $"Overview data loaded successfully for {SelectedVCenter.DisplayName}";
-
-            _logger.LogInformation("Overview data loaded successfully for vCenter: {VCenterName}", SelectedVCenter.Name);
-        }
-        catch (Exception ex)
-        {
-            if (SelectedVCenter != null)
-            {
-                SelectedVCenter.UpdateConnectionStatus(false);
-            }
-            _logger.LogError(ex, "Failed to load overview data for vCenter: {VCenterName}", SelectedVCenter?.Name);
-            StatusMessage = $"Failed to load overview data: {ex.Message}";
-            OverviewData = null;
-        }
-        finally
-        {
-            IsLoading = false;
-        }
-    }
 
     /// <summary>
     /// Monitor connections periodically to update status
@@ -538,16 +501,25 @@ public partial class MainWindowViewModel : ObservableObject
         if (value != null)
         {
             _logger.LogDebug("Selected vCenter changed to: {VCenterName}", value.Name);
-            // Automatically load overview data when a vCenter is selected
-            _ = LoadOverviewDataAsync();
             
-            // Load infrastructure data
+            // Stop previous refreshes
+            VCenterOverviewViewModel.StopRefresh();
+            
+            // Load overview and infrastructure data
+            _ = VCenterOverviewViewModel.LoadOverviewDataAsync(value);
             _ = InfrastructureViewModel.LoadInfrastructureAsync(value);
         }
         else
         {
+            // Stop all refreshes when no vCenter is selected
+            VCenterOverviewViewModel.StopRefresh();
+            
+            // Clear data
             OverviewData = null;
-            InfrastructureViewModel.InfrastructureItems.Clear();
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                InfrastructureViewModel.InfrastructureItems.Clear();
+            });
         }
     }
 
@@ -573,5 +545,6 @@ public partial class MainWindowViewModel : ObservableObject
         _clockTimer?.Dispose();
         _connectionMonitorTimer?.Dispose();
         _infrastructureViewModel?.Dispose();
+        _vCenterOverviewViewModel?.Dispose();
     }
 } 
