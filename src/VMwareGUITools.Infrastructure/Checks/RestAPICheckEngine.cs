@@ -310,6 +310,7 @@ public class RestAPICheckEngine : ICheckEngine
                         var thresholdInt = jsonElement.GetInt32();
                         if (intValue > thresholdInt)
                         {
+                            result.Warnings ??= new List<string>();
                             result.Warnings.Add($"{thresholdKey} value {intValue} exceeds threshold {thresholdInt}");
                         }
                     }
@@ -334,6 +335,7 @@ public class RestAPICheckEngine : ICheckEngine
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to evaluate thresholds for check '{CheckName}'", checkDefinition.Name);
+            result.Warnings ??= new List<string>();
             result.Warnings.Add($"Threshold evaluation failed: {ex.Message}");
             return result;
         }

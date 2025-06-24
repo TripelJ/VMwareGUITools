@@ -766,11 +766,10 @@
                                                     </StackPanel>
                                                 </Grid>
 
-                                                <!-- TreeView -->
-                                                <TreeView ItemsSource="{Binding InfrastructureViewModel.InfrastructureItems}"
-                                                          SelectedItem="{Binding InfrastructureViewModel.SelectedItem}"
-                                                          Style="{StaticResource MaterialDesignTreeView}"
-                                                          Visibility="{Binding InfrastructureViewModel.IsLoading, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=True}">
+                                                                                <!-- TreeView -->
+                                <TreeView ItemsSource="{Binding InfrastructureViewModel.InfrastructureItems}"
+                                          Style="{StaticResource MaterialDesignTreeView}"
+                                          Visibility="{Binding InfrastructureViewModel.IsLoading, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=True}">
                                                     <TreeView.ItemTemplate>
                                                         <HierarchicalDataTemplate ItemsSource="{Binding Children}">
                                                             <Border Padding="4,2" 
