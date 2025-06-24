@@ -824,9 +824,4 @@ public class VSphereApiResult
     public Dictionary<string, object> Properties { get; set; } = new();
 }
 
-internal class AuthResult
-{
-    public bool IsSuccessful { get; set; }
-    public string? SessionToken { get; set; }
-    public string? ErrorMessage { get; set; }
-} 
+ 
