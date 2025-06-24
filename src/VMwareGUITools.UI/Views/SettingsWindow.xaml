@@ -166,6 +166,251 @@
                     </materialDesign:Card>
                 </Grid>
             </TabItem>
+
+            <!-- Checks Tab -->
+            <TabItem Header="Checks">
+                <Grid Margin="16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="300"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Check Categories List -->
+                    <materialDesign:Card Grid.Column="0" Margin="0,0,8,0">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <Border Grid.Row="0" 
+                                    Background="{DynamicResource MaterialDesignChipBackground}"
+                                    Padding="16,8">
+                                <TextBlock Text="Check Categories"
+                                           FontWeight="Medium"/>
+                            </Border>
+
+                            <ListBox Grid.Row="1"
+                                     ItemsSource="{Binding CheckCategories}"
+                                     SelectedItem="{Binding SelectedCheckCategory}"
+                                     Style="{StaticResource MaterialDesignListBox}">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Margin="8">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <CheckBox Grid.Column="0"
+                                                      IsChecked="{Binding Enabled}"
+                                                      VerticalAlignment="Center"
+                                                      Margin="0,0,8,0"/>
+
+                                            <StackPanel Grid.Column="1">
+                                                <TextBlock Text="{Binding Name}"
+                                                           FontWeight="Medium"/>
+                                                <TextBlock Text="{Binding Description}"
+                                                           FontSize="11"
+                                                           Foreground="{DynamicResource MaterialDesignBodyLight}"
+                                                           TextTrimming="CharacterEllipsis"/>
+                                            </StackPanel>
+
+                                            <materialDesign:Chip Grid.Column="2"
+                                                                 Content="{Binding EnabledCheckCount}"
+                                                                 FontSize="10"
+                                                                 Margin="4,0,0,0"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+
+                            <Border Grid.Row="2" 
+                                    BorderBrush="{DynamicResource MaterialDesignDivider}"
+                                    BorderThickness="0,1,0,0"
+                                    Padding="8">
+                                <StackPanel Orientation="Horizontal">
+                                    <Button Content="Add Category" 
+                                            Command="{Binding AddCheckCategoryCommand}"
+                                            Style="{StaticResource MaterialDesignOutlinedButton}"
+                                            Margin="0,0,8,0"/>
+                                    <Button Content="Remove" 
+                                            Command="{Binding RemoveCheckCategoryCommand}"
+                                            Style="{StaticResource MaterialDesignOutlinedButton}"/>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+                    </materialDesign:Card>
+
+                    <!-- Check Definitions -->
+                    <materialDesign:Card Grid.Column="1" Margin="8,0,0,0">
+                        <Grid Margin="16">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <!-- Category Details -->
+                            <StackPanel Grid.Row="0" DataContext="{Binding SelectedCheckCategory}" Margin="0,0,0,16">
+                                <TextBlock Text="Category Details"
+                                           FontSize="16"
+                                           FontWeight="Medium"
+                                           Margin="0,0,0,8"/>
+
+                                <TextBox materialDesign:HintAssist.Hint="Category Name"
+                                         Text="{Binding Name}"
+                                         Style="{StaticResource MaterialDesignFloatingHintTextBox}"
+                                         Margin="0,0,0,8"/>
+
+                                <TextBox materialDesign:HintAssist.Hint="Description"
+                                         Text="{Binding Description}"
+                                         Style="{StaticResource MaterialDesignFloatingHintTextBox}"
+                                         AcceptsReturn="True"
+                                         MaxLines="2"
+                                         Margin="0,0,0,8"/>
+
+                                <ComboBox materialDesign:HintAssist.Hint="Category Type"
+                                          SelectedValue="{Binding Type}"
+                                          Style="{StaticResource MaterialDesignFloatingHintComboBox}"
+                                          Margin="0,0,0,8">
+                                    <ComboBoxItem Content="Configuration"/>
+                                    <ComboBoxItem Content="Health"/>
+                                    <ComboBoxItem Content="Performance"/>
+                                    <ComboBoxItem Content="Security"/>
+                                    <ComboBoxItem Content="Compliance"/>
+                                </ComboBox>
+                            </StackPanel>
+
+                            <!-- Check Definitions Header -->
+                            <Grid Grid.Row="1" Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                
+                                <TextBlock Grid.Column="0"
+                                           Text="Check Definitions"
+                                           FontSize="14"
+                                           FontWeight="Medium"
+                                           VerticalAlignment="Center"/>
+                                
+                                <Button Grid.Column="1"
+                                        Content="Add Check"
+                                        Command="{Binding AddCheckDefinitionCommand}"
+                                        Style="{StaticResource MaterialDesignOutlinedButton}"/>
+                            </Grid>
+
+                            <!-- Check Definitions List -->
+                            <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+                                <ItemsControl ItemsSource="{Binding CheckDefinitions}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <materialDesign:Card Margin="0,0,0,8" Padding="12">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    
+                                                    <CheckBox Grid.Column="0"
+                                                              IsChecked="{Binding IsEnabled}"
+                                                              VerticalAlignment="Center"
+                                                              Margin="0,0,12,0"/>
+                                                    
+                                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding Name}"
+                                                                   FontWeight="Medium"
+                                                                   FontSize="13"/>
+                                                        <TextBlock Text="{Binding Description}"
+                                                                   FontSize="11"
+                                                                   Foreground="{DynamicResource MaterialDesignBodyLight}"
+                                                                   TextTrimming="CharacterEllipsis"
+                                                                   MaxWidth="300"/>
+                                                        <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                                            <materialDesign:Chip Content="{Binding ExecutionType}"
+                                                                                 FontSize="9"
+                                                                                 Height="20"
+                                                                                 Margin="0,0,4,0"/>
+                                                            <materialDesign:Chip Content="{Binding DefaultSeverity}"
+                                                                                 FontSize="9"
+                                                                                 Height="20"/>
+                                                        </StackPanel>
+                                                    </StackPanel>
+                                                    
+                                                    <Button Grid.Column="2"
+                                                            Content="Edit"
+                                                            Command="{Binding DataContext.EditCheckDefinitionCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                            CommandParameter="{Binding}"
+                                                            Style="{StaticResource MaterialDesignFlatButton}"
+                                                            Margin="8,0"/>
+                                                    
+                                                    <Button Grid.Column="3"
+                                                            Content="Remove"
+                                                            Command="{Binding DataContext.RemoveCheckDefinitionCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                            CommandParameter="{Binding}"
+                                                            Style="{StaticResource MaterialDesignFlatButton}"
+                                                            Foreground="{DynamicResource MaterialDesignValidationErrorBrush}"/>
+                                                </Grid>
+                                            </materialDesign:Card>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+
+                            <!-- Quick Add Predefined Checks -->
+                            <Expander Grid.Row="3" 
+                                      Header="Quick Add Predefined Checks" 
+                                      Margin="0,16,0,0">
+                                <StackPanel Margin="0,8,0,0">
+                                    <TextBlock Text="Common VMware checks you can add quickly:"
+                                               FontSize="11"
+                                               Foreground="{DynamicResource MaterialDesignBodyLight}"
+                                               Margin="0,0,0,8"/>
+                                    
+                                    <WrapPanel>
+                                        <Button Content="NTP Sync Check"
+                                                Command="{Binding AddPredefinedCheckCommand}"
+                                                CommandParameter="NTP"
+                                                Style="{StaticResource MaterialDesignOutlinedButton}"
+                                                Margin="0,0,8,8"/>
+                                        <Button Content="SSH Service Check"
+                                                Command="{Binding AddPredefinedCheckCommand}"
+                                                CommandParameter="SSH"
+                                                Style="{StaticResource MaterialDesignOutlinedButton}"
+                                                Margin="0,0,8,8"/>
+                                        <Button Content="iSCSI Dead Path Check"
+                                                Command="{Binding AddPredefinedCheckCommand}"
+                                                CommandParameter="iSCSI"
+                                                Style="{StaticResource MaterialDesignOutlinedButton}"
+                                                Margin="0,0,8,8"/>
+                                        <Button Content="Storage Multipathing"
+                                                Command="{Binding AddPredefinedCheckCommand}"
+                                                CommandParameter="Multipath"
+                                                Style="{StaticResource MaterialDesignOutlinedButton}"
+                                                Margin="0,0,8,8"/>
+                                        <Button Content="DNS Resolution"
+                                                Command="{Binding AddPredefinedCheckCommand}"
+                                                CommandParameter="DNS"
+                                                Style="{StaticResource MaterialDesignOutlinedButton}"
+                                                Margin="0,0,8,8"/>
+                                        <Button Content="vSAN Health"
+                                                Command="{Binding AddPredefinedCheckCommand}"
+                                                CommandParameter="vSAN"
+                                                Style="{StaticResource MaterialDesignOutlinedButton}"
+                                                Margin="0,0,8,8"/>
+                                    </WrapPanel>
+                                </StackPanel>
+                            </Expander>
+                        </Grid>
+                    </materialDesign:Card>
+                </Grid>
+            </TabItem>
         </TabControl>
 
         <!-- Action Buttons -->

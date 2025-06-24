@@ -49,6 +49,15 @@ public partial class SettingsViewModel : ObservableObject
     private HostProfileSetting? _selectedHostProfile;
 
     [ObservableProperty]
+    private ObservableCollection<CheckCategory> _checkCategories = new();
+
+    [ObservableProperty]
+    private CheckCategory? _selectedCheckCategory;
+
+    [ObservableProperty]
+    private ObservableCollection<CheckDefinition> _checkDefinitions = new();
+
+    [ObservableProperty]
     private bool _isLoading = false;
 
     public SettingsViewModel(
@@ -61,15 +70,27 @@ public partial class SettingsViewModel : ObservableObject
         _dbContext = dbContext;
 
         // Initialize with current configuration values
-        LoadCurrentSettings();
+        _ = Task.Run(async () => await LoadCurrentSettings());
+    }
+
+    partial void OnSelectedCheckCategoryChanged(CheckCategory? value)
+    {
+        if (value != null)
+        {
+            LoadCheckDefinitionsForCategory(value.Id);
+        }
+        else
+        {
+            CheckDefinitions.Clear();
+        }
     }
 
     /// <summary>
     /// Refresh settings when window is reopened
     /// </summary>
-    public void RefreshSettings()
+    public async Task RefreshSettings()
     {
-        LoadCurrentSettings();
+        await LoadCurrentSettings();
     }
 
     /// <summary>
@@ -279,6 +300,198 @@ public partial class SettingsViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Command to add a new check category
+    /// </summary>
+    [RelayCommand]
+    private void AddCheckCategory()
+    {
+        var newCategory = new CheckCategory
+        {
+            Name = "New Category",
+            Description = "Enter category description",
+            Type = CheckCategoryType.Configuration,
+            Enabled = true,
+            SortOrder = CheckCategories.Count + 1
+        };
+
+        CheckCategories.Add(newCategory);
+        SelectedCheckCategory = newCategory;
+    }
+
+    /// <summary>
+    /// Command to remove a check category
+    /// </summary>
+    [RelayCommand]
+    private void RemoveCheckCategory()
+    {
+        if (SelectedCheckCategory != null)
+        {
+            CheckCategories.Remove(SelectedCheckCategory);
+            SelectedCheckCategory = CheckCategories.FirstOrDefault();
+        }
+    }
+
+    /// <summary>
+    /// Command to add a new check definition
+    /// </summary>
+    [RelayCommand]
+    private void AddCheckDefinition()
+    {
+        if (SelectedCheckCategory == null) return;
+
+        var newCheck = new CheckDefinition
+        {
+            CategoryId = SelectedCheckCategory.Id,
+            Name = "New Check",
+            Description = "Enter check description",
+            ExecutionType = CheckExecutionType.vSphereRestAPI,
+            DefaultSeverity = CheckSeverity.Warning,
+            IsEnabled = true,
+            TimeoutSeconds = 300,
+            ScriptPath = "",
+            Script = "",
+            Parameters = "{}",
+            Thresholds = "{}"
+        };
+
+        CheckDefinitions.Add(newCheck);
+    }
+
+    /// <summary>
+    /// Command to edit a check definition
+    /// </summary>
+    [RelayCommand]
+    private void EditCheckDefinition(CheckDefinition checkDefinition)
+    {
+        // For now, just show a simple message box with check details
+        // In a real implementation, you would open a detailed edit dialog
+        var message = $"Edit Check: {checkDefinition.Name}\n\n" +
+                     $"Description: {checkDefinition.Description}\n" +
+                     $"Execution Type: {checkDefinition.ExecutionType}\n" +
+                     $"Severity: {checkDefinition.DefaultSeverity}\n" +
+                     $"Timeout: {checkDefinition.TimeoutSeconds}s\n" +
+                     $"Enabled: {checkDefinition.IsEnabled}";
+
+        Application.Current.Dispatcher.Invoke(() =>
+        {
+            MessageBox.Show(message, "Check Definition Details", 
+                MessageBoxButton.OK, MessageBoxImage.Information);
+        });
+    }
+
+    /// <summary>
+    /// Command to remove a check definition
+    /// </summary>
+    [RelayCommand]
+    private void RemoveCheckDefinition(CheckDefinition checkDefinition)
+    {
+        if (checkDefinition != null)
+        {
+            CheckDefinitions.Remove(checkDefinition);
+        }
+    }
+
+    /// <summary>
+    /// Command to add predefined checks
+    /// </summary>
+    [RelayCommand]
+    private void AddPredefinedCheck(string checkType)
+    {
+        if (SelectedCheckCategory == null) return;
+
+        CheckDefinition newCheck = checkType switch
+        {
+            "NTP" => new CheckDefinition
+            {
+                CategoryId = SelectedCheckCategory.Id,
+                Name = "NTP Sync Check",
+                Description = "Verify that the ESXi host is properly synchronized with NTP servers",
+                ExecutionType = CheckExecutionType.vSphereRestAPI,
+                DefaultSeverity = CheckSeverity.Warning,
+                IsEnabled = true,
+                TimeoutSeconds = 60,
+                ScriptPath = "Scripts/NTP/Check-NTPSync.ps1",
+                Script = "# PowerShell script to check NTP sync status",
+                Parameters = """{"maxOffsetSeconds": 300}""",
+                Thresholds = """{"warningOffset": 60, "criticalOffset": 300}"""
+            },
+            "SSH" => new CheckDefinition
+            {
+                CategoryId = SelectedCheckCategory.Id,
+                Name = "SSH Service Check",
+                Description = "Check if SSH service is running and properly configured",
+                ExecutionType = CheckExecutionType.vSphereRestAPI,
+                DefaultSeverity = CheckSeverity.Warning,
+                IsEnabled = true,
+                TimeoutSeconds = 30,
+                ScriptPath = "Scripts/SSH/Check-SSHService.ps1",
+                Script = "# PowerShell script to check SSH service status",
+                Parameters = """{"checkPortAccess": true, "expectedPort": 22}""",
+                Thresholds = """{}"""
+            },
+            "iSCSI" => new CheckDefinition
+            {
+                CategoryId = SelectedCheckCategory.Id,
+                Name = "iSCSI Dead Path Check",
+                Description = "Check for dead or inactive iSCSI storage paths",
+                ExecutionType = CheckExecutionType.vSphereRestAPI,
+                DefaultSeverity = CheckSeverity.Critical,
+                IsEnabled = true,
+                TimeoutSeconds = 120,
+                ScriptPath = "Scripts/Storage/Check-iSCSIDeadPaths.ps1",
+                Script = "# PowerShell script to check iSCSI path status",
+                Parameters = """{"checkAllAdapters": true}""",
+                Thresholds = """{"maxDeadPaths": 0}"""
+            },
+            "Multipath" => new CheckDefinition
+            {
+                CategoryId = SelectedCheckCategory.Id,
+                Name = "Storage Multipathing Check",
+                Description = "Verify storage multipathing configuration and path availability",
+                ExecutionType = CheckExecutionType.vSphereRestAPI,
+                DefaultSeverity = CheckSeverity.Warning,
+                IsEnabled = true,
+                TimeoutSeconds = 90,
+                ScriptPath = "Scripts/Storage/Check-Multipathing.ps1",
+                Script = "# PowerShell script to check storage multipathing",
+                Parameters = """{"minimumPaths": 2}""",
+                Thresholds = """{"warningPaths": 2, "criticalPaths": 1}"""
+            },
+            "DNS" => new CheckDefinition
+            {
+                CategoryId = SelectedCheckCategory.Id,
+                Name = "DNS Resolution Check",
+                Description = "Test DNS resolution for configured DNS servers",
+                ExecutionType = CheckExecutionType.vSphereRestAPI,
+                DefaultSeverity = CheckSeverity.Warning,
+                IsEnabled = true,
+                TimeoutSeconds = 30,
+                ScriptPath = "Scripts/Network/Check-DNSResolution.ps1",
+                Script = "# PowerShell script to check DNS resolution",
+                Parameters = """{"testDomains": ["vmware.com", "google.com"]}""",
+                Thresholds = """{"maxResponseTimeMs": 5000}"""
+            },
+            "vSAN" => new CheckDefinition
+            {
+                CategoryId = SelectedCheckCategory.Id,
+                Name = "vSAN Health Check",
+                Description = "Check vSAN cluster health and disk group status",
+                ExecutionType = CheckExecutionType.vSphereRestAPI,
+                DefaultSeverity = CheckSeverity.Critical,
+                IsEnabled = true,
+                TimeoutSeconds = 180,
+                ScriptPath = "Scripts/vSAN/Check-vSANHealth.ps1",
+                Script = "# PowerShell script to check vSAN health",
+                Parameters = """{"checkDiskGroups": true, "checkNetworking": true}""",
+                Thresholds = """{}"""
+            },
+            _ => throw new ArgumentException($"Unknown check type: {checkType}")
+        };
+
+        CheckDefinitions.Add(newCheck);
+    }
+
+    /// <summary>
     /// Command to test email notifications
     /// </summary>
     [RelayCommand]
@@ -326,6 +539,9 @@ public partial class SettingsViewModel : ObservableObject
             
             // Save host profiles
             await SaveHostProfilesAsync();
+            
+            // Save check categories and definitions
+            await SaveCheckCategoriesAsync();
 
             Application.Current.Dispatcher.Invoke(() =>
             {
@@ -549,6 +765,218 @@ public partial class SettingsViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Save check categories and definitions
+    /// </summary>
+    private async Task SaveCheckCategoriesAsync()
+    {
+        try
+        {
+            _logger.LogInformation("Saving check categories and definitions to database");
+
+            // Save check categories
+            foreach (var category in CheckCategories)
+            {
+                var existingCategory = await _dbContext.CheckCategories
+                    .FirstOrDefaultAsync(c => c.Id == category.Id);
+
+                if (existingCategory != null)
+                {
+                    // Update existing category
+                    existingCategory.Name = category.Name;
+                    existingCategory.Description = category.Description;
+                    existingCategory.Type = category.Type;
+                    existingCategory.Enabled = category.Enabled;
+                    existingCategory.SortOrder = category.SortOrder;
+                    existingCategory.UpdatedAt = DateTime.UtcNow;
+                }
+                else if (category.Id == 0)
+                {
+                    // Create new category (Id == 0 means it's new)
+                    _dbContext.CheckCategories.Add(category);
+                }
+            }
+
+            // Save check definitions
+            foreach (var definition in CheckDefinitions)
+            {
+                var existingDefinition = await _dbContext.CheckDefinitions
+                    .FirstOrDefaultAsync(d => d.Id == definition.Id);
+
+                if (existingDefinition != null)
+                {
+                    // Update existing definition
+                    existingDefinition.Name = definition.Name;
+                    existingDefinition.Description = definition.Description;
+                    existingDefinition.ExecutionType = definition.ExecutionType;
+                    existingDefinition.ScriptPath = definition.ScriptPath;
+                    existingDefinition.Script = definition.Script;
+                    existingDefinition.Parameters = definition.Parameters;
+                    existingDefinition.Thresholds = definition.Thresholds;
+                    existingDefinition.ThresholdCriteria = definition.ThresholdCriteria;
+                    existingDefinition.DefaultSeverity = definition.DefaultSeverity;
+                    existingDefinition.IsEnabled = definition.IsEnabled;
+                    existingDefinition.TimeoutSeconds = definition.TimeoutSeconds;
+                    existingDefinition.UpdatedAt = DateTime.UtcNow;
+                }
+                else if (definition.Id == 0)
+                {
+                    // Create new definition (Id == 0 means it's new)
+                    definition.CategoryId = SelectedCheckCategory?.Id ?? definition.CategoryId;
+                    _dbContext.CheckDefinitions.Add(definition);
+                }
+            }
+
+            await _dbContext.SaveChangesAsync();
+            _logger.LogInformation("Check categories and definitions saved successfully");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to save check categories and definitions");
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Load check categories from database
+    /// </summary>
+    private async Task LoadCheckCategoriesFromDatabase()
+    {
+        try
+        {
+            CheckCategories.Clear();
+            CheckDefinitions.Clear();
+
+            var dbCategories = await _dbContext.CheckCategories
+                .OrderBy(c => c.SortOrder)
+                .ThenBy(c => c.Name)
+                .ToListAsync();
+
+            foreach (var dbCategory in dbCategories)
+            {
+                CheckCategories.Add(dbCategory);
+            }
+
+            // Select the first category by default
+            if (CheckCategories.Any())
+            {
+                SelectedCheckCategory = CheckCategories.First();
+            }
+
+            _logger.LogInformation("Loaded {Count} check categories from database", CheckCategories.Count);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to load check categories from database");
+            // Add default categories if database load fails
+            await AddDefaultCheckCategories();
+        }
+    }
+
+    /// <summary>
+    /// Load check definitions for a specific category
+    /// </summary>
+    private async void LoadCheckDefinitionsForCategory(int categoryId)
+    {
+        try
+        {
+            CheckDefinitions.Clear();
+
+            var dbDefinitions = await _dbContext.CheckDefinitions
+                .Where(d => d.CategoryId == categoryId)
+                .OrderBy(d => d.Name)
+                .ToListAsync();
+
+            foreach (var dbDefinition in dbDefinitions)
+            {
+                CheckDefinitions.Add(dbDefinition);
+            }
+
+            _logger.LogInformation("Loaded {Count} check definitions for category {CategoryId}", CheckDefinitions.Count, categoryId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to load check definitions for category {CategoryId}", categoryId);
+        }
+    }
+
+    /// <summary>
+    /// Add default check categories if none exist
+    /// </summary>
+    private async Task AddDefaultCheckCategories()
+    {
+        try
+        {
+            var defaultCategories = new List<CheckCategory>
+            {
+                new CheckCategory
+                {
+                    Name = "Configuration",
+                    Description = "Configuration compliance checks",
+                    Type = CheckCategoryType.Configuration,
+                    Enabled = true,
+                    SortOrder = 1
+                },
+                new CheckCategory
+                {
+                    Name = "Health",
+                    Description = "System health and availability checks",
+                    Type = CheckCategoryType.Health,
+                    Enabled = true,
+                    SortOrder = 2
+                },
+                new CheckCategory
+                {
+                    Name = "Security",
+                    Description = "Security compliance and vulnerability checks",
+                    Type = CheckCategoryType.Security,
+                    Enabled = true,
+                    SortOrder = 3
+                },
+                new CheckCategory
+                {
+                    Name = "Performance",
+                    Description = "Performance monitoring and optimization checks",
+                    Type = CheckCategoryType.Performance,
+                    Enabled = true,
+                    SortOrder = 4
+                },
+                new CheckCategory
+                {
+                    Name = "Storage",
+                    Description = "Storage health and configuration checks",
+                    Type = CheckCategoryType.Health,
+                    Enabled = true,
+                    SortOrder = 5
+                },
+                new CheckCategory
+                {
+                    Name = "Network",
+                    Description = "Network connectivity and configuration checks",
+                    Type = CheckCategoryType.Configuration,
+                    Enabled = true,
+                    SortOrder = 6
+                }
+            };
+
+            foreach (var category in defaultCategories)
+            {
+                CheckCategories.Add(category);
+            }
+
+            if (CheckCategories.Any())
+            {
+                SelectedCheckCategory = CheckCategories.First();
+            }
+
+            _logger.LogInformation("Added {Count} default check categories", defaultCategories.Count);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to add default check categories");
+        }
+    }
+
+    /// <summary>
     /// Convert JsonElement to object for manipulation
     /// </summary>
     private object ConvertJsonElement(System.Text.Json.JsonElement element)
@@ -599,7 +1027,7 @@ public partial class SettingsViewModel : ObservableObject
     /// <summary>
     /// Load current settings from configuration
     /// </summary>
-    private void LoadCurrentSettings()
+    private async Task LoadCurrentSettings()
     {
         try
         {
@@ -622,12 +1050,17 @@ public partial class SettingsViewModel : ObservableObject
 
             // Load host profiles from database
             LoadHostProfilesFromDatabase();
+            
+            // Load check categories from database
+            await LoadCheckCategoriesFromDatabase();
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to load current settings");
             // Fallback to default profiles if database load fails
             AddDefaultHostProfiles();
+            // Fallback to default check categories if database load fails
+            await AddDefaultCheckCategories();
         }
     }
 
