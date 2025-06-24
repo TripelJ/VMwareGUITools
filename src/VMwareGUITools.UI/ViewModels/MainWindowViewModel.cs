@@ -26,6 +26,7 @@ public partial class MainWindowViewModel : ObservableObject
     private readonly IVSphereRestAPIService _restApiService;
     private readonly IServiceProvider _serviceProvider;
     private readonly System.Timers.Timer _clockTimer;
+    private readonly System.Timers.Timer _connectionMonitorTimer;
 
     [ObservableProperty]
     private ObservableCollection<VCenter> _vCenters = new();
@@ -76,6 +77,11 @@ public partial class MainWindowViewModel : ObservableObject
         _clockTimer = new System.Timers.Timer(1000);
         _clockTimer.Elapsed += (s, e) => CurrentTime = DateTime.Now;
         _clockTimer.Start();
+
+        // Setup connection monitoring timer - check every 30 seconds
+        _connectionMonitorTimer = new System.Timers.Timer(30000);
+        _connectionMonitorTimer.Elapsed += async (s, e) => await MonitorConnectionsAsync();
+        _connectionMonitorTimer.Start();
 
         // Initialize data
         _ = InitializeAsync();
@@ -134,12 +140,10 @@ public partial class MainWindowViewModel : ObservableObject
 
             var session = await _vmwareService.ConnectAsync(vCenter);
             
-            // Update last scan time
+            // Update connection status
+            vCenter.UpdateConnectionStatus(true);
             vCenter.LastScan = DateTime.UtcNow;
             await _context.SaveChangesAsync();
-
-            // Refresh the list to update status
-            await LoadVCentersAsync();
 
             StatusMessage = $"Connected to {vCenter.DisplayName}";
             
@@ -150,6 +154,7 @@ public partial class MainWindowViewModel : ObservableObject
         }
         catch (Exception ex)
         {
+            vCenter.UpdateConnectionStatus(false);
             _logger.LogError(ex, "Failed to connect to vCenter: {VCenterName}", vCenter.Name);
             StatusMessage = $"Failed to connect to {vCenter.DisplayName}: {ex.Message}";
         }
@@ -200,24 +205,24 @@ public partial class MainWindowViewModel : ObservableObject
             _logger.LogInformation("Opening Edit vCenter dialog for: {VCenterName}", vCenter.Name);
 
             var editVCenterWindow = _serviceProvider.GetRequiredService<EditVCenterWindow>();
-            var editViewModel = _serviceProvider.GetRequiredService<EditVCenterViewModel>();
+            var viewModel = editVCenterWindow.DataContext as EditVCenterViewModel;
             
-            // Initialize the edit view model with the vCenter data
-            await editViewModel.InitializeAsync(vCenter);
-            editVCenterWindow.DataContext = editViewModel;
-
-            var result = editVCenterWindow.ShowDialog();
-
-            if (result == true)
+            if (viewModel != null)
             {
-                await LoadVCentersAsync();
-                StatusMessage = "vCenter server updated successfully";
+                await viewModel.InitializeAsync(vCenter);
+                var result = editVCenterWindow.ShowDialog();
+
+                if (result == true)
+                {
+                    await LoadVCentersAsync();
+                    StatusMessage = $"vCenter '{vCenter.DisplayName}' updated successfully";
+                }
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to edit vCenter server: {VCenterName}", vCenter?.Name);
-            StatusMessage = $"Failed to edit vCenter server: {ex.Message}";
+            _logger.LogError(ex, "Failed to edit vCenter: {VCenterName}", vCenter.Name);
+            StatusMessage = $"Failed to edit vCenter: {ex.Message}";
         }
     }
 
@@ -283,15 +288,18 @@ public partial class MainWindowViewModel : ObservableObject
 
             if (testResult.IsSuccessful)
             {
+                vCenter.UpdateConnectionStatus(true);
                 StatusMessage = $"Connection to {vCenter.DisplayName} successful - {testResult.ResponseTime.TotalMilliseconds:F0}ms";
             }
             else
             {
+                vCenter.UpdateConnectionStatus(false);
                 StatusMessage = $"Connection to {vCenter.DisplayName} failed: {testResult.ErrorMessage}";
             }
         }
         catch (Exception ex)
         {
+            vCenter.UpdateConnectionStatus(false);
             _logger.LogError(ex, "Failed to test connection to vCenter: {VCenterName}", vCenter.Name);
             StatusMessage = $"Failed to test connection to {vCenter.DisplayName}: {ex.Message}";
         }
@@ -343,6 +351,9 @@ public partial class MainWindowViewModel : ObservableObject
             // Connect to vCenter using REST API service directly
             var restSession = await _restApiService.ConnectAsync(SelectedVCenter);
 
+            // Update connection status since we successfully connected
+            SelectedVCenter.UpdateConnectionStatus(true);
+
             // Get overview data
             OverviewData = await _restApiService.GetOverviewDataAsync(restSession);
             StatusMessage = $"Overview data loaded successfully for {SelectedVCenter.DisplayName}";
@@ -351,6 +362,10 @@ public partial class MainWindowViewModel : ObservableObject
         }
         catch (Exception ex)
         {
+            if (SelectedVCenter != null)
+            {
+                SelectedVCenter.UpdateConnectionStatus(false);
+            }
             _logger.LogError(ex, "Failed to load overview data for vCenter: {VCenterName}", SelectedVCenter?.Name);
             StatusMessage = $"Failed to load overview data: {ex.Message}";
             OverviewData = null;
@@ -358,6 +373,50 @@ public partial class MainWindowViewModel : ObservableObject
         finally
         {
             IsLoading = false;
+        }
+    }
+
+    /// <summary>
+    /// Monitor connections periodically to update status
+    /// </summary>
+    private async Task MonitorConnectionsAsync()
+    {
+        try
+        {
+            // Check each vCenter's connection status
+            var monitoringTasks = VCenters.Where(v => v.Enabled).Select(async vCenter =>
+            {
+                try
+                {
+                    // Reset stale connection flags first
+                    if (vCenter.IsCurrentlyConnected && 
+                        vCenter.LastSuccessfulConnection.HasValue &&
+                        DateTime.UtcNow - vCenter.LastSuccessfulConnection.Value > TimeSpan.FromMinutes(5))
+                    {
+                        vCenter.UpdateConnectionStatus(false);
+                    }
+
+                    // If marked as disconnected but hasn't been tested recently, perform health check
+                    if (!vCenter.IsCurrentlyConnected && 
+                        (!vCenter.LastSuccessfulConnection.HasValue || 
+                         DateTime.UtcNow - vCenter.LastSuccessfulConnection.Value > TimeSpan.FromMinutes(2)))
+                    {
+                        var isHealthy = await _vmwareService.TestConnectionHealthAsync(vCenter);
+                        vCenter.UpdateConnectionStatus(isHealthy);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Error monitoring connection for vCenter: {VCenterName}", vCenter.Name);
+                    vCenter.UpdateConnectionStatus(false);
+                }
+            });
+
+            await Task.WhenAll(monitoringTasks);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during connection monitoring");
         }
     }
 
@@ -512,5 +571,6 @@ public partial class MainWindowViewModel : ObservableObject
     public void Dispose()
     {
         _clockTimer?.Dispose();
+        _connectionMonitorTimer?.Dispose();
     }
 } 

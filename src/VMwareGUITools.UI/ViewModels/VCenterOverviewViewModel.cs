@@ -81,10 +81,14 @@ public partial class VCenterOverviewViewModel : ObservableObject
             LastUpdated = DateTime.Now;
             StatusMessage = $"Overview loaded successfully at {LastUpdated:HH:mm:ss}";
 
+            // Update connection status since we successfully loaded overview data
+            vCenter.UpdateConnectionStatus(true);
+
             _logger.LogInformation("Overview data loaded successfully for vCenter: {VCenterName}", vCenter.Name);
         }
         catch (Exception ex)
         {
+            vCenter?.UpdateConnectionStatus(false);
             _logger.LogError(ex, "Failed to load overview data for vCenter: {VCenterName}", vCenter?.Name);
             StatusMessage = $"Failed to load overview data: {ex.Message}";
             OverviewData = null;

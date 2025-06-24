@@ -467,9 +467,13 @@ public class VMwareConnectionService : IVMwareConnectionService
             // TODO: Implement actual PowerCLI version retrieval
             await Task.Delay(200, cancellationToken);
 
-            session.LastActivity = DateTime.UtcNow;
+            if (session.VersionInfo != null)
+            {
+                return session.VersionInfo;
+            }
 
-            return session.VersionInfo ?? new VCenterVersionInfo
+            // Return cached version info from session
+            return new VCenterVersionInfo
             {
                 Version = "8.0.0",
                 Build = "20920323",
@@ -482,6 +486,71 @@ public class VMwareConnectionService : IVMwareConnectionService
         {
             _logger.LogError(ex, "Failed to get vCenter version for session: {SessionId}", session.SessionId);
             throw;
+        }
+    }
+
+    public async Task<bool> TestConnectionHealthAsync(VCenter vCenter, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            _logger.LogDebug("Testing connection health for vCenter: {VCenterName}", vCenter.Name);
+
+            // Decrypt credentials
+            var (username, password) = _credentialService.DecryptCredentials(vCenter.EncryptedCredentials);
+
+            // Basic URL validation
+            if (!Uri.TryCreate(vCenter.Url, UriKind.Absolute, out var uri) || 
+                (uri.Scheme != "https" && uri.Scheme != "http"))
+            {
+                return false;
+            }
+
+            // Quick connection test with shorter timeout
+            var script = @"
+                param($Server, $Username, $Password)
+                
+                try {
+                    # Set timeout and configure PowerCLI
+                    Set-PowerCLIConfiguration -InvalidCertificateAction Ignore -Confirm:$false -ErrorAction SilentlyContinue
+                    
+                    # Quick connect test
+                    $connection = Connect-VIServer -Server $Server -User $Username -Password $Password -ErrorAction Stop
+                    
+                    if ($connection) {
+                        # Disconnect immediately
+                        Disconnect-VIServer -Server $Server -Confirm:$false -ErrorAction SilentlyContinue
+                        return $true
+                    }
+                    return $false
+                } catch {
+                    return $false
+                }
+            ";
+
+            var parameters = new Dictionary<string, object>
+            {
+                ["Server"] = vCenter.Url,
+                ["Username"] = username,
+                ["Password"] = password
+            };
+
+            var psResult = await _powerShellService.ExecutePowerCLICommandAsync(script, parameters, 30, cancellationToken);
+            
+            if (psResult.IsSuccess && psResult.Objects.Count > 0)
+            {
+                if (psResult.Objects[0] is bool result)
+                {
+                    _logger.LogDebug("Health check for vCenter {VCenterName}: {Result}", vCenter.Name, result);
+                    return result;
+                }
+            }
+
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Health check failed for vCenter: {VCenterName}", vCenter.Name);
+            return false;
         }
     }
 } 

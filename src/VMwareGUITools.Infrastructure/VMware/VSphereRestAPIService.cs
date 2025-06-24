@@ -123,6 +123,8 @@ public class VSphereRestAPIService : IVSphereRestAPIService
                 {
                     _logger.LogDebug("Reusing existing vSphere session: {SessionId}", existingSession.SessionId);
                     existingSession.LastActivity = DateTime.UtcNow;
+                    // Update connection status for existing session
+                    vCenter.UpdateConnectionStatus(true);
                     return existingSession;
                 }
             }
@@ -139,6 +141,7 @@ public class VSphereRestAPIService : IVSphereRestAPIService
             
             if (!authResult.IsSuccessful)
             {
+                vCenter.UpdateConnectionStatus(false);
                 throw new InvalidOperationException($"Failed to authenticate: {authResult.ErrorMessage}");
             }
 
@@ -169,11 +172,15 @@ public class VSphereRestAPIService : IVSphereRestAPIService
                 _sessionSemaphore.Release();
             }
 
+            // Update connection status for successful connection
+            vCenter.UpdateConnectionStatus(true);
+
             _logger.LogInformation("vSphere REST API session established. SessionId: {SessionId}", session.SessionId);
             return session;
         }
         catch (Exception ex)
         {
+            vCenter.UpdateConnectionStatus(false);
             _logger.LogError(ex, "Failed to establish vSphere REST API session to: {VCenterUrl}", vCenter.Url);
             throw;
         }

@@ -71,6 +71,11 @@ public interface IVMwareConnectionService
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>vCenter version information</returns>
     Task<VCenterVersionInfo> GetVCenterVersionAsync(VMwareSession session, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Test connection to a vCenter server with lightweight health check
+    /// </summary>
+    Task<bool> TestConnectionHealthAsync(VCenter vCenter, CancellationToken cancellationToken = default);
 }
 
 /// <summary>

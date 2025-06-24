@@ -132,11 +132,18 @@ public partial class InfrastructureViewModel : ObservableObject
                 InfrastructureItems.Add(datastoresSection);
             }
 
+            // Successfully loaded infrastructure data - update connection status
+            if (clusters.Any() || datastores.Any())
+            {
+                vCenter.UpdateConnectionStatus(true);
+            }
+
             _logger.LogInformation("Loaded {ClusterCount} clusters and {DatastoreCount} datastores for vCenter: {VCenterName}", 
                 clusters.Count, datastores.Count, vCenter.Name);
         }
         catch (Exception ex)
         {
+            vCenter?.UpdateConnectionStatus(false);
             _logger.LogError(ex, "Failed to load infrastructure for vCenter: {VCenterName}", vCenter?.Name);
         }
         finally
