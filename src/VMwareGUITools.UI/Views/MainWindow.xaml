@@ -434,99 +434,105 @@
                                                 <materialDesign:Card Grid.Column="0" 
                                                                      Margin="0,0,8,0"
                                                                      materialDesign:ElevationAssist.Elevation="Dp2">
-                                                    <Grid Padding="16">
-                                                        <Grid.RowDefinitions>
-                                                            <RowDefinition Height="Auto"/>
-                                                            <RowDefinition Height="Auto"/>
-                                                            <RowDefinition Height="Auto"/>
-                                                        </Grid.RowDefinitions>
-                                                        
-                                                        <materialDesign:PackIcon Grid.Row="0"
-                                                                                 Kind="ServerNetwork"
-                                                                                 Height="32" Width="32"
-                                                                                 HorizontalAlignment="Center"
-                                                                                 Foreground="{StaticResource VMwareBlueBrush}"
-                                                                                 Margin="0,0,0,8"/>
-                                                        
-                                                        <TextBlock Grid.Row="1"
-                                                                   Text="{Binding OverviewData.ClusterCount, FallbackValue=0}"
-                                                                   FontSize="28"
-                                                                   FontWeight="Bold"
-                                                                   HorizontalAlignment="Center"
-                                                                   Foreground="{StaticResource VMwareBlueBrush}"/>
-                                                        
-                                                        <TextBlock Grid.Row="2"
-                                                                   Text="Clusters"
-                                                                   FontSize="14"
-                                                                   HorizontalAlignment="Center"
-                                                                   Opacity="0.8"/>
-                                                    </Grid>
+                                                    <Border Padding="16">
+                                                        <Grid>
+                                                            <Grid.RowDefinitions>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                            </Grid.RowDefinitions>
+                                                            
+                                                            <materialDesign:PackIcon Grid.Row="0"
+                                                                                     Kind="ServerNetwork"
+                                                                                     Height="32" Width="32"
+                                                                                     HorizontalAlignment="Center"
+                                                                                     Foreground="{StaticResource VMwareBlueBrush}"
+                                                                                     Margin="0,0,0,8"/>
+                                                            
+                                                            <TextBlock Grid.Row="1"
+                                                                       Text="{Binding OverviewData.ClusterCount, FallbackValue=0}"
+                                                                       FontSize="28"
+                                                                       FontWeight="Bold"
+                                                                       HorizontalAlignment="Center"
+                                                                       Foreground="{StaticResource VMwareBlueBrush}"/>
+                                                            
+                                                            <TextBlock Grid.Row="2"
+                                                                       Text="Clusters"
+                                                                       FontSize="14"
+                                                                       HorizontalAlignment="Center"
+                                                                       Opacity="0.8"/>
+                                                        </Grid>
+                                                    </Border>
                                                 </materialDesign:Card>
 
                                                 <!-- Hosts Card -->
                                                 <materialDesign:Card Grid.Column="1" 
                                                                      Margin="4,0"
                                                                      materialDesign:ElevationAssist.Elevation="Dp2">
-                                                    <Grid Padding="16">
-                                                        <Grid.RowDefinitions>
-                                                            <RowDefinition Height="Auto"/>
-                                                            <RowDefinition Height="Auto"/>
-                                                            <RowDefinition Height="Auto"/>
-                                                        </Grid.RowDefinitions>
-                                                        
-                                                        <materialDesign:PackIcon Grid.Row="0"
-                                                                                 Kind="Server"
-                                                                                 Height="32" Width="32"
-                                                                                 HorizontalAlignment="Center"
-                                                                                 Foreground="{StaticResource VMwareOrangeBrush}"
-                                                                                 Margin="0,0,0,8"/>
-                                                        
-                                                        <TextBlock Grid.Row="1"
-                                                                   Text="{Binding OverviewData.HostCount, FallbackValue=0}"
-                                                                   FontSize="28"
-                                                                   FontWeight="Bold"
-                                                                   HorizontalAlignment="Center"
-                                                                   Foreground="{StaticResource VMwareOrangeBrush}"/>
-                                                        
-                                                        <TextBlock Grid.Row="2"
-                                                                   Text="Hosts"
-                                                                   FontSize="14"
-                                                                   HorizontalAlignment="Center"
-                                                                   Opacity="0.8"/>
-                                                    </Grid>
+                                                    <Border Padding="16">
+                                                        <Grid>
+                                                            <Grid.RowDefinitions>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                            </Grid.RowDefinitions>
+                                                            
+                                                            <materialDesign:PackIcon Grid.Row="0"
+                                                                                     Kind="Server"
+                                                                                     Height="32" Width="32"
+                                                                                     HorizontalAlignment="Center"
+                                                                                     Foreground="{StaticResource VMwareOrangeBrush}"
+                                                                                     Margin="0,0,0,8"/>
+                                                            
+                                                            <TextBlock Grid.Row="1"
+                                                                       Text="{Binding OverviewData.HostCount, FallbackValue=0}"
+                                                                       FontSize="28"
+                                                                       FontWeight="Bold"
+                                                                       HorizontalAlignment="Center"
+                                                                       Foreground="{StaticResource VMwareOrangeBrush}"/>
+                                                            
+                                                            <TextBlock Grid.Row="2"
+                                                                       Text="Hosts"
+                                                                       FontSize="14"
+                                                                       HorizontalAlignment="Center"
+                                                                       Opacity="0.8"/>
+                                                        </Grid>
+                                                    </Border>
                                                 </materialDesign:Card>
 
                                                 <!-- VMs Card -->
                                                 <materialDesign:Card Grid.Column="2" 
                                                                      Margin="8,0,0,0"
                                                                      materialDesign:ElevationAssist.Elevation="Dp2">
-                                                    <Grid Padding="16">
-                                                        <Grid.RowDefinitions>
-                                                            <RowDefinition Height="Auto"/>
-                                                            <RowDefinition Height="Auto"/>
-                                                            <RowDefinition Height="Auto"/>
-                                                        </Grid.RowDefinitions>
-                                                        
-                                                        <materialDesign:PackIcon Grid.Row="0"
-                                                                                 Kind="Monitor"
-                                                                                 Height="32" Width="32"
-                                                                                 HorizontalAlignment="Center"
-                                                                                 Foreground="{StaticResource VMwareGreenBrush}"
-                                                                                 Margin="0,0,0,8"/>
-                                                        
-                                                        <TextBlock Grid.Row="1"
-                                                                   Text="{Binding OverviewData.VmCount, FallbackValue=0}"
-                                                                   FontSize="28"
-                                                                   FontWeight="Bold"
-                                                                   HorizontalAlignment="Center"
-                                                                   Foreground="{StaticResource VMwareGreenBrush}"/>
-                                                        
-                                                        <TextBlock Grid.Row="2"
-                                                                   Text="Virtual Machines"
-                                                                   FontSize="14"
-                                                                   HorizontalAlignment="Center"
-                                                                   Opacity="0.8"/>
-                                                    </Grid>
+                                                    <Border Padding="16">
+                                                        <Grid>
+                                                            <Grid.RowDefinitions>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                            </Grid.RowDefinitions>
+                                                            
+                                                            <materialDesign:PackIcon Grid.Row="0"
+                                                                                     Kind="Monitor"
+                                                                                     Height="32" Width="32"
+                                                                                     HorizontalAlignment="Center"
+                                                                                     Foreground="{StaticResource VMwareGreenBrush}"
+                                                                                     Margin="0,0,0,8"/>
+                                                            
+                                                            <TextBlock Grid.Row="1"
+                                                                       Text="{Binding OverviewData.VmCount, FallbackValue=0}"
+                                                                       FontSize="28"
+                                                                       FontWeight="Bold"
+                                                                       HorizontalAlignment="Center"
+                                                                       Foreground="{StaticResource VMwareGreenBrush}"/>
+                                                            
+                                                            <TextBlock Grid.Row="2"
+                                                                       Text="Virtual Machines"
+                                                                       FontSize="14"
+                                                                       HorizontalAlignment="Center"
+                                                                       Opacity="0.8"/>
+                                                        </Grid>
+                                                    </Border>
                                                 </materialDesign:Card>
                                             </Grid>
 
@@ -542,7 +548,8 @@
                                                 <materialDesign:Card Grid.Column="0" 
                                                                      Margin="0,0,8,0"
                                                                      materialDesign:ElevationAssist.Elevation="Dp2">
-                                                    <Grid Padding="16">
+                                                    <Border Padding="16">
+                                                        <Grid>
                                                         <Grid.RowDefinitions>
                                                             <RowDefinition Height="Auto"/>
                                                             <RowDefinition Height="*"/>
@@ -579,20 +586,22 @@
                                                             </Border>
                                                         </materialDesign:Card>
                                                         
-                                                                                                                                                                          <TextBlock Grid.Row="2"
-                                                                     Text="{Binding OverviewData.CpuUsage, Converter={StaticResource ResourceUsageConverter}, FallbackValue='N/A'}"
-                                                                   FontSize="11"
-                                                                   HorizontalAlignment="Center"
-                                                                   Margin="0,8,0,0"
-                                                                   TextWrapping="Wrap"/>
-                                                    </Grid>
+                                                                                                                                                                              <TextBlock Grid.Row="2"
+                                                                       Text="{Binding OverviewData.CpuUsage, Converter={StaticResource ResourceUsageConverter}, FallbackValue='N/A'}"
+                                                                       FontSize="11"
+                                                                       HorizontalAlignment="Center"
+                                                                       Margin="0,8,0,0"
+                                                                       TextWrapping="Wrap"/>
+                                                        </Grid>
+                                                    </Border>
                                                 </materialDesign:Card>
 
                                                 <!-- Memory Usage -->
                                                 <materialDesign:Card Grid.Column="1" 
                                                                      Margin="4,0"
                                                                      materialDesign:ElevationAssist.Elevation="Dp2">
-                                                    <Grid Padding="16">
+                                                    <Border Padding="16">
+                                                        <Grid>
                                                         <Grid.RowDefinitions>
                                                             <RowDefinition Height="Auto"/>
                                                             <RowDefinition Height="*"/>
@@ -629,20 +638,22 @@
                                                             </Border>
                                                         </materialDesign:Card>
                                                         
-                                                                                                                                                                          <TextBlock Grid.Row="2"
-                                                                     Text="{Binding OverviewData.MemoryUsage, Converter={StaticResource ResourceUsageConverter}, FallbackValue='N/A'}"
-                                                                   FontSize="11"
-                                                                   HorizontalAlignment="Center"
-                                                                   Margin="0,8,0,0"
-                                                                   TextWrapping="Wrap"/>
-                                                    </Grid>
+                                                                                                                                                                              <TextBlock Grid.Row="2"
+                                                                       Text="{Binding OverviewData.MemoryUsage, Converter={StaticResource ResourceUsageConverter}, FallbackValue='N/A'}"
+                                                                       FontSize="11"
+                                                                       HorizontalAlignment="Center"
+                                                                       Margin="0,8,0,0"
+                                                                       TextWrapping="Wrap"/>
+                                                        </Grid>
+                                                    </Border>
                                                 </materialDesign:Card>
 
                                                 <!-- Storage Usage -->
                                                 <materialDesign:Card Grid.Column="2" 
                                                                      Margin="8,0,0,0"
                                                                      materialDesign:ElevationAssist.Elevation="Dp2">
-                                                    <Grid Padding="16">
+                                                    <Border Padding="16">
+                                                        <Grid>
                                                         <Grid.RowDefinitions>
                                                             <RowDefinition Height="Auto"/>
                                                             <RowDefinition Height="*"/>
@@ -679,13 +690,14 @@
                                                             </Border>
                                                         </materialDesign:Card>
                                                         
-                                                                                                                                                                          <TextBlock Grid.Row="2"
-                                                                     Text="{Binding OverviewData.StorageUsage, Converter={StaticResource ResourceUsageConverter}, FallbackValue='N/A'}"
-                                                                   FontSize="11"
-                                                                   HorizontalAlignment="Center"
-                                                                   Margin="0,8,0,0"
-                                                                   TextWrapping="Wrap"/>
-                                                    </Grid>
+                                                                                                                                                                              <TextBlock Grid.Row="2"
+                                                                       Text="{Binding OverviewData.StorageUsage, Converter={StaticResource ResourceUsageConverter}, FallbackValue='N/A'}"
+                                                                       FontSize="11"
+                                                                       HorizontalAlignment="Center"
+                                                                       Margin="0,8,0,0"
+                                                                       TextWrapping="Wrap"/>
+                                                        </Grid>
+                                                    </Border>
                                                 </materialDesign:Card>
                                             </Grid>
 
