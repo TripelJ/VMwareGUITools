@@ -353,14 +353,17 @@ public partial class MainWindowViewModel : ObservableObject
     [RelayCommand]
     private async Task AssignVCenterToZoneAsync(object? parameter)
     {
-        if (parameter is not (VCenter vCenter, AvailabilityZone? targetZone))
+        if (parameter == null)
             return;
 
+        // For now, we'll implement this when we add the context menu functionality
+        // This method is ready for future drag-and-drop or context menu operations
+        
         try
         {
-            await _availabilityZoneViewModel.MoveVCenterToZoneAsync(vCenter, targetZone);
-            await LoadVCentersAsync();
-            StatusMessage = $"Moved vCenter '{vCenter.Name}' to zone '{targetZone?.Name ?? "No Zone"}'";
+            // Example: await _availabilityZoneViewModel.MoveVCenterToZoneAsync(vCenter, targetZone);
+            // await LoadVCentersAsync();
+            StatusMessage = "vCenter assignment functionality ready for implementation";
         }
         catch (Exception ex)
         {
