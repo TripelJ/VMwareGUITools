@@ -351,7 +351,7 @@ public partial class MainWindowViewModel : ObservableObject
     /// Command to assign a vCenter to an availability zone
     /// </summary>
     [RelayCommand]
-    private async Task AssignVCenterToZoneAsync(object? parameter)
+    private void AssignVCenterToZone(object? parameter)
     {
         if (parameter == null)
             return;
@@ -382,7 +382,7 @@ public partial class MainWindowViewModel : ObservableObject
         {
             _logger.LogInformation("Opening Add Availability Zone dialog");
 
-            var addZoneWindow = new Views.AddAvailabilityZoneWindow(_availabilityZoneViewModel);
+            var addZoneWindow = new Views.AddAvailabilityZoneWindow(AvailabilityZoneViewModel);
             addZoneWindow.Owner = Application.Current.MainWindow;
             
             var result = addZoneWindow.ShowDialog();
@@ -512,7 +512,7 @@ public partial class MainWindowViewModel : ObservableObject
             });
 
             // Update availability zone view model
-            await _availabilityZoneViewModel.LoadAvailabilityZonesAsync();
+            await AvailabilityZoneViewModel.LoadAvailabilityZonesAsync();
 
             _logger.LogDebug("Loaded {VCenterCount} vCenter servers in {ZoneCount} availability zones", 
                 vcenters.Count, zones.Count);
@@ -630,7 +630,7 @@ public partial class MainWindowViewModel : ObservableObject
     {
         _clockTimer?.Dispose();
         _connectionMonitorTimer?.Dispose();
-        _infrastructureViewModel?.Dispose();
-        _vCenterOverviewViewModel?.Dispose();
+        InfrastructureViewModel?.Dispose();
+        VCenterOverviewViewModel?.Dispose();
     }
 } 
