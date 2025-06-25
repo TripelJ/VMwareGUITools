@@ -139,169 +139,160 @@
                             </Grid>
                         </Border>
 
-                        <!-- Grouped vCenter List -->
-                        <TreeView Grid.Row="1"
-                                  ItemsSource="{Binding AvailabilityZones}"
-                                  Style="{StaticResource MaterialDesignTreeView}"
-                                  Margin="0">
-                            <!-- Availability Zone Template -->
-                            <TreeView.ItemTemplate>
-                                <HierarchicalDataTemplate ItemsSource="{Binding VCenters}">
-                                    <!-- Zone Header -->
-                                    <Border Padding="8,4"
-                                            Background="{DynamicResource MaterialDesignChipBackground}"
-                                            CornerRadius="4"
-                                            Margin="0,2">
-                                        <Border.ContextMenu>
-                                            <ContextMenu>
-                                                <MenuItem Header="Edit Zone" 
-                                                          Icon="{materialDesign:PackIcon Kind=Edit}"
-                                                          Command="{Binding DataContext.AvailabilityZoneViewModel.EditAvailabilityZoneCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                          CommandParameter="{Binding}"/>
-                                                <MenuItem Header="Delete Zone" 
-                                                          Icon="{materialDesign:PackIcon Kind=Delete}"
-                                                          Command="{Binding DataContext.AvailabilityZoneViewModel.DeleteAvailabilityZoneCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                          CommandParameter="{Binding}"/>
-                                            </ContextMenu>
-                                        </Border.ContextMenu>
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="Auto"/>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="Auto"/>
-                                            </Grid.ColumnDefinitions>
+                        <!-- Grouped vCenter List with Separators -->
+                        <ScrollViewer Grid.Row="1" 
+                                      VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled">
+                            <ItemsControl ItemsSource="{Binding AvailabilityZones}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Margin="0,4,0,8">
+                                            <!-- Zone Separator/Header -->
+                                            <Border Background="{DynamicResource MaterialDesignDivider}"
+                                                    Height="1"
+                                                    Margin="16,0"/>
                                             
-                                            <Rectangle Grid.Column="0"
-                                                       Width="12" Height="12"
-                                                       Fill="{Binding Color}"
-                                                       Margin="0,0,8,0"/>
-                                            
-                                            <TextBlock Grid.Column="1"
-                                                       Text="{Binding Name}"
-                                                       FontWeight="Medium"
-                                                       VerticalAlignment="Center"/>
-                                            
-                                            <TextBlock Grid.Column="2"
-                                                       Text="{Binding VCenterCount, StringFormat='({0})'}"
-                                                       FontSize="11"
-                                                       Foreground="{DynamicResource MaterialDesignBodyLight}"
-                                                       VerticalAlignment="Center"
-                                                       Margin="4,0,0,0"/>
-                                        </Grid>
-                                    </Border>
-                                    
-                                    <!-- vCenter Items Template -->
-                                    <HierarchicalDataTemplate.ItemTemplate>
-                                        <DataTemplate>
-                                            <Grid Margin="8,2" Background="Transparent">
-                                                <Grid.ContextMenu>
-                                                    <ContextMenu>
-                                                        <MenuItem Header="Edit" 
-                                                                  Icon="{materialDesign:PackIcon Kind=Edit}"
-                                                                  Command="{Binding DataContext.EditVCenterCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                                  CommandParameter="{Binding}"/>
-                                                        <MenuItem Header="Delete" 
-                                                                  Icon="{materialDesign:PackIcon Kind=Delete}"
-                                                                  Command="{Binding DataContext.DeleteVCenterCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                                  CommandParameter="{Binding}"/>
-                                                        <Separator/>
-                                                        <MenuItem Header="Test Connection" 
-                                                                  Icon="{materialDesign:PackIcon Kind=Connection}"
-                                                                  Command="{Binding DataContext.TestVCenterConnectionCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                                  CommandParameter="{Binding}"/>
-                                                        <Separator/>
-                                                        <MenuItem Header="Move to Zone" Icon="{materialDesign:PackIcon Kind=FolderMove}">
-                                                            <!-- Zone submenu items would be bound here -->
-                                                        </MenuItem>
-                                                    </ContextMenu>
-                                                </Grid.ContextMenu>
+                                            <Grid Margin="16,8,16,4"
+                                                  Background="Transparent">
+                                                                                                 <Grid.ContextMenu>
+                                                     <ContextMenu>
+                                                         <MenuItem Header="Edit Zone" 
+                                                                   Icon="{materialDesign:PackIcon Kind=Edit}"
+                                                                   Command="{Binding DataContext.EditAvailabilityZoneCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                   CommandParameter="{Binding}"/>
+                                                         <MenuItem Header="Delete Zone" 
+                                                                   Icon="{materialDesign:PackIcon Kind=Delete}"
+                                                                   Command="{Binding DataContext.DeleteAvailabilityZoneCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                   CommandParameter="{Binding}"/>
+                                                     </ContextMenu>
+                                                 </Grid.ContextMenu>
                                                 
-                                                <Grid.InputBindings>
-                                                    <MouseBinding MouseAction="LeftClick"
-                                                                  Command="{Binding DataContext.ConnectVCenterCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                                  CommandParameter="{Binding}"/>
-                                                </Grid.InputBindings>
-                                                
-                                                <Grid.RowDefinitions>
-                                                    <RowDefinition Height="Auto"/>
-                                                    <RowDefinition Height="Auto"/>
-                                                </Grid.RowDefinitions>
                                                 <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="Auto"/>
                                                     <ColumnDefinition Width="*"/>
                                                     <ColumnDefinition Width="Auto"/>
-                                                    <ColumnDefinition Width="Auto"/>
                                                 </Grid.ColumnDefinitions>
-
-                                                <!-- Status Indicator -->
-                                                <Ellipse Grid.Row="0" Grid.Column="0" Grid.RowSpan="2"
-                                                         Width="10" Height="10"
-                                                         VerticalAlignment="Center"
-                                                         Margin="0,0,8,0">
-                                                    <Ellipse.Style>
-                                                        <Style TargetType="Ellipse">
-                                                            <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding Status}" Value="Connected">
-                                                                    <Setter Property="Fill" Value="{StaticResource SuccessBrush}"/>
-                                                                </DataTrigger>
-                                                                <DataTrigger Binding="{Binding Status}" Value="Disconnected">
-                                                                    <Setter Property="Fill" Value="{StaticResource ErrorBrush}"/>
-                                                                </DataTrigger>
-                                                                <DataTrigger Binding="{Binding Status}" Value="NotTested">
-                                                                    <Setter Property="Fill" Value="{StaticResource InfoBrush}"/>
-                                                                </DataTrigger>
-                                                                <DataTrigger Binding="{Binding Status}" Value="Stale">
-                                                                    <Setter Property="Fill" Value="{StaticResource WarningBrush}"/>
-                                                                </DataTrigger>
-                                                                <DataTrigger Binding="{Binding Status}" Value="Disabled">
-                                                                    <Setter Property="Fill" Value="Gray"/>
-                                                                </DataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </Ellipse.Style>
-                                                </Ellipse>
-
-                                                <!-- vCenter Name -->
-                                                <TextBlock Grid.Row="0" Grid.Column="1"
-                                                           Text="{Binding DisplayName}"
-                                                           FontWeight="Medium"
-                                                           FontSize="13"
-                                                           TextTrimming="CharacterEllipsis"/>
-
-                                                <!-- vCenter URL -->
-                                                <TextBlock Grid.Row="1" Grid.Column="1"
-                                                           Text="{Binding Url}"
-                                                           FontSize="10"
+                                                
+                                                <TextBlock Grid.Column="0"
+                                                           Text="{Binding Name}"
+                                                           FontWeight="SemiBold"
+                                                           FontSize="14"
+                                                           Foreground="{DynamicResource MaterialDesignBody}"
+                                                           VerticalAlignment="Center"/>
+                                                
+                                                <TextBlock Grid.Column="1"
+                                                           Text="{Binding VCenterCount, StringFormat='({0})'}"
+                                                           FontSize="12"
                                                            Foreground="{DynamicResource MaterialDesignBodyLight}"
-                                                           TextTrimming="CharacterEllipsis"/>
-
-                                                <!-- Edit Button -->
-                                                <Button Grid.Row="0" Grid.Column="2" Grid.RowSpan="2"
-                                                        Style="{StaticResource MaterialDesignToolButton}"
-                                                        Command="{Binding DataContext.EditVCenterCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                        CommandParameter="{Binding}"
-                                                        ToolTip="Edit vCenter"
-                                                        Width="24" Height="24"
-                                                        Margin="2,0">
-                                                    <materialDesign:PackIcon Kind="Edit" Height="12" Width="12"/>
-                                                </Button>
-
-                                                <!-- Connect Button -->
-                                                <Button Grid.Row="0" Grid.Column="3" Grid.RowSpan="2"
-                                                        Style="{StaticResource MaterialDesignToolButton}"
-                                                        Command="{Binding DataContext.ConnectVCenterCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                        CommandParameter="{Binding}"
-                                                        ToolTip="Connect"
-                                                        Width="24" Height="24"
-                                                        Margin="2,0">
-                                                    <materialDesign:PackIcon Kind="Connection" Height="14" Width="14"/>
-                                                </Button>
+                                                           VerticalAlignment="Center"
+                                                           Margin="8,0,0,0"/>
                                             </Grid>
-                                        </DataTemplate>
-                                    </HierarchicalDataTemplate.ItemTemplate>
-                                </HierarchicalDataTemplate>
-                            </TreeView.ItemTemplate>
-                        </TreeView>
+                                            
+                                            <!-- vCenters under this zone -->
+                                            <ItemsControl ItemsSource="{Binding VCenters}"
+                                                          Margin="24,0,16,0">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Grid Margin="0,2" 
+                                                              Background="Transparent">
+                                                            <Grid.ContextMenu>
+                                                                <ContextMenu>
+                                                                    <MenuItem Header="Edit" 
+                                                                              Icon="{materialDesign:PackIcon Kind=Edit}"
+                                                                              Command="{Binding DataContext.EditVCenterCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                              CommandParameter="{Binding}"/>
+                                                                    <MenuItem Header="Delete" 
+                                                                              Icon="{materialDesign:PackIcon Kind=Delete}"
+                                                                              Command="{Binding DataContext.DeleteVCenterCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                              CommandParameter="{Binding}"/>
+                                                                    <Separator/>
+                                                                    <MenuItem Header="Test Connection" 
+                                                                              Icon="{materialDesign:PackIcon Kind=Connection}"
+                                                                              Command="{Binding DataContext.TestVCenterConnectionCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                              CommandParameter="{Binding}"/>
+                                                                    <Separator/>
+                                                                    <MenuItem Header="Move to Zone" Icon="{materialDesign:PackIcon Kind=FolderMove}">
+                                                                        <!-- Zone submenu items would be bound here -->
+                                                                    </MenuItem>
+                                                                </ContextMenu>
+                                                            </Grid.ContextMenu>
+                                                            
+                                                            <Grid.InputBindings>
+                                                                <MouseBinding MouseAction="LeftClick"
+                                                                              Command="{Binding DataContext.ConnectVCenterCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                              CommandParameter="{Binding}"/>
+                                                            </Grid.InputBindings>
+                                                            
+                                                            <Grid.RowDefinitions>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                            </Grid.RowDefinitions>
+                                                                                                                         <Grid.ColumnDefinitions>
+                                                                 <ColumnDefinition Width="Auto"/>
+                                                                 <ColumnDefinition Width="*"/>
+                                                                 <ColumnDefinition Width="Auto"/>
+                                                             </Grid.ColumnDefinitions>
+
+                                                             <!-- Status Indicator -->
+                                                             <Ellipse Grid.Row="0" Grid.Column="0" Grid.RowSpan="2"
+                                                                      Width="10" Height="10"
+                                                                      VerticalAlignment="Center"
+                                                                      Margin="0,0,8,0">
+                                                                 <Ellipse.Style>
+                                                                     <Style TargetType="Ellipse">
+                                                                         <Style.Triggers>
+                                                                             <DataTrigger Binding="{Binding Status}" Value="Connected">
+                                                                                 <Setter Property="Fill" Value="{StaticResource SuccessBrush}"/>
+                                                                             </DataTrigger>
+                                                                             <DataTrigger Binding="{Binding Status}" Value="Disconnected">
+                                                                                 <Setter Property="Fill" Value="{StaticResource ErrorBrush}"/>
+                                                                             </DataTrigger>
+                                                                             <DataTrigger Binding="{Binding Status}" Value="NotTested">
+                                                                                 <Setter Property="Fill" Value="{StaticResource InfoBrush}"/>
+                                                                             </DataTrigger>
+                                                                             <DataTrigger Binding="{Binding Status}" Value="Stale">
+                                                                                 <Setter Property="Fill" Value="{StaticResource WarningBrush}"/>
+                                                                             </DataTrigger>
+                                                                             <DataTrigger Binding="{Binding Status}" Value="Disabled">
+                                                                                 <Setter Property="Fill" Value="Gray"/>
+                                                                             </DataTrigger>
+                                                                         </Style.Triggers>
+                                                                     </Style>
+                                                                 </Ellipse.Style>
+                                                             </Ellipse>
+
+                                                             <!-- vCenter Name -->
+                                                             <TextBlock Grid.Row="0" Grid.Column="1"
+                                                                        Text="{Binding DisplayName}"
+                                                                        FontWeight="Medium"
+                                                                        FontSize="13"
+                                                                        TextTrimming="CharacterEllipsis"/>
+
+                                                             <!-- vCenter URL -->
+                                                             <TextBlock Grid.Row="1" Grid.Column="1"
+                                                                        Text="{Binding Url}"
+                                                                        FontSize="10"
+                                                                        Foreground="{DynamicResource MaterialDesignBodyLight}"
+                                                                        TextTrimming="CharacterEllipsis"/>
+
+                                                             <!-- Edit Button -->
+                                                             <Button Grid.Row="0" Grid.Column="2" Grid.RowSpan="2"
+                                                                     Style="{StaticResource MaterialDesignToolButton}"
+                                                                     Command="{Binding DataContext.EditVCenterCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                     CommandParameter="{Binding}"
+                                                                     ToolTip="Edit vCenter"
+                                                                     Width="24" Height="24"
+                                                                     Margin="2,0">
+                                                                 <materialDesign:PackIcon Kind="Edit" Height="12" Width="12"/>
+                                                             </Button>
+                                                        </Grid>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
 
                         <!-- VMware API Status -->
                         <Border Grid.Row="2" 

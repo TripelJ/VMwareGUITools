@@ -405,6 +405,26 @@ public partial class MainWindowViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Command to edit an availability zone (proxy to AvailabilityZoneViewModel)
+    /// </summary>
+    [RelayCommand]
+    private void EditAvailabilityZone(AvailabilityZone? zone)
+    {
+        if (zone == null) return;
+        AvailabilityZoneViewModel.EditAvailabilityZoneCommand.Execute(zone);
+    }
+
+    /// <summary>
+    /// Command to delete an availability zone (proxy to AvailabilityZoneViewModel)
+    /// </summary>
+    [RelayCommand]
+    private async Task DeleteAvailabilityZoneAsync(AvailabilityZone? zone)
+    {
+        if (zone == null) return;
+        await AvailabilityZoneViewModel.DeleteAvailabilityZoneCommand.ExecuteAsync(zone);
+    }
+
+    /// <summary>
     /// Handles the request to edit an availability zone
     /// </summary>
     private async void OnEditAvailabilityZoneRequested(AvailabilityZone zone)
