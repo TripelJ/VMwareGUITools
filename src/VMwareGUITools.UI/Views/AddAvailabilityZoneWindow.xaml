@@ -43,7 +43,7 @@
 
             <!-- Content -->
             <ScrollViewer Grid.Row="1" Padding="24" VerticalScrollBarVisibility="Auto">
-                <StackPanel Spacing="16">
+                <StackPanel>
                     
                     <!-- Zone Name -->
                     <TextBox materialDesign:HintAssist.Hint="Zone Name"
@@ -51,7 +51,7 @@
                              Style="{StaticResource MaterialDesignFloatingHintTextBox}"
                              Text="{Binding NewZoneName, UpdateSourceTrigger=PropertyChanged}"
                              MaxLength="100"
-                             Margin="0,8"/>
+                             Margin="0,0,0,16"/>
 
                     <!-- Description -->
                     <TextBox materialDesign:HintAssist.Hint="Description (Optional)"
@@ -64,10 +64,10 @@
                              MinLines="2"
                              MaxLines="4"
                              VerticalScrollBarVisibility="Auto"
-                             Margin="0,8"/>
+                             Margin="0,0,0,16"/>
 
                     <!-- Color Picker -->
-                    <StackPanel Margin="0,8">
+                    <StackPanel Margin="0,0,0,16">
                         <TextBlock Text="Zone Color" 
                                    FontWeight="Medium" 
                                    Margin="0,0,0,8"/>
@@ -125,7 +125,7 @@
                     <TextBlock Text="{Binding StatusMessage}"
                                Foreground="{DynamicResource MaterialDesignValidationErrorBrush}"
                                FontWeight="Medium"
-                               Margin="0,8">
+                               Margin="0,0,0,16">
                         <TextBlock.Style>
                             <Style TargetType="TextBlock">
                                 <Style.Triggers>
@@ -150,8 +150,7 @@
                     BorderThickness="0,1,0,0"
                     Padding="24,16">
                 <StackPanel Orientation="Horizontal" 
-                            HorizontalAlignment="Right" 
-                            Spacing="8">
+                            HorizontalAlignment="Right">
                     
                     <Button Style="{StaticResource MaterialDesignFlatButton}"
                             Content="Cancel"
