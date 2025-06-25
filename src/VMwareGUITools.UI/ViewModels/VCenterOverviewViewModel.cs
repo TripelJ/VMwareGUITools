@@ -62,6 +62,7 @@ public partial class VCenterOverviewViewModel : ObservableObject, IDisposable
         {
             OverviewData = null;
             _overviewRefreshTimer.Stop();
+            _currentSession = null;
             return;
         }
 
@@ -69,14 +70,22 @@ public partial class VCenterOverviewViewModel : ObservableObject, IDisposable
         {
             IsLoading = true;
             StatusMessage = "Loading vCenter overview...";
+            
+            // Stop any previous refresh timer and clear current session
+            _overviewRefreshTimer.Stop();
+            _currentSession = null;
+            
+            // Clear previous data to ensure fresh display
+            OverviewData = null;
+            
             SelectedVCenter = vCenter;
 
             _logger.LogInformation("Loading overview data for vCenter: {VCenterName}", vCenter.Name);
 
-            // First ensure we have an active connection using REST API service
+            // Establish a fresh connection using REST API service
             _currentSession = await _restApiService.ConnectAsync(vCenter);
 
-            // Get overview data (always live, never from database)
+            // Get fresh overview data (always live, never from database)
             var freshOverviewData = await _restApiService.GetOverviewDataAsync(_currentSession);
             
             // Update UI on dispatcher thread
@@ -96,7 +105,10 @@ public partial class VCenterOverviewViewModel : ObservableObject, IDisposable
                 _overviewRefreshTimer.Start();
             }
 
-            _logger.LogInformation("Overview data loaded successfully for vCenter: {VCenterName}", vCenter.Name);
+            _logger.LogInformation("Overview data loaded successfully for vCenter: {VCenterName} - CPU: {CpuUsage}%, Memory: {MemoryUsage}%, Storage: {StorageUsage}%", 
+                vCenter.Name, freshOverviewData.CpuUsage.UsagePercentage.ToString("F1"), 
+                freshOverviewData.MemoryUsage.UsagePercentage.ToString("F1"), 
+                freshOverviewData.StorageUsage.UsagePercentage.ToString("F1"));
         }
         catch (Exception ex)
         {
@@ -110,6 +122,7 @@ public partial class VCenterOverviewViewModel : ObservableObject, IDisposable
             });
             
             _overviewRefreshTimer.Stop();
+            _currentSession = null;
         }
         finally
         {
@@ -140,7 +153,10 @@ public partial class VCenterOverviewViewModel : ObservableObject, IDisposable
                 // Don't update status message during auto-refresh to avoid UI noise
             });
 
-            _logger.LogDebug("Auto-refresh completed for vCenter: {VCenterName}", SelectedVCenter.Name);
+            _logger.LogDebug("Auto-refresh completed for vCenter: {VCenterName} - CPU: {CpuUsage}%, Memory: {MemoryUsage}%, Storage: {StorageUsage}%", 
+                SelectedVCenter.Name, freshOverviewData.CpuUsage.UsagePercentage.ToString("F1"), 
+                freshOverviewData.MemoryUsage.UsagePercentage.ToString("F1"), 
+                freshOverviewData.StorageUsage.UsagePercentage.ToString("F1"));
         }
         catch (Exception ex)
         {
@@ -150,6 +166,7 @@ public partial class VCenterOverviewViewModel : ObservableObject, IDisposable
             if (ex.Message.Contains("connection") || ex.Message.Contains("session"))
             {
                 _overviewRefreshTimer.Stop();
+                _currentSession = null;
                 await Application.Current.Dispatcher.InvokeAsync(() =>
                 {
                     StatusMessage = $"Connection lost - auto-refresh disabled";
