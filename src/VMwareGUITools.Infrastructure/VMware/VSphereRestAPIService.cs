@@ -1147,8 +1147,8 @@ public class VSphereRestAPIService : IVSphereRestAPIService
         }
         
         // Fallback to moderate usage with some randomization
-        var random = new Random(hostMoId.GetHashCode());
-        var usagePercent = 0.25 + random.NextDouble() * 0.3; // 25-55% usage
+        var fallbackRandom = new Random(hostMoId.GetHashCode());
+        var usagePercent = 0.25 + fallbackRandom.NextDouble() * 0.3; // 25-55% usage
         return (long)(cpuCapacityMhz * usagePercent);
     }
 
@@ -1183,8 +1183,8 @@ public class VSphereRestAPIService : IVSphereRestAPIService
         }
         
         // Fallback to moderate usage with some randomization
-        var random = new Random((hostMoId + "mem").GetHashCode());
-        var usagePercent = 0.4 + random.NextDouble() * 0.25; // 40-65% usage
+        var fallbackRandom = new Random((hostMoId + "mem").GetHashCode());
+        var usagePercent = 0.4 + fallbackRandom.NextDouble() * 0.25; // 40-65% usage
         return (long)(memCapacityMB * usagePercent);
     }
 
