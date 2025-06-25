@@ -160,7 +160,7 @@
                                                           CommandParameter="{Binding}"/>
                                                 <MenuItem Header="Delete Zone" 
                                                           Icon="{materialDesign:PackIcon Kind=Delete}"
-                                                          Command="{Binding DataContext.AvailabilityZoneViewModel.DeleteAvailabilityZoneAsyncCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                          Command="{Binding DataContext.AvailabilityZoneViewModel.DeleteAvailabilityZoneCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                                           CommandParameter="{Binding}"/>
                                             </ContextMenu>
                                         </Border.ContextMenu>
