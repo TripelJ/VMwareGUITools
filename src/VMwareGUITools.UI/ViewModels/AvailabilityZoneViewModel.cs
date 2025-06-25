@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.EntityFrameworkCore;
@@ -129,6 +130,10 @@ public partial class AvailabilityZoneViewModel : ObservableObject
 
             await LoadAvailabilityZonesAsync();
 
+            // Notify main window to refresh
+            if (AvailabilityZonesChanged != null)
+                await AvailabilityZonesChanged.Invoke();
+
             // Clear form
             NewZoneName = string.Empty;
             NewZoneDescription = string.Empty;
@@ -154,6 +159,11 @@ public partial class AvailabilityZoneViewModel : ObservableObject
     public event Action<AvailabilityZone>? EditAvailabilityZoneRequested;
 
     /// <summary>
+    /// Event raised when availability zones are changed and main window needs to refresh
+    /// </summary>
+    public static event Func<Task>? AvailabilityZonesChanged;
+
+    /// <summary>
     /// Command to edit an availability zone
     /// </summary>
     [RelayCommand]
@@ -173,10 +183,7 @@ public partial class AvailabilityZoneViewModel : ObservableObject
 
         try
         {
-            IsLoading = true;
-            StatusMessage = $"Deleting availability zone '{zone.Name}'...";
-
-            // Check if any vCenters are assigned to this zone
+            // Check if any vCenters are assigned to this zone first
             var vCenterCount = await _context.VCenters
                 .CountAsync(vc => vc.AvailabilityZoneId == zone.Id);
 
@@ -186,10 +193,27 @@ public partial class AvailabilityZoneViewModel : ObservableObject
                 return;
             }
 
+            // Show confirmation dialog
+            var result = System.Windows.MessageBox.Show(
+                $"Are you sure you want to delete the availability zone '{zone.Name}'?",
+                "Confirm Delete",
+                System.Windows.MessageBoxButton.YesNo,
+                System.Windows.MessageBoxImage.Warning);
+
+            if (result != System.Windows.MessageBoxResult.Yes)
+                return;
+
+            IsLoading = true;
+            StatusMessage = $"Deleting availability zone '{zone.Name}'...";
+
             _context.AvailabilityZones.Remove(zone);
             await _context.SaveChangesAsync();
 
             await LoadAvailabilityZonesAsync();
+
+            // Notify main window to refresh
+            if (AvailabilityZonesChanged != null)
+                await AvailabilityZonesChanged.Invoke();
 
             StatusMessage = $"Deleted availability zone '{zone.Name}'";
             _logger.LogInformation("Deleted availability zone: {ZoneName}", zone.Name);

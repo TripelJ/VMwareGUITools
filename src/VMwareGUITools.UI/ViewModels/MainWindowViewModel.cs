@@ -93,6 +93,7 @@ public partial class MainWindowViewModel : ObservableObject
 
         // Subscribe to availability zone events
         AvailabilityZoneViewModel.EditAvailabilityZoneRequested += OnEditAvailabilityZoneRequested;
+        AvailabilityZoneViewModel.AvailabilityZonesChanged += OnAvailabilityZonesChanged;
 
         // Setup clock timer
         _clockTimer = new System.Timers.Timer(1000);
@@ -435,6 +436,14 @@ public partial class MainWindowViewModel : ObservableObject
             _logger.LogError(ex, "Failed to edit availability zone: {ZoneName}", zone.Name);
             StatusMessage = $"Failed to edit availability zone: {ex.Message}";
         }
+    }
+
+    /// <summary>
+    /// Handles when availability zones are changed and need to refresh
+    /// </summary>
+    private async Task OnAvailabilityZonesChanged()
+    {
+        await LoadVCentersAsync();
     }
 
 

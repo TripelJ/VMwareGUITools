@@ -164,7 +164,11 @@ public partial class App : Application
             return new MainWindow(viewModel);
         });
         services.AddTransient<AddVCenterWindow>();
-        services.AddTransient<EditVCenterWindow>();
+        services.AddTransient<EditVCenterWindow>(provider =>
+        {
+            var viewModel = provider.GetRequiredService<EditVCenterViewModel>();
+            return new EditVCenterWindow { DataContext = viewModel };
+        });
         services.AddTransient<SettingsWindow>();
         services.AddTransient<VCenterDetailsWindow>();
 
