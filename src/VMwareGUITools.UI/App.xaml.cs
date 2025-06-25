@@ -180,15 +180,10 @@ public partial class App : Application
             var context = scope.ServiceProvider.GetRequiredService<VMwareDbContext>();
             
             Log.Information("Initializing database...");
-            await context.Database.EnsureCreatedAsync();
             
-            // Run any pending migrations
-            var pendingMigrations = await context.Database.GetPendingMigrationsAsync();
-            if (pendingMigrations.Any())
-            {
-                Log.Information("Applying {Count} pending migrations", pendingMigrations.Count());
-                await context.Database.MigrateAsync();
-            }
+            // Force recreation of database to ensure all tables exist with current schema
+            await context.Database.EnsureDeletedAsync();
+            await context.Database.EnsureCreatedAsync();
             
             Log.Information("Database initialized successfully");
         }
