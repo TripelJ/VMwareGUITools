@@ -261,6 +261,20 @@ public class EnhancedVMwareConnectionService : IVMwareConnectionService
             var command = $@"
                 $cluster = Get-Cluster | Where-Object {{ $_.Id -eq '{clusterMoId}' }}
                 if ($cluster) {{
+                    # Check if cluster has vSAN enabled
+                    $vsanEnabled = $false
+                    try {{
+                        $vsanConfig = Get-VsanClusterConfiguration -Cluster $cluster -ErrorAction SilentlyContinue
+                        $vsanEnabled = $vsanConfig.VsanEnabled
+                    }} catch {{
+                        # vSAN module might not be available, try alternative method
+                        try {{
+                            $vsanEnabled = $cluster.VsanEnabled
+                        }} catch {{
+                            $vsanEnabled = $false
+                        }}
+                    }}
+                    
                     $cluster | Get-VMHost | Select-Object Name,
                         @{{N='MoId'; E={{$_.Id}}}},
                         @{{N='IpAddress'; E={{$_.NetworkInfo.VirtualNic[0].Spec.Ip.IpAddress}}}},
@@ -268,7 +282,7 @@ public class EnhancedVMwareConnectionService : IVMwareConnectionService
                         PowerState,
                         ConnectionState,
                         @{{N='InMaintenanceMode'; E={{$_.State -eq 'Maintenance'}}}},
-                        @{{N='Type'; E={{'Standard'}}}}
+                        @{{N='Type'; E={{if ($vsanEnabled) {{ 'VsanNode' }} else {{ 'Standard' }}}}}}
                 }}
             ";
 
@@ -284,6 +298,14 @@ public class EnhancedVMwareConnectionService : IVMwareConnectionService
             var hosts = new List<HostInfo>();
             foreach (var obj in result.Objects.OfType<PSObject>())
             {
+                var typeString = GetPropertyValue<string>(obj, "Type") ?? "Standard";
+                var hostType = typeString switch
+                {
+                    "VsanNode" => HostType.VsanNode,
+                    "Standard" => HostType.Standard,
+                    _ => HostType.Standard
+                };
+
                 hosts.Add(new HostInfo
                 {
                     Name = GetPropertyValue<string>(obj, "Name") ?? "",
@@ -293,12 +315,12 @@ public class EnhancedVMwareConnectionService : IVMwareConnectionService
                     PowerState = GetPropertyValue<string>(obj, "PowerState") ?? "",
                     ConnectionState = GetPropertyValue<string>(obj, "ConnectionState") ?? "",
                     InMaintenanceMode = GetPropertyValue<bool>(obj, "InMaintenanceMode"),
-                    Type = HostType.Standard
+                    Type = hostType
                 });
             }
 
-            _logger.LogInformation("Discovered {HostCount} hosts in cluster {ClusterMoId} for session: {SessionId}", 
-                hosts.Count, clusterMoId, session.SessionId);
+            _logger.LogInformation("Discovered {HostCount} hosts in cluster {ClusterMoId} for session: {SessionId} (vSAN hosts: {VsanHostCount})", 
+                hosts.Count, clusterMoId, session.SessionId, hosts.Count(h => h.Type == HostType.VsanNode));
             return hosts;
         }
         catch (Exception ex)
@@ -322,6 +344,21 @@ public class EnhancedVMwareConnectionService : IVMwareConnectionService
             var command = $@"
                 $vmhost = Get-VMHost | Where-Object {{ $_.Id -eq '{hostMoId}' }}
                 if ($vmhost) {{
+                    # Get the cluster for this host and check vSAN status
+                    $cluster = $vmhost.Parent
+                    $vsanEnabled = $false
+                    try {{
+                        $vsanConfig = Get-VsanClusterConfiguration -Cluster $cluster -ErrorAction SilentlyContinue
+                        $vsanEnabled = $vsanConfig.VsanEnabled
+                    }} catch {{
+                        # vSAN module might not be available, try alternative method
+                        try {{
+                            $vsanEnabled = $cluster.VsanEnabled
+                        }} catch {{
+                            $vsanEnabled = $false
+                        }}
+                    }}
+                    
                     $vmhost | Select-Object Name,
                         @{{N='MoId'; E={{$_.Id}}}},
                         @{{N='IpAddress'; E={{$_.NetworkInfo.VirtualNic[0].Spec.Ip.IpAddress}}}},
@@ -335,7 +372,7 @@ public class EnhancedVMwareConnectionService : IVMwareConnectionService
                         @{{N='MemorySize'; E={{$_.Hardware.MemorySize}}}},
                         @{{N='CpuCores'; E={{$_.Hardware.CpuInfo.NumCpuCores}}}},
                         @{{N='SshEnabled'; E={{ ($_ | Get-VMHostService | Where-Object {{$_.Key -eq 'TSM-SSH'}}).Running}}}},
-                        @{{N='Type'; E={{'Standard'}}}}
+                        @{{N='Type'; E={{if ($vsanEnabled) {{ 'VsanNode' }} else {{ 'Standard' }}}}}}
                 }}
             ";
 
@@ -354,6 +391,14 @@ public class EnhancedVMwareConnectionService : IVMwareConnectionService
             }
 
             var obj = result.Objects.OfType<PSObject>().First();
+            var typeString = GetPropertyValue<string>(obj, "Type") ?? "Standard";
+            var hostType = typeString switch
+            {
+                "VsanNode" => HostType.VsanNode,
+                "Standard" => HostType.Standard,
+                _ => HostType.Standard
+            };
+
             var hostDetail = new HostDetailInfo
             {
                 Name = GetPropertyValue<string>(obj, "Name") ?? "",
@@ -369,10 +414,11 @@ public class EnhancedVMwareConnectionService : IVMwareConnectionService
                 MemorySize = GetPropertyValue<long>(obj, "MemorySize"),
                 CpuCores = GetPropertyValue<int>(obj, "CpuCores"),
                 SshEnabled = GetPropertyValue<bool>(obj, "SshEnabled"),
-                Type = HostType.Standard
+                Type = hostType
             };
 
-            _logger.LogInformation("Retrieved host details for {HostMoId} in session: {SessionId}", hostMoId, session.SessionId);
+            _logger.LogInformation("Retrieved host details for {HostMoId} in session: {SessionId} - Type: {HostType}", 
+                hostMoId, session.SessionId, hostType);
             return hostDetail;
         }
         catch (Exception ex)

@@ -503,6 +503,37 @@ public class VSphereRestAPIService : IVSphereRestAPIService
         var content = await response.Content.ReadAsStringAsync();
         var hostsData = JsonSerializer.Deserialize<JsonElement>(content);
 
+        // Check if this cluster has vSAN enabled by looking for vSAN datastores
+        var isVsanCluster = false;
+        try
+        {
+            var datastoresUrl = $"{baseUrl}/api/vcenter/datastore";
+            using var datastoreRequest = new HttpRequestMessage(HttpMethod.Get, datastoresUrl);
+            datastoreRequest.Headers.Add("vmware-api-session-id", sessionToken);
+            
+            var datastoreResponse = await _httpClient.SendAsync(datastoreRequest, cancellationToken);
+            if (datastoreResponse.IsSuccessStatusCode)
+            {
+                var datastoreContent = await datastoreResponse.Content.ReadAsStringAsync();
+                var datastoresData = JsonSerializer.Deserialize<JsonElement>(datastoreContent);
+                
+                foreach (var datastore in datastoresData.EnumerateArray())
+                {
+                    if (datastore.TryGetProperty("type", out var typeProperty) &&
+                        typeProperty.GetString()?.ToUpper() == "VSAN")
+                    {
+                        isVsanCluster = true;
+                        _logger.LogDebug("Detected vSAN cluster {ClusterMoId} based on vSAN datastore presence", clusterMoId);
+                        break;
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Could not determine vSAN status for cluster {ClusterMoId}", clusterMoId);
+        }
+
         var hosts = new List<HostInfo>();
         foreach (var host in hostsData.EnumerateArray())
         {
@@ -511,9 +542,13 @@ public class VSphereRestAPIService : IVSphereRestAPIService
                 MoId = host.GetProperty("host").GetString() ?? "",
                 Name = host.GetProperty("name").GetString() ?? "",
                 ConnectionState = host.GetProperty("connection_state").GetString() ?? "",
-                PowerState = host.GetProperty("power_state").GetString() ?? ""
+                PowerState = host.GetProperty("power_state").GetString() ?? "",
+                Type = isVsanCluster ? HostType.VsanNode : HostType.Standard
             });
         }
+
+        _logger.LogInformation("Discovered {HostCount} hosts in cluster {ClusterMoId} (vSAN: {IsVsanCluster})", 
+            hosts.Count, clusterMoId, isVsanCluster);
 
         return hosts;
     }
@@ -589,12 +624,93 @@ public class VSphereRestAPIService : IVSphereRestAPIService
         var content = await response.Content.ReadAsStringAsync();
         var hostData = JsonSerializer.Deserialize<JsonElement>(content);
 
+        // Determine host type by checking if it's in a vSAN-enabled cluster
+        var hostType = HostType.Standard;
+        try
+        {
+            // Get all clusters to find which one contains this host
+            var clustersUrl = $"{baseUrl}/api/vcenter/cluster";
+            using var clusterRequest = new HttpRequestMessage(HttpMethod.Get, clustersUrl);
+            clusterRequest.Headers.Add("vmware-api-session-id", sessionToken);
+            
+            var clusterResponse = await _httpClient.SendAsync(clusterRequest, cancellationToken);
+            if (clusterResponse.IsSuccessStatusCode)
+            {
+                var clusterContent = await clusterResponse.Content.ReadAsStringAsync();
+                var clustersData = JsonSerializer.Deserialize<JsonElement>(clusterContent);
+                
+                // Check each cluster to see if this host belongs to it and if it has vSAN enabled
+                foreach (var cluster in clustersData.EnumerateArray())
+                {
+                    var clusterMoId = cluster.GetProperty("cluster").GetString();
+                    
+                    // Check if host is in this cluster
+                    var hostsInClusterUrl = $"{baseUrl}/api/vcenter/host?clusters={clusterMoId}";
+                    using var hostCheckRequest = new HttpRequestMessage(HttpMethod.Get, hostsInClusterUrl);
+                    hostCheckRequest.Headers.Add("vmware-api-session-id", sessionToken);
+                    
+                    var hostCheckResponse = await _httpClient.SendAsync(hostCheckRequest, cancellationToken);
+                    if (hostCheckResponse.IsSuccessStatusCode)
+                    {
+                        var hostCheckContent = await hostCheckResponse.Content.ReadAsStringAsync();
+                        var hostsInCluster = JsonSerializer.Deserialize<JsonElement>(hostCheckContent);
+                        
+                        var hostInCluster = false;
+                        foreach (var host in hostsInCluster.EnumerateArray())
+                        {
+                            if (host.GetProperty("host").GetString() == hostMoId)
+                            {
+                                hostInCluster = true;
+                                break;
+                            }
+                        }
+                        
+                        if (hostInCluster)
+                        {
+                            // Check if this cluster has vSAN enabled
+                            // Note: vSAN status might not be directly available in REST API response
+                            // but we can check for vSAN datastores or other indicators
+                            
+                            // For now, we'll try to detect vSAN by checking if there are vSAN datastores
+                            var datastoresUrl = $"{baseUrl}/api/vcenter/datastore";
+                            using var datastoreRequest = new HttpRequestMessage(HttpMethod.Get, datastoresUrl);
+                            datastoreRequest.Headers.Add("vmware-api-session-id", sessionToken);
+                            
+                            var datastoreResponse = await _httpClient.SendAsync(datastoreRequest, cancellationToken);
+                            if (datastoreResponse.IsSuccessStatusCode)
+                            {
+                                var datastoreContent = await datastoreResponse.Content.ReadAsStringAsync();
+                                var datastoresData = JsonSerializer.Deserialize<JsonElement>(datastoreContent);
+                                
+                                foreach (var datastore in datastoresData.EnumerateArray())
+                                {
+                                    if (datastore.TryGetProperty("type", out var typeProperty) &&
+                                        typeProperty.GetString()?.ToUpper() == "VSAN")
+                                    {
+                                        hostType = HostType.VsanNode;
+                                        break;
+                                    }
+                                }
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Could not determine host type for {HostMoId}, defaulting to Standard", hostMoId);
+            hostType = HostType.Standard;
+        }
+
         return new HostDetailInfo
         {
             MoId = hostMoId,
             Name = hostData.GetProperty("name").GetString() ?? "",
             ConnectionState = hostData.GetProperty("connection_state").GetString() ?? "",
             PowerState = hostData.GetProperty("power_state").GetString() ?? "",
+            Type = hostType
             // Add more properties as needed from the REST API response
         };
     }

@@ -445,6 +445,11 @@ public class RestVMwareConnectionService : IVMwareConnectionService
         // Implementation would use vSphere REST API to get host information
         await Task.Delay(100, cancellationToken); // Simulate API call
         
+        // For now, simulate detecting vSAN by checking cluster configuration
+        // In a real implementation, this would check the cluster's vSAN status via API
+        var isVsanCluster = clusterMoId.Contains("vsan", StringComparison.OrdinalIgnoreCase) || 
+                           clusterMoId.Contains("hci", StringComparison.OrdinalIgnoreCase);
+        
         return new List<HostInfo>
         {
             new HostInfo
@@ -456,7 +461,7 @@ public class RestVMwareConnectionService : IVMwareConnectionService
                 PowerState = "PoweredOn",
                 ConnectionState = "Connected",
                 InMaintenanceMode = false,
-                Type = HostType.Standard
+                Type = isVsanCluster ? HostType.VsanNode : HostType.Standard
             }
         };
     }
@@ -465,6 +470,10 @@ public class RestVMwareConnectionService : IVMwareConnectionService
     {
         // Implementation would use vSphere REST API to get detailed host information
         await Task.Delay(100, cancellationToken); // Simulate API call
+        
+        // For now, simulate detecting vSAN by checking if there are vSAN datastores or cluster naming
+        // In a real implementation, this would check the host's cluster vSAN status via API
+        var isVsanHost = hostMoId.Contains("vsan", StringComparison.OrdinalIgnoreCase);
         
         return new HostDetailInfo
         {
@@ -475,7 +484,7 @@ public class RestVMwareConnectionService : IVMwareConnectionService
             PowerState = "PoweredOn",
             ConnectionState = "Connected",
             InMaintenanceMode = false,
-            Type = HostType.Standard,
+            Type = isVsanHost ? HostType.VsanNode : HostType.Standard,
             Vendor = "Dell Inc.",
             Model = "PowerEdge R740",
             ProcessorType = "Intel(R) Xeon(R) Gold 6248 CPU @ 2.50GHz",
