@@ -149,6 +149,21 @@ public partial class AvailabilityZoneViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Event raised when edit availability zone dialog should be opened
+    /// </summary>
+    public event Action<AvailabilityZone>? EditAvailabilityZoneRequested;
+
+    /// <summary>
+    /// Command to edit an availability zone
+    /// </summary>
+    [RelayCommand]
+    private void EditAvailabilityZone(AvailabilityZone? zone)
+    {
+        if (zone == null) return;
+        EditAvailabilityZoneRequested?.Invoke(zone);
+    }
+
+    /// <summary>
     /// Deletes an availability zone
     /// </summary>
     [RelayCommand]

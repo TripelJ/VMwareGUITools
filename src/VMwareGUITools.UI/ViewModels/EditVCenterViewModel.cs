@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.ComponentModel.DataAnnotations;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -56,6 +57,12 @@ public partial class EditVCenterViewModel : ObservableValidator
 
     [ObservableProperty]
     private bool _showTestResult = false;
+
+    [ObservableProperty]
+    private ObservableCollection<AvailabilityZone> _availabilityZones = new();
+
+    [ObservableProperty]
+    private AvailabilityZone? _selectedAvailabilityZone;
 
     public EditVCenterViewModel(
         ILogger<EditVCenterViewModel> logger,
@@ -119,7 +126,7 @@ public partial class EditVCenterViewModel : ObservableValidator
     /// <summary>
     /// Initialize the view model with existing vCenter data
     /// </summary>
-    public Task InitializeAsync(VCenter vCenter)
+    public async Task InitializeAsync(VCenter vCenter)
     {
         _originalVCenter = vCenter;
         
@@ -140,7 +147,9 @@ public partial class EditVCenterViewModel : ObservableValidator
             // Leave username/password empty if decryption fails
         }
         
-        return Task.CompletedTask;
+        // Load availability zones and set current selection
+        await LoadAvailabilityZonesAsync();
+        SelectedAvailabilityZone = AvailabilityZones.FirstOrDefault(az => az.Id == vCenter.AvailabilityZoneId);
     }
 
     /// <summary>
@@ -222,6 +231,7 @@ public partial class EditVCenterViewModel : ObservableValidator
             _originalVCenter.Name = Name.Trim();
             _originalVCenter.Url = Url.Trim();
             _originalVCenter.EncryptedCredentials = encryptedCredentials;
+            _originalVCenter.AvailabilityZoneId = SelectedAvailabilityZone?.Id;
             _originalVCenter.UpdatedAt = DateTime.UtcNow;
             
             // Update last scan time if connection test was successful
@@ -304,5 +314,31 @@ public partial class EditVCenterViewModel : ObservableValidator
     {
         OnPropertyChanged(nameof(TestResultMessage));
         OnPropertyChanged(nameof(CanSave));
+    }
+
+    /// <summary>
+    /// Loads all availability zones for selection
+    /// </summary>
+    private async Task LoadAvailabilityZonesAsync()
+    {
+        try
+        {
+            var zones = await _context.AvailabilityZones
+                .OrderBy(az => az.SortOrder)
+                .ThenBy(az => az.Name)
+                .ToListAsync();
+
+            AvailabilityZones.Clear();
+            foreach (var zone in zones)
+            {
+                AvailabilityZones.Add(zone);
+            }
+
+            _logger.LogDebug("Loaded {Count} availability zones for vCenter editing", zones.Count);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to load availability zones");
+        }
     }
 } 

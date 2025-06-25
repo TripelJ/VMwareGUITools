@@ -91,6 +91,9 @@ public partial class MainWindowViewModel : ObservableObject
             _serviceProvider.GetRequiredService<ILogger<AvailabilityZoneViewModel>>(),
             context);
 
+        // Subscribe to availability zone events
+        _availabilityZoneViewModel.EditAvailabilityZoneRequested += OnEditAvailabilityZoneRequested;
+
         // Setup clock timer
         _clockTimer = new System.Timers.Timer(1000);
         _clockTimer.Elapsed += (s, e) => CurrentTime = DateTime.Now;
@@ -400,6 +403,40 @@ public partial class MainWindowViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Handles the request to edit an availability zone
+    /// </summary>
+    private async void OnEditAvailabilityZoneRequested(AvailabilityZone zone)
+    {
+        try
+        {
+            _logger.LogInformation("Opening Edit Availability Zone dialog for: {ZoneName}", zone.Name);
+
+            var editZoneViewModel = new EditAvailabilityZoneViewModel(
+                _serviceProvider.GetRequiredService<ILogger<EditAvailabilityZoneViewModel>>(),
+                _context);
+
+            await editZoneViewModel.InitializeAsync(zone);
+
+            var editZoneWindow = new Views.EditAvailabilityZoneWindow(editZoneViewModel);
+            editZoneWindow.Owner = Application.Current.MainWindow;
+            
+            var result = editZoneWindow.ShowDialog();
+
+            if (result == true)
+            {
+                await LoadVCentersAsync();
+                await AvailabilityZoneViewModel.LoadAvailabilityZonesAsync();
+                StatusMessage = $"Availability zone '{zone.Name}' updated successfully";
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to edit availability zone: {ZoneName}", zone.Name);
+            StatusMessage = $"Failed to edit availability zone: {ex.Message}";
+        }
+    }
+
 
 
     /// <summary>
@@ -628,6 +665,12 @@ public partial class MainWindowViewModel : ObservableObject
     /// </summary>
     public void Dispose()
     {
+        // Unsubscribe from events
+        if (_availabilityZoneViewModel != null)
+        {
+            _availabilityZoneViewModel.EditAvailabilityZoneRequested -= OnEditAvailabilityZoneRequested;
+        }
+        
         _clockTimer?.Dispose();
         _connectionMonitorTimer?.Dispose();
         InfrastructureViewModel?.Dispose();

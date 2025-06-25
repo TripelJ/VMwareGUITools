@@ -152,6 +152,18 @@
                                             Background="{DynamicResource MaterialDesignChipBackground}"
                                             CornerRadius="4"
                                             Margin="0,2">
+                                        <Border.ContextMenu>
+                                            <ContextMenu>
+                                                <MenuItem Header="Edit Zone" 
+                                                          Icon="{materialDesign:PackIcon Kind=Edit}"
+                                                          Command="{Binding DataContext.AvailabilityZoneViewModel.EditAvailabilityZoneCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                          CommandParameter="{Binding}"/>
+                                                <MenuItem Header="Delete Zone" 
+                                                          Icon="{materialDesign:PackIcon Kind=Delete}"
+                                                          Command="{Binding DataContext.AvailabilityZoneViewModel.DeleteAvailabilityZoneCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                          CommandParameter="{Binding}"/>
+                                            </ContextMenu>
+                                        </Border.ContextMenu>
                                         <Grid>
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="Auto"/>

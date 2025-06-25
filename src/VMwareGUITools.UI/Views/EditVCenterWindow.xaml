@@ -77,6 +77,36 @@
                          Style="{StaticResource MaterialDesignFloatingHintTextBox}"
                          Margin="0,0,0,16"/>
 
+                <!-- Availability Zone Selection -->
+                <ComboBox materialDesign:HintAssist.Hint="Availability Zone (Optional)"
+                          materialDesign:HintAssist.IsFloating="True"
+                          Style="{StaticResource MaterialDesignFloatingHintComboBox}"
+                          ItemsSource="{Binding AvailabilityZones}"
+                          SelectedItem="{Binding SelectedAvailabilityZone}"
+                          DisplayMemberPath="Name"
+                          Margin="0,0,0,16">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="4,2">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                
+                                <Rectangle Grid.Column="0"
+                                           Width="12" Height="12"
+                                           Fill="{Binding Color}"
+                                           Margin="0,0,8,0"
+                                           VerticalAlignment="Center"/>
+                                
+                                <TextBlock Grid.Column="1"
+                                           Text="{Binding Name}"
+                                           VerticalAlignment="Center"/>
+                            </Grid>
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+
                 <!-- Credentials -->
                 <TextBlock Text="Credentials"
                            FontSize="16"

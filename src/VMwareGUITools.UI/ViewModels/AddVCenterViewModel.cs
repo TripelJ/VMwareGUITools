@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.ComponentModel.DataAnnotations;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -56,6 +57,12 @@ public partial class AddVCenterViewModel : ObservableValidator
     [ObservableProperty]
     private bool _showTestResult = false;
 
+    [ObservableProperty]
+    private ObservableCollection<AvailabilityZone> _availabilityZones = new();
+
+    [ObservableProperty]
+    private AvailabilityZone? _selectedAvailabilityZone;
+
     public AddVCenterViewModel(
         ILogger<AddVCenterViewModel> logger,
         VMwareDbContext context,
@@ -66,6 +73,8 @@ public partial class AddVCenterViewModel : ObservableValidator
         _context = context;
         _credentialService = credentialService;
         _vmwareService = vmwareService;
+        
+        _ = LoadAvailabilityZonesAsync();
     }
 
     /// <summary>
@@ -197,6 +206,7 @@ public partial class AddVCenterViewModel : ObservableValidator
                 Url = Url.Trim(),
                 EncryptedCredentials = encryptedCredentials,
                 Enabled = true,
+                AvailabilityZoneId = SelectedAvailabilityZone?.Id,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow,
                 LastScan = TestResult?.IsSuccessful == true ? DateTime.UtcNow : null
@@ -229,6 +239,32 @@ public partial class AddVCenterViewModel : ObservableValidator
     {
         _logger.LogDebug("Add vCenter dialog cancelled");
         DialogResultRequested?.Invoke(false);
+    }
+
+    /// <summary>
+    /// Loads all availability zones for selection
+    /// </summary>
+    private async Task LoadAvailabilityZonesAsync()
+    {
+        try
+        {
+            var zones = await _context.AvailabilityZones
+                .OrderBy(az => az.SortOrder)
+                .ThenBy(az => az.Name)
+                .ToListAsync();
+
+            AvailabilityZones.Clear();
+            foreach (var zone in zones)
+            {
+                AvailabilityZones.Add(zone);
+            }
+
+            _logger.LogDebug("Loaded {Count} availability zones for vCenter selection", zones.Count);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to load availability zones");
+        }
     }
 
     /// <summary>
