@@ -92,7 +92,7 @@ public partial class MainWindowViewModel : ObservableObject
             context);
 
         // Subscribe to availability zone events
-        _availabilityZoneViewModel.EditAvailabilityZoneRequested += OnEditAvailabilityZoneRequested;
+        AvailabilityZoneViewModel.EditAvailabilityZoneRequested += OnEditAvailabilityZoneRequested;
 
         // Setup clock timer
         _clockTimer = new System.Timers.Timer(1000);
@@ -666,9 +666,9 @@ public partial class MainWindowViewModel : ObservableObject
     public void Dispose()
     {
         // Unsubscribe from events
-        if (_availabilityZoneViewModel != null)
+        if (AvailabilityZoneViewModel != null)
         {
-            _availabilityZoneViewModel.EditAvailabilityZoneRequested -= OnEditAvailabilityZoneRequested;
+            AvailabilityZoneViewModel.EditAvailabilityZoneRequested -= OnEditAvailabilityZoneRequested;
         }
         
         _clockTimer?.Dispose();

@@ -11,7 +11,7 @@ namespace VMwareGUITools.UI.ViewModels;
 /// <summary>
 /// View model for editing an existing availability zone
 /// </summary>
-public partial class EditAvailabilityZoneViewModel : ObservableObject
+public partial class EditAvailabilityZoneViewModel : ObservableValidator
 {
     private readonly ILogger<EditAvailabilityZoneViewModel> _logger;
     private readonly VMwareDbContext _context;
