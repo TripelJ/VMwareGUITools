@@ -83,7 +83,6 @@
                           Style="{StaticResource MaterialDesignFloatingHintComboBox}"
                           ItemsSource="{Binding AvailabilityZones}"
                           SelectedItem="{Binding SelectedAvailabilityZone}"
-                          DisplayMemberPath="Name"
                           Margin="0,0,0,16">
                     <ComboBox.ItemTemplate>
                         <DataTemplate>
