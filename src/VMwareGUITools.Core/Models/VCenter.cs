@@ -68,7 +68,11 @@ public class VCenter : INotifyPropertyChanged
 
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
+    // Foreign key for AvailabilityZone
+    public int? AvailabilityZoneId { get; set; }
+
     // Navigation properties
+    public virtual AvailabilityZone? AvailabilityZone { get; set; }
     public virtual ICollection<Cluster> Clusters { get; set; } = new List<Cluster>();
     public virtual ICollection<Host> Hosts { get; set; } = new List<Host>();
 

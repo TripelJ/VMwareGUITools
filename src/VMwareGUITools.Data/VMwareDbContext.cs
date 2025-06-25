@@ -13,6 +13,7 @@ public class VMwareDbContext : DbContext
     }
 
     // DbSets for all entities
+    public DbSet<AvailabilityZone> AvailabilityZones { get; set; }
     public DbSet<VCenter> VCenters { get; set; }
     public DbSet<Cluster> Clusters { get; set; }
     public DbSet<Host> Hosts { get; set; }
@@ -26,6 +27,18 @@ public class VMwareDbContext : DbContext
     {
         base.OnModelCreating(modelBuilder);
 
+        // Configure AvailabilityZone entity
+        modelBuilder.Entity<AvailabilityZone>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Description).HasMaxLength(500);
+            entity.Property(e => e.Color).HasMaxLength(50);
+            
+            entity.HasIndex(e => e.Name).IsUnique();
+            entity.HasIndex(e => e.SortOrder);
+        });
+
         // Configure VCenter entity
         modelBuilder.Entity<VCenter>(entity =>
         {
@@ -35,6 +48,12 @@ public class VMwareDbContext : DbContext
             entity.Property(e => e.EncryptedCredentials).IsRequired().HasMaxLength(500);
             entity.HasIndex(e => e.Url).IsUnique();
             entity.HasIndex(e => e.Name);
+            
+            // Foreign key relationship to AvailabilityZone
+            entity.HasOne(e => e.AvailabilityZone)
+                .WithMany(az => az.VCenters)
+                .HasForeignKey(e => e.AvailabilityZoneId)
+                .OnDelete(DeleteBehavior.SetNull);
             
             // Ignore properties that are not persisted to database
             entity.Ignore(e => e.IsCurrentlyConnected);
@@ -178,6 +197,40 @@ public class VMwareDbContext : DbContext
 
     private static void SeedDefaultData(ModelBuilder modelBuilder)
     {
+        // Seed default availability zones
+        modelBuilder.Entity<AvailabilityZone>().HasData(
+            new AvailabilityZone
+            {
+                Id = 1,
+                Name = "AZ1",
+                Description = "Availability Zone 1",
+                Color = "#1976D2",
+                SortOrder = 1,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            },
+            new AvailabilityZone
+            {
+                Id = 2,
+                Name = "AZ2",
+                Description = "Availability Zone 2", 
+                Color = "#388E3C",
+                SortOrder = 2,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            },
+            new AvailabilityZone
+            {
+                Id = 3,
+                Name = "AZ3",
+                Description = "Availability Zone 3",
+                Color = "#F57C00",
+                SortOrder = 3,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            }
+        );
+
         // Seed default check categories
         modelBuilder.Entity<CheckCategory>().HasData(
             new CheckCategory

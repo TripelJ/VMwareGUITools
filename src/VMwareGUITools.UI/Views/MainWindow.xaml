@@ -103,6 +103,8 @@
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
                                 
                                 <TextBlock Grid.Column="0"
@@ -114,6 +116,20 @@
                                 
                                 <Button Grid.Column="1"
                                         Style="{StaticResource MaterialDesignToolButton}"
+                                        Command="{Binding AddAvailabilityZoneCommand}"
+                                        ToolTip="Add Availability Zone"
+                                        Margin="0,0,4,0">
+                                    <materialDesign:PackIcon Kind="FolderPlus" 
+                                                             Height="18" Width="18"
+                                                             Foreground="White"/>
+                                </Button>
+                                
+                                <Separator Grid.Column="2" 
+                                           Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}"
+                                           Margin="4,2"/>
+                                
+                                <Button Grid.Column="3"
+                                        Style="{StaticResource MaterialDesignToolButton}"
                                         Command="{Binding AddVCenterCommand}"
                                         ToolTip="Add vCenter Server">
                                     <materialDesign:PackIcon Kind="Plus" 
@@ -123,107 +139,157 @@
                             </Grid>
                         </Border>
 
-                        <!-- vCenter List -->
-                        <ListBox Grid.Row="1"
-                                 ItemsSource="{Binding VCenters}"
-                                 SelectedItem="{Binding SelectedVCenter}"
-                                 Style="{StaticResource MaterialDesignListBox}"
-                                 Margin="0">
-                            <ListBox.ItemTemplate>
-                                <DataTemplate>
-                                    <Grid Margin="8">
-                                        <Grid.ContextMenu>
-                                            <ContextMenu>
-                                                <MenuItem Header="Edit" 
-                                                          Icon="{materialDesign:PackIcon Kind=Edit}"
-                                                          Command="{Binding DataContext.EditVCenterCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                          CommandParameter="{Binding}"/>
-                                                <MenuItem Header="Delete" 
-                                                          Icon="{materialDesign:PackIcon Kind=Delete}"
-                                                          Command="{Binding DataContext.DeleteVCenterCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                          CommandParameter="{Binding}"/>
-                                                <Separator/>
-                                                <MenuItem Header="Test Connection" 
-                                                          Icon="{materialDesign:PackIcon Kind=Connection}"
-                                                          Command="{Binding DataContext.TestVCenterConnectionCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                          CommandParameter="{Binding}"/>
-                                            </ContextMenu>
-                                        </Grid.ContextMenu>
-                                        <Grid.RowDefinitions>
-                                            <RowDefinition Height="Auto"/>
-                                            <RowDefinition Height="Auto"/>
-                                        </Grid.RowDefinitions>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto"/>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
+                        <!-- Grouped vCenter List -->
+                        <TreeView Grid.Row="1"
+                                  ItemsSource="{Binding AvailabilityZones}"
+                                  Style="{StaticResource MaterialDesignTreeView}"
+                                  Margin="0">
+                            <!-- Availability Zone Template -->
+                            <TreeView.ItemTemplate>
+                                <HierarchicalDataTemplate ItemsSource="{Binding VCenters}">
+                                    <!-- Zone Header -->
+                                    <Border Padding="8,4"
+                                            Background="{DynamicResource MaterialDesignChipBackground}"
+                                            CornerRadius="4"
+                                            Margin="0,2">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            
+                                            <Rectangle Grid.Column="0"
+                                                       Width="12" Height="12"
+                                                       Fill="{Binding Color}"
+                                                       Margin="0,0,8,0"/>
+                                            
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{Binding Name}"
+                                                       FontWeight="Medium"
+                                                       VerticalAlignment="Center"/>
+                                            
+                                            <TextBlock Grid.Column="2"
+                                                       Text="{Binding VCenterCount, StringFormat='({0})'}"
+                                                       FontSize="11"
+                                                       Foreground="{DynamicResource MaterialDesignBodyLight}"
+                                                       VerticalAlignment="Center"
+                                                       Margin="4,0,0,0"/>
+                                        </Grid>
+                                    </Border>
+                                    
+                                    <!-- vCenter Items Template -->
+                                    <HierarchicalDataTemplate.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Margin="8,2" Background="Transparent">
+                                                <Grid.ContextMenu>
+                                                    <ContextMenu>
+                                                        <MenuItem Header="Edit" 
+                                                                  Icon="{materialDesign:PackIcon Kind=Edit}"
+                                                                  Command="{Binding DataContext.EditVCenterCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                  CommandParameter="{Binding}"/>
+                                                        <MenuItem Header="Delete" 
+                                                                  Icon="{materialDesign:PackIcon Kind=Delete}"
+                                                                  Command="{Binding DataContext.DeleteVCenterCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                  CommandParameter="{Binding}"/>
+                                                        <Separator/>
+                                                        <MenuItem Header="Test Connection" 
+                                                                  Icon="{materialDesign:PackIcon Kind=Connection}"
+                                                                  Command="{Binding DataContext.TestVCenterConnectionCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                  CommandParameter="{Binding}"/>
+                                                        <Separator/>
+                                                        <MenuItem Header="Move to Zone" Icon="{materialDesign:PackIcon Kind=FolderMove}">
+                                                            <!-- Zone submenu items would be bound here -->
+                                                        </MenuItem>
+                                                    </ContextMenu>
+                                                </Grid.ContextMenu>
+                                                
+                                                <Grid.InputBindings>
+                                                    <MouseBinding MouseAction="LeftClick"
+                                                                  Command="{Binding DataContext.ConnectVCenterCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                  CommandParameter="{Binding}"/>
+                                                </Grid.InputBindings>
+                                                
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="Auto"/>
+                                                    <RowDefinition Height="Auto"/>
+                                                </Grid.RowDefinitions>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
 
-                                        <!-- Status Indicator -->
-                                        <Ellipse Grid.Row="0" Grid.Column="0" Grid.RowSpan="2"
-                                                 Width="12" Height="12"
-                                                 VerticalAlignment="Center"
-                                                 Margin="0,0,8,0">
-                                            <Ellipse.Style>
-                                                <Style TargetType="Ellipse">
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding Status}" Value="Connected">
-                                                            <Setter Property="Fill" Value="{StaticResource SuccessBrush}"/>
-                                                        </DataTrigger>
-                                                        <DataTrigger Binding="{Binding Status}" Value="Disconnected">
-                                                            <Setter Property="Fill" Value="{StaticResource ErrorBrush}"/>
-                                                        </DataTrigger>
-                                                        <DataTrigger Binding="{Binding Status}" Value="NotTested">
-                                                            <Setter Property="Fill" Value="{StaticResource InfoBrush}"/>
-                                                        </DataTrigger>
-                                                        <DataTrigger Binding="{Binding Status}" Value="Stale">
-                                                            <Setter Property="Fill" Value="{StaticResource WarningBrush}"/>
-                                                        </DataTrigger>
-                                                        <DataTrigger Binding="{Binding Status}" Value="Disabled">
-                                                            <Setter Property="Fill" Value="Gray"/>
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </Ellipse.Style>
-                                        </Ellipse>
+                                                <!-- Status Indicator -->
+                                                <Ellipse Grid.Row="0" Grid.Column="0" Grid.RowSpan="2"
+                                                         Width="10" Height="10"
+                                                         VerticalAlignment="Center"
+                                                         Margin="0,0,8,0">
+                                                    <Ellipse.Style>
+                                                        <Style TargetType="Ellipse">
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding Status}" Value="Connected">
+                                                                    <Setter Property="Fill" Value="{StaticResource SuccessBrush}"/>
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding Status}" Value="Disconnected">
+                                                                    <Setter Property="Fill" Value="{StaticResource ErrorBrush}"/>
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding Status}" Value="NotTested">
+                                                                    <Setter Property="Fill" Value="{StaticResource InfoBrush}"/>
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding Status}" Value="Stale">
+                                                                    <Setter Property="Fill" Value="{StaticResource WarningBrush}"/>
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding Status}" Value="Disabled">
+                                                                    <Setter Property="Fill" Value="Gray"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Ellipse.Style>
+                                                </Ellipse>
 
-                                        <!-- vCenter Name -->
-                                        <TextBlock Grid.Row="0" Grid.Column="1"
-                                                   Text="{Binding DisplayName}"
-                                                   FontWeight="Medium"
-                                                   TextTrimming="CharacterEllipsis"/>
+                                                <!-- vCenter Name -->
+                                                <TextBlock Grid.Row="0" Grid.Column="1"
+                                                           Text="{Binding DisplayName}"
+                                                           FontWeight="Medium"
+                                                           FontSize="13"
+                                                           TextTrimming="CharacterEllipsis"/>
 
-                                        <!-- vCenter URL -->
-                                        <TextBlock Grid.Row="1" Grid.Column="1"
-                                                   Text="{Binding Url}"
-                                                   FontSize="11"
-                                                   Foreground="{DynamicResource MaterialDesignBodyLight}"
-                                                   TextTrimming="CharacterEllipsis"/>
+                                                <!-- vCenter URL -->
+                                                <TextBlock Grid.Row="1" Grid.Column="1"
+                                                           Text="{Binding Url}"
+                                                           FontSize="10"
+                                                           Foreground="{DynamicResource MaterialDesignBodyLight}"
+                                                           TextTrimming="CharacterEllipsis"/>
 
-                                        <!-- Edit Button -->
-                                        <Button Grid.Row="0" Grid.Column="2" Grid.RowSpan="2"
-                                                Style="{StaticResource MaterialDesignToolButton}"
-                                                Command="{Binding DataContext.EditVCenterCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                CommandParameter="{Binding}"
-                                                ToolTip="Edit vCenter"
-                                                Margin="2,0">
-                                            <materialDesign:PackIcon Kind="Edit" Height="14" Width="14"/>
-                                        </Button>
+                                                <!-- Edit Button -->
+                                                <Button Grid.Row="0" Grid.Column="2" Grid.RowSpan="2"
+                                                        Style="{StaticResource MaterialDesignToolButton}"
+                                                        Command="{Binding DataContext.EditVCenterCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding}"
+                                                        ToolTip="Edit vCenter"
+                                                        Width="24" Height="24"
+                                                        Margin="2,0">
+                                                    <materialDesign:PackIcon Kind="Edit" Height="12" Width="12"/>
+                                                </Button>
 
-                                        <!-- Connect Button -->
-                                        <Button Grid.Row="0" Grid.Column="3" Grid.RowSpan="2"
-                                                Style="{StaticResource MaterialDesignToolButton}"
-                                                Command="{Binding DataContext.ConnectVCenterCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                CommandParameter="{Binding}"
-                                                ToolTip="Connect"
-                                                Margin="2,0">
-                                            <materialDesign:PackIcon Kind="Connection" Height="16" Width="16"/>
-                                        </Button>
-                                    </Grid>
-                                </DataTemplate>
-                            </ListBox.ItemTemplate>
-                        </ListBox>
+                                                <!-- Connect Button -->
+                                                <Button Grid.Row="0" Grid.Column="3" Grid.RowSpan="2"
+                                                        Style="{StaticResource MaterialDesignToolButton}"
+                                                        Command="{Binding DataContext.ConnectVCenterCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding}"
+                                                        ToolTip="Connect"
+                                                        Width="24" Height="24"
+                                                        Margin="2,0">
+                                                    <materialDesign:PackIcon Kind="Connection" Height="14" Width="14"/>
+                                                </Button>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </HierarchicalDataTemplate.ItemTemplate>
+                                </HierarchicalDataTemplate>
+                            </TreeView.ItemTemplate>
+                        </TreeView>
 
                         <!-- VMware API Status -->
                         <Border Grid.Row="2" 
@@ -535,170 +601,7 @@
                                                 </materialDesign:Card>
                                             </Grid>
 
-                                            <!-- Resource Usage Gauges -->
-                                            <Grid Grid.Row="2" Margin="0,0,0,16">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="*"/>
-                                                </Grid.ColumnDefinitions>
-
-                                                <!-- CPU Usage -->
-                                                <materialDesign:Card Grid.Column="0" 
-                                                                     Margin="0,0,8,0"
-                                                                     materialDesign:ElevationAssist.Elevation="Dp2">
-                                                    <Border Padding="16">
-                                                        <Grid>
-                                                        <Grid.RowDefinitions>
-                                                            <RowDefinition Height="Auto"/>
-                                                            <RowDefinition Height="*"/>
-                                                            <RowDefinition Height="Auto"/>
-                                                        </Grid.RowDefinitions>
-                                                        
-                                                        <TextBlock Grid.Row="0"
-                                                                   Text="CPU Usage"
-                                                                   FontSize="16"
-                                                                   FontWeight="Medium"
-                                                                   HorizontalAlignment="Center"
-                                                                   Margin="0,0,0,12"/>
-                                                        
-                                                        <materialDesign:Card Grid.Row="1"
-                                                                             Width="120" Height="120"
-                                                                             HorizontalAlignment="Center"
-                                                                             Background="{DynamicResource MaterialDesignCardBackground}">
-                                                            <Border Padding="8">
-                                                                <Grid>
-                                                                    <!-- Progress Ring -->
-                                                                    <ProgressBar Style="{StaticResource MaterialDesignCircularProgressBar}"
-                                                                                 Value="{Binding VCenterOverviewViewModel.OverviewData.CpuUsage.UsagePercentage, Mode=OneWay, FallbackValue=0}"
-                                                                                 Width="100" Height="100"
-                                                                                 IsIndeterminate="False"
-                                                                                 Foreground="{StaticResource VMwareBlueBrush}"/>
-                                                                    
-                                                                    <!-- Percentage Text -->
-                                                                    <TextBlock Text="{Binding VCenterOverviewViewModel.OverviewData.CpuUsage.UsagePercentage, StringFormat='{}{0:F1}%', Mode=OneWay, FallbackValue='0%'}"
-                                                                               FontSize="18"
-                                                                               FontWeight="Bold"
-                                                                               HorizontalAlignment="Center"
-                                                                               VerticalAlignment="Center"/>
-                                                                </Grid>
-                                                            </Border>
-                                                        </materialDesign:Card>
-                                                        
-                                                        <TextBlock Grid.Row="2"
-                                                                   Text="{Binding VCenterOverviewViewModel.OverviewData.CpuUsage, Converter={StaticResource ResourceUsageConverter}, FallbackValue='N/A'}"
-                                                                   FontSize="11"
-                                                                   HorizontalAlignment="Center"
-                                                                   Margin="0,8,0,0"
-                                                                   TextWrapping="Wrap"/>
-                                                        </Grid>
-                                                    </Border>
-                                                </materialDesign:Card>
-
-                                                <!-- Memory Usage -->
-                                                <materialDesign:Card Grid.Column="1" 
-                                                                     Margin="4,0"
-                                                                     materialDesign:ElevationAssist.Elevation="Dp2">
-                                                    <Border Padding="16">
-                                                        <Grid>
-                                                        <Grid.RowDefinitions>
-                                                            <RowDefinition Height="Auto"/>
-                                                            <RowDefinition Height="*"/>
-                                                            <RowDefinition Height="Auto"/>
-                                                        </Grid.RowDefinitions>
-                                                        
-                                                        <TextBlock Grid.Row="0"
-                                                                   Text="Memory Usage"
-                                                                   FontSize="16"
-                                                                   FontWeight="Medium"
-                                                                   HorizontalAlignment="Center"
-                                                                   Margin="0,0,0,12"/>
-                                                        
-                                                        <materialDesign:Card Grid.Row="1"
-                                                                             Width="120" Height="120"
-                                                                             HorizontalAlignment="Center"
-                                                                             Background="{DynamicResource MaterialDesignCardBackground}">
-                                                            <Border Padding="8">
-                                                                <Grid>
-                                                                    <!-- Progress Ring -->
-                                                                    <ProgressBar Style="{StaticResource MaterialDesignCircularProgressBar}"
-                                                                                 Value="{Binding VCenterOverviewViewModel.OverviewData.MemoryUsage.UsagePercentage, Mode=OneWay, FallbackValue=0}"
-                                                                                 Width="100" Height="100"
-                                                                                 IsIndeterminate="False"
-                                                                                 Foreground="{StaticResource VMwareOrangeBrush}"/>
-                                                                    
-                                                                    <!-- Percentage Text -->
-                                                                    <TextBlock Text="{Binding VCenterOverviewViewModel.OverviewData.MemoryUsage.UsagePercentage, StringFormat='{}{0:F1}%', Mode=OneWay, FallbackValue='0%'}"
-                                                                               FontSize="18"
-                                                                               FontWeight="Bold"
-                                                                               HorizontalAlignment="Center"
-                                                                               VerticalAlignment="Center"/>
-                                                                </Grid>
-                                                            </Border>
-                                                        </materialDesign:Card>
-                                                        
-                                                        <TextBlock Grid.Row="2"
-                                                                   Text="{Binding VCenterOverviewViewModel.OverviewData.MemoryUsage, Converter={StaticResource ResourceUsageConverter}, FallbackValue='N/A'}"
-                                                                   FontSize="11"
-                                                                   HorizontalAlignment="Center"
-                                                                   Margin="0,8,0,0"
-                                                                   TextWrapping="Wrap"/>
-                                                        </Grid>
-                                                    </Border>
-                                                </materialDesign:Card>
-
-                                                <!-- Storage Usage -->
-                                                <materialDesign:Card Grid.Column="2" 
-                                                                     Margin="8,0,0,0"
-                                                                     materialDesign:ElevationAssist.Elevation="Dp2">
-                                                    <Border Padding="16">
-                                                        <Grid>
-                                                        <Grid.RowDefinitions>
-                                                            <RowDefinition Height="Auto"/>
-                                                            <RowDefinition Height="*"/>
-                                                            <RowDefinition Height="Auto"/>
-                                                        </Grid.RowDefinitions>
-                                                        
-                                                        <TextBlock Grid.Row="0"
-                                                                   Text="Storage Usage"
-                                                                   FontSize="16"
-                                                                   FontWeight="Medium"
-                                                                   HorizontalAlignment="Center"
-                                                                   Margin="0,0,0,12"/>
-                                                        
-                                                        <materialDesign:Card Grid.Row="1"
-                                                                             Width="120" Height="120"
-                                                                             HorizontalAlignment="Center"
-                                                                             Background="{DynamicResource MaterialDesignCardBackground}">
-                                                            <Border Padding="8">
-                                                                <Grid>
-                                                                    <!-- Progress Ring -->
-                                                                    <ProgressBar Style="{StaticResource MaterialDesignCircularProgressBar}"
-                                                                                 Value="{Binding VCenterOverviewViewModel.OverviewData.StorageUsage.UsagePercentage, Mode=OneWay, FallbackValue=0}"
-                                                                                 Width="100" Height="100"
-                                                                                 IsIndeterminate="False"
-                                                                                 Foreground="{StaticResource VMwareGreenBrush}"/>
-                                                                    
-                                                                    <!-- Percentage Text -->
-                                                                    <TextBlock Text="{Binding VCenterOverviewViewModel.OverviewData.StorageUsage.UsagePercentage, StringFormat='{}{0:F1}%', Mode=OneWay, FallbackValue='0%'}"
-                                                                               FontSize="18"
-                                                                               FontWeight="Bold"
-                                                                               HorizontalAlignment="Center"
-                                                                               VerticalAlignment="Center"/>
-                                                                </Grid>
-                                                            </Border>
-                                                        </materialDesign:Card>
-                                                        
-                                                        <TextBlock Grid.Row="2"
-                                                                   Text="{Binding VCenterOverviewViewModel.OverviewData.StorageUsage, Converter={StaticResource ResourceUsageConverter}, FallbackValue='N/A'}"
-                                                                   FontSize="11"
-                                                                   HorizontalAlignment="Center"
-                                                                   Margin="0,8,0,0"
-                                                                   TextWrapping="Wrap"/>
-                                                        </Grid>
-                                                    </Border>
-                                                </materialDesign:Card>
-                                            </Grid>
+                                            <!-- Resource usage gauges removed as requested -->
                                         </Grid>
                                     </ScrollViewer>
                                 </TabItem>

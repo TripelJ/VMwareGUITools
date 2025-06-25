@@ -32,7 +32,13 @@ public partial class MainWindowViewModel : ObservableObject
     private ObservableCollection<VCenter> _vCenters = new();
 
     [ObservableProperty]
+    private ObservableCollection<AvailabilityZone> _availabilityZones = new();
+
+    [ObservableProperty]
     private VCenter? _selectedVCenter;
+
+    [ObservableProperty]
+    private AvailabilityZoneViewModel _availabilityZoneViewModel;
 
     [ObservableProperty]
     private string _statusMessage = "Ready";
@@ -80,6 +86,10 @@ public partial class MainWindowViewModel : ObservableObject
             _serviceProvider.GetRequiredService<ILogger<VCenterOverviewViewModel>>(),
             vmwareService,
             restApiService);
+
+        _availabilityZoneViewModel = new AvailabilityZoneViewModel(
+            _serviceProvider.GetRequiredService<ILogger<AvailabilityZoneViewModel>>(),
+            context);
 
         // Setup clock timer
         _clockTimer = new System.Timers.Timer(1000);
@@ -337,6 +347,56 @@ public partial class MainWindowViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Command to assign a vCenter to an availability zone
+    /// </summary>
+    [RelayCommand]
+    private async Task AssignVCenterToZoneAsync(object? parameter)
+    {
+        if (parameter is not (VCenter vCenter, AvailabilityZone? targetZone))
+            return;
+
+        try
+        {
+            await _availabilityZoneViewModel.MoveVCenterToZoneAsync(vCenter, targetZone);
+            await LoadVCentersAsync();
+            StatusMessage = $"Moved vCenter '{vCenter.Name}' to zone '{targetZone?.Name ?? "No Zone"}'";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to assign vCenter to zone");
+            StatusMessage = $"Failed to assign vCenter to zone: {ex.Message}";
+        }
+    }
+
+    /// <summary>
+    /// Command to add a new availability zone
+    /// </summary>
+    [RelayCommand]
+    private async Task AddAvailabilityZoneAsync()
+    {
+        try
+        {
+            _logger.LogInformation("Opening Add Availability Zone dialog");
+
+            var addZoneWindow = new Views.AddAvailabilityZoneWindow(_availabilityZoneViewModel);
+            addZoneWindow.Owner = Application.Current.MainWindow;
+            
+            var result = addZoneWindow.ShowDialog();
+
+            if (result == true)
+            {
+                await LoadVCentersAsync();
+                StatusMessage = "Availability zone added successfully";
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to add availability zone");
+            StatusMessage = $"Failed to add availability zone: {ex.Message}";
+        }
+    }
+
 
 
     /// <summary>
@@ -414,14 +474,33 @@ public partial class MainWindowViewModel : ObservableObject
         {
             _logger.LogDebug("Loading vCenter servers from database");
 
+            // Load availability zones with their vCenters
+            var zones = await _context.AvailabilityZones
+                .Include(az => az.VCenters)
+                    .ThenInclude(v => v.Clusters)
+                    .ThenInclude(c => c.Hosts)
+                .OrderBy(az => az.SortOrder)
+                .ThenBy(az => az.Name)
+                .ToListAsync();
+
+            // Load all vCenters (including ungrouped ones)
             var vcenters = await _context.VCenters
+                .Include(v => v.AvailabilityZone)
                 .Include(v => v.Clusters)
                 .ThenInclude(c => c.Hosts)
-                .OrderBy(v => v.Name)
+                .OrderBy(v => v.AvailabilityZone!.SortOrder)
+                .ThenBy(v => v.AvailabilityZone!.Name)
+                .ThenBy(v => v.Name)
                 .ToListAsync();
 
             Application.Current.Dispatcher.Invoke(() =>
             {
+                AvailabilityZones.Clear();
+                foreach (var zone in zones)
+                {
+                    AvailabilityZones.Add(zone);
+                }
+
                 VCenters.Clear();
                 foreach (var vcenter in vcenters)
                 {
@@ -429,7 +508,11 @@ public partial class MainWindowViewModel : ObservableObject
                 }
             });
 
-            _logger.LogDebug("Loaded {Count} vCenter servers", vcenters.Count);
+            // Update availability zone view model
+            await _availabilityZoneViewModel.LoadAvailabilityZonesAsync();
+
+            _logger.LogDebug("Loaded {VCenterCount} vCenter servers in {ZoneCount} availability zones", 
+                vcenters.Count, zones.Count);
         }
         catch (Exception ex)
         {
