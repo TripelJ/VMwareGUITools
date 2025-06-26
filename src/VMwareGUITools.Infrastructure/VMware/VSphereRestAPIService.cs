@@ -1225,9 +1225,8 @@ public class VSphereRestAPIService : IVSphereRestAPIService
                 Unit = "GB"
             };
             
-            _logger.LogInformation("Overview data retrieved for vCenter {VCenterUrl}: {ClusterCount} clusters, {HostCount} hosts, {VmCount} VMs - Storage: {StorageUsage}%", 
-                session.VCenterUrl, overview.ClusterCount, overview.HostCount, overview.VmCount,
-                overview.StorageUsage.UsagePercentage.ToString("F1"));
+            _logger.LogInformation("Overview data retrieved for vCenter {VCenterUrl}: {ClusterCount} clusters, {HostCount} hosts, {VmCount} VMs", 
+                session.VCenterUrl, overview.ClusterCount, overview.HostCount, overview.VmCount);
             
             return overview;
         }
@@ -1289,8 +1288,8 @@ public class VSphereRestAPIService : IVSphereRestAPIService
             fallbackStats.StorageTotalGB = totalStorageCapacityGB;
             fallbackStats.StorageUsedGB = totalStorageUsedGB;
             
-            _logger.LogInformation("Cluster {ClusterMoId} resource summary - Storage: {StorageTotalGB}GB ({StorageUsedGB}GB used, {StorageUsagePercent:F1}%), VMs: {VmCount}", 
-                clusterMoId, fallbackStats.StorageTotalGB, fallbackStats.StorageUsedGB, fallbackStats.StorageTotalGB > 0 ? (double)fallbackStats.StorageUsedGB / fallbackStats.StorageTotalGB * 100 : 0, fallbackStats.VmCount);
+            _logger.LogInformation("Cluster {ClusterMoId} resource summary - VMs: {VmCount}", 
+                clusterMoId, fallbackStats.VmCount);
             
             return fallbackStats;
         }
@@ -1364,8 +1363,8 @@ public class VSphereRestAPIService : IVSphereRestAPIService
             VmCount = Math.Max(5, hostCount * 4) // Estimate VMs
         };
         
-        _logger.LogInformation("Using fallback resource data - Storage: {StorageTotalGB}GB ({StorageUsedGB}GB used), VMs: {VmCount}", 
-            stats.StorageTotalGB, stats.StorageUsedGB, stats.VmCount);
+        _logger.LogInformation("Using fallback resource data - VMs: {VmCount}", 
+            stats.VmCount);
         
         return stats;
     }
