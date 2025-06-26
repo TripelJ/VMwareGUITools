@@ -263,6 +263,21 @@ public class RestAPICheckEngine : ICheckEngine
         // Map check definitions to REST API check types
         // This could be enhanced to parse the script content or use a mapping table
 
+        // Check by name first for specific well-known checks
+        if (!string.IsNullOrWhiteSpace(checkDefinition.Name))
+        {
+            var name = checkDefinition.Name.ToLower();
+            
+            if (name.Contains("iscsi") && name.Contains("dead") && name.Contains("path"))
+                return "host-storage";
+            
+            if (name.Contains("multipath") || name.Contains("storage path"))
+                return "host-storage";
+            
+            if (name.Contains("ssh") && name.Contains("service"))
+                return "host-security";
+        }
+
         if (!string.IsNullOrWhiteSpace(checkDefinition.Script))
         {
             var script = checkDefinition.Script.ToLower();
@@ -276,10 +291,10 @@ public class RestAPICheckEngine : ICheckEngine
             if (script.Contains("network") || script.Contains("vnic") || script.Contains("vmkernel"))
                 return "host-networking";
             
-            if (script.Contains("storage") || script.Contains("datastore") || script.Contains("vmfs"))
+            if (script.Contains("iscsi") || script.Contains("storage") || script.Contains("datastore") || script.Contains("vmfs"))
                 return "host-storage";
             
-            if (script.Contains("security") || script.Contains("firewall") || script.Contains("certificate"))
+            if (script.Contains("security") || script.Contains("firewall") || script.Contains("certificate") || script.Contains("ssh"))
                 return "host-security";
             
             if (script.Contains("configuration") || script.Contains("settings") || script.Contains("policy"))

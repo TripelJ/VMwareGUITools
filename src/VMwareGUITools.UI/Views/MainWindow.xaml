@@ -4,6 +4,7 @@
         xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
         xmlns:viewModels="clr-namespace:VMwareGUITools.UI.ViewModels"
         xmlns:converters="clr-namespace:VMwareGUITools.UI.Converters"
+        xmlns:core="clr-namespace:VMwareGUITools.Core.Models;assembly=VMwareGUITools.Core"
         Title="VMware GUI Tools - vSphere Infrastructure Management" 
         Height="800" Width="1200"
         MinHeight="600" MinWidth="800"
@@ -19,6 +20,12 @@
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
         <converters:ResourceUsageConverter x:Key="ResourceUsageConverter"/>
+        
+        <!-- Inverse Boolean to Visibility Converter -->
+        <converters:InverseBooleanToVisibilityConverter x:Key="InverseBooleanToVisibilityConverter"/>
+        
+        <!-- String to Visibility Converter -->
+        <converters:StringToVisibilityConverter x:Key="StringToVisibilityConverter"/>
     </Window.Resources>
 
     <materialDesign:DialogHost Identifier="RootDialog">
@@ -875,11 +882,247 @@
                                 </TabItem>
                                 <TabItem Header="Checks">
                                     <Grid Margin="16">
-                                        <TextBlock Text="Health &amp; Configuration Checks - Coming Soon"
-                                                   VerticalAlignment="Center"
-                                                   HorizontalAlignment="Center"
-                                                   FontSize="16"
-                                                   Foreground="{DynamicResource MaterialDesignBodyLight}"/>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="*"/>
+                                        </Grid.RowDefinitions>
+
+                                        <!-- Header with Refresh Button -->
+                                        <Border Grid.Row="0" 
+                                                Background="{DynamicResource MaterialDesignChipBackground}"
+                                                CornerRadius="4"
+                                                Margin="0,0,0,16"
+                                                Padding="16,12">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <materialDesign:PackIcon Kind="CheckBold" Height="20" Width="20" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                                    <TextBlock Text="Health &amp; Configuration Checks" FontWeight="Medium" FontSize="16" VerticalAlignment="Center"/>
+                                                </StackPanel>
+
+                                                <Button Grid.Column="1"
+                                                        Content="Run iSCSI Check"
+                                                        Command="{Binding RuniSCSICheckCommand}"
+                                                        Style="{StaticResource MaterialDesignOutlinedButton}"
+                                                        Margin="0,0,8,0"/>
+
+                                                <Button Grid.Column="2"
+                                                        Content="Refresh"
+                                                        Command="{Binding CheckResultsViewModel.RefreshCommand}"
+                                                        Style="{StaticResource MaterialDesignOutlinedButton}"/>
+                                            </Grid>
+                                        </Border>
+
+                                        <!-- Filters and Controls -->
+                                        <Grid Grid.Row="1" Margin="0,0,0,16">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <TextBox Grid.Column="0"
+                                                     materialDesign:HintAssist.Hint="Search checks..."
+                                                     Text="{Binding CheckResultsViewModel.FilterText, UpdateSourceTrigger=PropertyChanged}"
+                                                     Style="{StaticResource MaterialDesignFloatingHintTextBox}"
+                                                     Margin="0,0,16,0"/>
+
+                                            <ComboBox Grid.Column="1"
+                                                      materialDesign:HintAssist.Hint="Filter by Status"
+                                                      SelectedValue="{Binding CheckResultsViewModel.FilterStatus}"
+                                                      Style="{StaticResource MaterialDesignFloatingHintComboBox}"
+                                                      Width="150"
+                                                      Margin="0,0,16,0">
+                                                <ComboBoxItem Content="All" Tag="{x:Null}"/>
+                                                <ComboBoxItem Content="Passed" Tag="{x:Static core:CheckStatus.Passed}"/>
+                                                <ComboBoxItem Content="Failed" Tag="{x:Static core:CheckStatus.Failed}"/>
+                                                <ComboBoxItem Content="Warning" Tag="{x:Static core:CheckStatus.Warning}"/>
+                                                <ComboBoxItem Content="Critical" Tag="{x:Static core:CheckStatus.Critical}"/>
+                                            </ComboBox>
+
+                                            <Button Grid.Column="2"
+                                                    Content="Clear Filters"
+                                                    Command="{Binding CheckResultsViewModel.ClearFiltersCommand}"
+                                                    Style="{StaticResource MaterialDesignFlatButton}"
+                                                    Margin="0,0,8,0"/>
+
+                                            <TextBlock Grid.Column="3"
+                                                       Text="{Binding CheckResultsViewModel.StatusMessage}"
+                                                       VerticalAlignment="Center"
+                                                       FontSize="12"
+                                                       Foreground="{DynamicResource MaterialDesignBodyLight}"/>
+                                        </Grid>
+
+                                        <!-- Check Results -->
+                                        <materialDesign:Card Grid.Row="2">
+                                            <Grid>
+                                                <!-- Loading Indicator -->
+                                                <ProgressBar IsIndeterminate="True"
+                                                           Style="{StaticResource MaterialDesignCircularProgressBar}"
+                                                           Width="48" Height="48"
+                                                           HorizontalAlignment="Center"
+                                                           VerticalAlignment="Center"
+                                                           Visibility="{Binding CheckResultsViewModel.IsLoading, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+
+                                                <!-- Results List -->
+                                                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                                            Visibility="{Binding CheckResultsViewModel.IsLoading, Converter={StaticResource InverseBooleanToVisibilityConverter}}">
+                                                    <ItemsControl ItemsSource="{Binding CheckResultsViewModel.CheckResultsView}">
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate>
+                                                                <materialDesign:Card Margin="8" Padding="16">
+                                                                    <Grid>
+                                                                        <Grid.ColumnDefinitions>
+                                                                            <ColumnDefinition Width="Auto"/>
+                                                                            <ColumnDefinition Width="*"/>
+                                                                            <ColumnDefinition Width="Auto"/>
+                                                                            <ColumnDefinition Width="Auto"/>
+                                                                        </Grid.ColumnDefinitions>
+                                                                        <Grid.RowDefinitions>
+                                                                            <RowDefinition Height="Auto"/>
+                                                                            <RowDefinition Height="Auto"/>
+                                                                            <RowDefinition Height="Auto"/>
+                                                                        </Grid.RowDefinitions>
+
+                                                                        <!-- Status Icon -->
+                                                                        <Border Grid.Column="0" Grid.RowSpan="3"
+                                                                                Width="4"
+                                                                                VerticalAlignment="Stretch"
+                                                                                Margin="0,0,12,0">
+                                                                            <Border.Style>
+                                                                                <Style TargetType="Border">
+                                                                                    <Style.Triggers>
+                                                                                        <DataTrigger Binding="{Binding Status}" Value="{x:Static core:CheckStatus.Passed}">
+                                                                                            <Setter Property="Background" Value="#4CAF50"/>
+                                                                                        </DataTrigger>
+                                                                                        <DataTrigger Binding="{Binding Status}" Value="{x:Static core:CheckStatus.Failed}">
+                                                                                            <Setter Property="Background" Value="#F44336"/>
+                                                                                        </DataTrigger>
+                                                                                        <DataTrigger Binding="{Binding Status}" Value="{x:Static core:CheckStatus.Warning}">
+                                                                                            <Setter Property="Background" Value="#FF9800"/>
+                                                                                        </DataTrigger>
+                                                                                        <DataTrigger Binding="{Binding Status}" Value="{x:Static core:CheckStatus.Critical}">
+                                                                                            <Setter Property="Background" Value="#E91E63"/>
+                                                                                        </DataTrigger>
+                                                                                    </Style.Triggers>
+                                                                                </Style>
+                                                                            </Border.Style>
+                                                                        </Border>
+
+                                                                        <!-- Check Name and Host -->
+                                                                        <StackPanel Grid.Column="1" Grid.Row="0">
+                                                                            <TextBlock Text="{Binding CheckDefinition.Name}"
+                                                                                     FontWeight="Medium"
+                                                                                     FontSize="14"/>
+                                                                            <TextBlock Text="{Binding Host.Name, StringFormat='Host: {0}'}"
+                                                                                     FontSize="12"
+                                                                                     Foreground="{DynamicResource MaterialDesignBodyLight}"/>
+                                                                        </StackPanel>
+
+                                                                        <!-- Status Badge -->
+                                                                        <materialDesign:Chip Grid.Column="2" Grid.Row="0"
+                                                                                           Content="{Binding Status}"
+                                                                                           VerticalAlignment="Top"
+                                                                                           FontSize="11">
+                                                                            <materialDesign:Chip.Style>
+                                                                                <Style TargetType="materialDesign:Chip" BasedOn="{StaticResource MaterialDesignChip}">
+                                                                                    <Style.Triggers>
+                                                                                        <DataTrigger Binding="{Binding Status}" Value="{x:Static core:CheckStatus.Passed}">
+                                                                                            <Setter Property="Background" Value="#E8F5E8"/>
+                                                                                            <Setter Property="Foreground" Value="#2E7D32"/>
+                                                                                        </DataTrigger>
+                                                                                        <DataTrigger Binding="{Binding Status}" Value="{x:Static core:CheckStatus.Failed}">
+                                                                                            <Setter Property="Background" Value="#FFEBEE"/>
+                                                                                            <Setter Property="Foreground" Value="#C62828"/>
+                                                                                        </DataTrigger>
+                                                                                        <DataTrigger Binding="{Binding Status}" Value="{x:Static core:CheckStatus.Warning}">
+                                                                                            <Setter Property="Background" Value="#FFF3E0"/>
+                                                                                            <Setter Property="Foreground" Value="#E65100"/>
+                                                                                        </DataTrigger>
+                                                                                    </Style.Triggers>
+                                                                                </Style>
+                                                                            </materialDesign:Chip.Style>
+                                                                        </materialDesign:Chip>
+
+                                                                        <!-- Execution Time -->
+                                                                        <TextBlock Grid.Column="3" Grid.Row="0"
+                                                                                 Text="{Binding ExecutionTimeDisplay}"
+                                                                                 FontSize="11"
+                                                                                 Foreground="{DynamicResource MaterialDesignBodyLight}"
+                                                                                 VerticalAlignment="Top"
+                                                                                 Margin="8,0,0,0"/>
+
+                                                                        <!-- Output/Error Message -->
+                                                                        <TextBlock Grid.Column="1" Grid.ColumnSpan="3" Grid.Row="1"
+                                                                                 Text="{Binding Output}"
+                                                                                 FontSize="12"
+                                                                                 TextWrapping="Wrap"
+                                                                                 MaxHeight="100"
+                                                                                 Margin="0,8,0,0"
+                                                                                 Visibility="{Binding Output, Converter={StaticResource StringToVisibilityConverter}}"/>
+
+                                                                        <!-- Error Message -->
+                                                                        <TextBlock Grid.Column="1" Grid.ColumnSpan="3" Grid.Row="2"
+                                                                                 Text="{Binding ErrorMessage}"
+                                                                                 FontSize="12"
+                                                                                 TextWrapping="Wrap"
+                                                                                 Foreground="{DynamicResource MaterialDesignValidationErrorBrush}"
+                                                                                 Margin="0,4,0,0"
+                                                                                 Visibility="{Binding ErrorMessage, Converter={StaticResource StringToVisibilityConverter}}"/>
+
+                                                                        <!-- Execution Date -->
+                                                                        <TextBlock Grid.Column="1" Grid.ColumnSpan="3" Grid.Row="2"
+                                                                                 Text="{Binding ExecutedAt, StringFormat='Executed: {0:yyyy-MM-dd HH:mm:ss}'}"
+                                                                                 FontSize="10"
+                                                                                 Foreground="{DynamicResource MaterialDesignBodyLight}"
+                                                                                 HorizontalAlignment="Right"
+                                                                                 VerticalAlignment="Bottom"/>
+                                                                    </Grid>
+                                                                </materialDesign:Card>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+                                                </ScrollViewer>
+
+                                                <!-- Empty State -->
+                                                <StackPanel VerticalAlignment="Center" 
+                                                          HorizontalAlignment="Center"
+                                                          Visibility="{Binding CheckResultsViewModel.IsLoading, Converter={StaticResource InverseBooleanToVisibilityConverter}}">
+                                                    <StackPanel.Style>
+                                                        <Style TargetType="StackPanel">
+                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding CheckResultsViewModel.CheckResults.Count}" Value="0">
+                                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </StackPanel.Style>
+                                                    <materialDesign:PackIcon Kind="CheckBold" 
+                                                                           Height="48" Width="48"
+                                                                           HorizontalAlignment="Center"
+                                                                           Foreground="{DynamicResource MaterialDesignBodyLight}"
+                                                                           Margin="0,0,0,16"/>
+                                                    <TextBlock Text="No check results available"
+                                                             FontSize="16"
+                                                             HorizontalAlignment="Center"
+                                                             Margin="0,0,0,4"/>
+                                                    <TextBlock Text="Run some checks to see results here"
+                                                             FontSize="12"
+                                                             Foreground="{DynamicResource MaterialDesignBodyLight}"
+                                                             HorizontalAlignment="Center"
+                                                             TextWrapping="Wrap"
+                                                             MaxWidth="300"/>
+                                                </StackPanel>
+                                            </Grid>
+                                        </materialDesign:Card>
                                     </Grid>
                                 </TabItem>
                             </TabControl>

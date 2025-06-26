@@ -849,6 +849,17 @@ public class VSphereRestAPIService : IVSphereRestAPIService
         try
         {
             var baseUrl = session.VCenterUrl.TrimEnd('/');
+            
+            // Check if this is specifically an iSCSI dead path check
+            var checkAllAdapters = parameters?.ContainsKey("checkAllAdapters") == true && 
+                                 parameters["checkAllAdapters"].ToString()?.ToLower() == "true";
+            
+            if (checkAllAdapters)
+            {
+                return await CheckiSCSIDeadPathsAsync(session, hostMoId, parameters, cancellationToken);
+            }
+            
+            // Default storage check
             var storageUrl = $"{baseUrl}/api/vcenter/host/{hostMoId}/storage";
             
             using var request = new HttpRequestMessage(HttpMethod.Get, storageUrl);
@@ -882,6 +893,145 @@ public class VSphereRestAPIService : IVSphereRestAPIService
             {
                 IsSuccess = false,
                 ErrorMessage = $"Failed to get host storage data: {ex.Message}",
+                Timestamp = DateTime.UtcNow
+            };
+        }
+    }
+
+    private async Task<VSphereApiResult> CheckiSCSIDeadPathsAsync(VSphereSession session, string hostMoId, Dictionary<string, object>? parameters, CancellationToken cancellationToken)
+    {
+        try
+        {
+            _logger.LogInformation("Checking iSCSI dead paths for host {HostMoId}", hostMoId);
+            
+            var baseUrl = session.VCenterUrl.TrimEnd('/');
+            var result = new VSphereApiResult
+            {
+                Timestamp = DateTime.UtcNow
+            };
+            
+            // Get host storage adapters
+            var adaptersUrl = $"{baseUrl}/api/vcenter/host/{hostMoId}/storage/adapters";
+            using var adaptersRequest = new HttpRequestMessage(HttpMethod.Get, adaptersUrl);
+            adaptersRequest.Headers.Add("vmware-api-session-id", session.SessionToken);
+            
+            var adaptersResponse = await _httpClient.SendAsync(adaptersRequest, cancellationToken);
+            
+            if (!adaptersResponse.IsSuccessStatusCode)
+            {
+                result.IsSuccess = false;
+                result.ErrorMessage = $"Failed to get storage adapters: {adaptersResponse.StatusCode}";
+                return result;
+            }
+            
+            var adaptersContent = await adaptersResponse.Content.ReadAsStringAsync();
+            var adaptersData = JsonSerializer.Deserialize<JsonElement>(adaptersContent);
+            
+            var iSCSIAdapters = new List<JsonElement>();
+            var totalPaths = 0;
+            var activePaths = 0;
+            var deadPaths = 0;
+            var pathDetails = new List<string>();
+            
+            // Filter for iSCSI adapters and check their paths
+            if (adaptersData.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var adapter in adaptersData.EnumerateArray())
+                {
+                    if (adapter.TryGetProperty("type", out var typeProperty) && 
+                        typeProperty.GetString()?.ToUpper().Contains("ISCSI") == true)
+                    {
+                        iSCSIAdapters.Add(adapter);
+                        
+                        // Get detailed path information for this adapter
+                        var adapterKey = adapter.GetProperty("adapter").GetString();
+                        var pathsUrl = $"{baseUrl}/api/vcenter/host/{hostMoId}/storage/paths";
+                        
+                        using var pathsRequest = new HttpRequestMessage(HttpMethod.Get, pathsUrl);
+                        pathsRequest.Headers.Add("vmware-api-session-id", session.SessionToken);
+                        
+                        var pathsResponse = await _httpClient.SendAsync(pathsRequest, cancellationToken);
+                        
+                        if (pathsResponse.IsSuccessStatusCode)
+                        {
+                            var pathsContent = await pathsResponse.Content.ReadAsStringAsync();
+                            var pathsData = JsonSerializer.Deserialize<JsonElement>(pathsContent);
+                            
+                            if (pathsData.ValueKind == JsonValueKind.Array)
+                            {
+                                foreach (var path in pathsData.EnumerateArray())
+                                {
+                                    // Check if this path belongs to our iSCSI adapter
+                                    if (path.TryGetProperty("adapter", out var pathAdapter) && 
+                                        pathAdapter.GetString() == adapterKey)
+                                    {
+                                        totalPaths++;
+                                        
+                                        var pathState = path.TryGetProperty("state", out var stateProperty) 
+                                            ? stateProperty.GetString() : "unknown";
+                                        var pathName = path.TryGetProperty("path", out var pathProperty) 
+                                            ? pathProperty.GetString() : "unknown";
+                                        
+                                        if (string.Equals(pathState, "active", StringComparison.OrdinalIgnoreCase) ||
+                                            string.Equals(pathState, "standby", StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            activePaths++;
+                                            pathDetails.Add($"Path {pathName}: {pathState?.ToUpper()}");
+                                        }
+                                        else
+                                        {
+                                            deadPaths++;
+                                            pathDetails.Add($"Path {pathName}: {pathState?.ToUpper()} (DEAD)");
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Evaluate the results
+            var maxDeadPaths = 0;
+            if (parameters?.TryGetValue("maxDeadPaths", out var maxDeadValue) == true)
+            {
+                int.TryParse(maxDeadValue.ToString(), out maxDeadPaths);
+            }
+            
+            result.IsSuccess = deadPaths <= maxDeadPaths;
+            result.Properties["total_paths"] = totalPaths;
+            result.Properties["active_paths"] = activePaths;
+            result.Properties["dead_paths"] = deadPaths;
+            result.Properties["iscsi_adapters_count"] = iSCSIAdapters.Count;
+            
+            // Create detailed result message
+            var pathSummary = string.Join("\n", pathDetails);
+            result.Data = $"iSCSI Path Check Results:\n" +
+                         $"Total iSCSI Adapters: {iSCSIAdapters.Count}\n" +
+                         $"Total Paths: {totalPaths}\n" +
+                         $"Active Paths: {activePaths}\n" +
+                         $"Dead Paths: {deadPaths}\n" +
+                         $"Threshold (Max Dead Paths): {maxDeadPaths}\n" +
+                         $"Status: {(result.IsSuccess ? "PASS" : "FAIL")}\n\n" +
+                         $"Path Details:\n{pathSummary}";
+            
+            if (!result.IsSuccess)
+            {
+                result.ErrorMessage = $"Found {deadPaths} dead paths, exceeding threshold of {maxDeadPaths}";
+            }
+            
+            _logger.LogInformation("iSCSI dead path check completed for host {HostMoId}: {DeadPaths} dead paths found", 
+                hostMoId, deadPaths);
+            
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to check iSCSI dead paths for host {HostMoId}", hostMoId);
+            return new VSphereApiResult
+            {
+                IsSuccess = false,
+                ErrorMessage = $"Failed to check iSCSI dead paths: {ex.Message}",
                 Timestamp = DateTime.UtcNow
             };
         }

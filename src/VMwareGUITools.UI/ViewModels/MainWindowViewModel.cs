@@ -11,6 +11,7 @@ using VMwareGUITools.Core.Models;
 using VMwareGUITools.Data;
 using VMwareGUITools.Infrastructure.Security;
 using VMwareGUITools.Infrastructure.VMware;
+using VMwareGUITools.Infrastructure.Checks;
 using VMwareGUITools.UI.Views;
 
 namespace VMwareGUITools.UI.ViewModels;
@@ -64,6 +65,9 @@ public partial class MainWindowViewModel : ObservableObject
     [ObservableProperty]
     private VCenterOverviewViewModel _vCenterOverviewViewModel;
 
+    [ObservableProperty]
+    private CheckResultsViewModel _checkResultsViewModel;
+
     public MainWindowViewModel(
         ILogger<MainWindowViewModel> logger,
         VMwareDbContext context,
@@ -86,6 +90,11 @@ public partial class MainWindowViewModel : ObservableObject
             _serviceProvider.GetRequiredService<ILogger<VCenterOverviewViewModel>>(),
             vmwareService,
             restApiService);
+
+        _checkResultsViewModel = new CheckResultsViewModel(
+            _serviceProvider.GetRequiredService<ILogger<CheckResultsViewModel>>(),
+            context,
+            _serviceProvider.GetRequiredService<ICheckExecutionService>());
 
         _availabilityZoneViewModel = new AvailabilityZoneViewModel(
             _serviceProvider.GetRequiredService<ILogger<AvailabilityZoneViewModel>>(),
@@ -348,6 +357,112 @@ public partial class MainWindowViewModel : ObservableObject
         {
             _logger.LogError(ex, "Failed to open settings");
             StatusMessage = $"Failed to open settings: {ex.Message}";
+        }
+    }
+
+    /// <summary>
+    /// Command to run iSCSI dead path checks on all hosts
+    /// </summary>
+    [RelayCommand]
+    private async Task RuniSCSICheckAsync()
+    {
+        if (SelectedVCenter == null)
+        {
+            StatusMessage = "Please select a vCenter server first";
+            return;
+        }
+
+        try
+        {
+            IsLoading = true;
+            StatusMessage = "Running iSCSI dead path checks...";
+
+            _logger.LogInformation("Running iSCSI checks for vCenter: {VCenterName}", SelectedVCenter.Name);
+
+            // Get the iSCSI check definition
+            var iSCSICheck = await _context.CheckDefinitions
+                .Include(cd => cd.Category)
+                .FirstOrDefaultAsync(cd => cd.Name.Contains("iSCSI") && cd.Name.Contains("Dead Path"));
+
+            if (iSCSICheck == null)
+            {
+                // Create the iSCSI check if it doesn't exist
+                var storageCategory = await _context.CheckCategories
+                    .FirstOrDefaultAsync(cc => cc.Name == "Storage")
+                    ?? new CheckCategory
+                    {
+                        Name = "Storage",
+                        Description = "Storage health and configuration checks",
+                        Type = CheckCategoryType.Health,
+                        Enabled = true,
+                        SortOrder = 5
+                    };
+
+                if (storageCategory.Id == 0)
+                {
+                    _context.CheckCategories.Add(storageCategory);
+                    await _context.SaveChangesAsync();
+                }
+
+                iSCSICheck = new CheckDefinition
+                {
+                    CategoryId = storageCategory.Id,
+                    Name = "iSCSI Dead Path Check",
+                    Description = "Check for dead or inactive iSCSI storage paths",
+                    ExecutionType = CheckExecutionType.vSphereRestAPI,
+                    DefaultSeverity = CheckSeverity.Critical,
+                    IsEnabled = true,
+                    TimeoutSeconds = 120,
+                    ScriptPath = "Scripts/Storage/Check-iSCSIDeadPaths.ps1",
+                    Script = "# PowerShell script to check iSCSI path status",
+                    Parameters = """{"checkAllAdapters": true}""",
+                    Thresholds = """{"maxDeadPaths": 0}"""
+                };
+
+                _context.CheckDefinitions.Add(iSCSICheck);
+                await _context.SaveChangesAsync();
+            }
+
+            // Get all hosts for this vCenter
+            var hosts = await _context.Hosts
+                .Where(h => h.VCenterId == SelectedVCenter.Id)
+                .ToListAsync();
+
+            if (!hosts.Any())
+            {
+                StatusMessage = "No hosts found for the selected vCenter";
+                return;
+            }
+
+            var checkExecutionService = _serviceProvider.GetRequiredService<ICheckExecutionService>();
+            var results = new List<CheckResult>();
+
+            // Execute the check on each host
+            foreach (var host in hosts)
+            {
+                var result = await checkExecutionService.ExecuteCheckAsync(host, iSCSICheck, SelectedVCenter);
+                results.Add(result);
+            }
+
+            // Load the results into the check results view model
+            await CheckResultsViewModel.LoadCheckResultsAsync(SelectedVCenter);
+
+            var passedCount = results.Count(r => r.Status == CheckStatus.Passed);
+            var failedCount = results.Count(r => r.Status == CheckStatus.Failed);
+
+            StatusMessage = $"iSCSI checks completed: {passedCount} passed, {failedCount} failed on {hosts.Count} hosts";
+
+            _logger.LogInformation("iSCSI checks completed for {HostCount} hosts: {PassedCount} passed, {FailedCount} failed",
+                hosts.Count, passedCount, failedCount);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to run iSCSI checks");
+            StatusMessage = $"Failed to run iSCSI checks: {ex.Message}";
+        }
+        finally
+        {
+            IsLoading = false;
         }
     }
 
@@ -657,9 +772,10 @@ public partial class MainWindowViewModel : ObservableObject
             // Stop previous refreshes
             VCenterOverviewViewModel.StopRefresh();
             
-            // Load overview and infrastructure data
+            // Load overview, infrastructure, and check results data
             _ = VCenterOverviewViewModel.LoadOverviewDataAsync(value);
             _ = InfrastructureViewModel.LoadInfrastructureAsync(value);
+            _ = CheckResultsViewModel.LoadCheckResultsAsync(value);
         }
         else
         {
@@ -671,6 +787,7 @@ public partial class MainWindowViewModel : ObservableObject
             Application.Current.Dispatcher.Invoke(() =>
             {
                 InfrastructureViewModel.InfrastructureItems.Clear();
+                CheckResultsViewModel.CheckResults.Clear();
             });
         }
     }
