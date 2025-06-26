@@ -891,7 +891,17 @@ public partial class MainWindowViewModel : ObservableObject
             // Load overview, infrastructure, and check results data
             _ = VCenterOverviewViewModel.LoadOverviewDataAsync(value);
             _ = InfrastructureViewModel.LoadInfrastructureAsync(value);
-            _ = CheckResultsViewModel.LoadCheckResultsAsync(value);
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await CheckResultsViewModel.LoadCheckResultsAsync(value);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to load check results for vCenter: {VCenterName}", value.Name);
+                }
+            });
         }
         else
         {

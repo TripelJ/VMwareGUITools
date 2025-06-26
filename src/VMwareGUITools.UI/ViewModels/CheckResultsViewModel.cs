@@ -90,6 +90,9 @@ public partial class CheckResultsViewModel : ObservableObject
             SelectedHostMoId = hostMoId ?? string.Empty;
             SelectedClusterName = clusterName ?? string.Empty;
 
+            // Ensure database is initialized with basic data
+            await EnsureDatabaseInitializedAsync();
+
             var query = _dbContext.CheckResults
                 .Include(cr => cr.CheckDefinition)
                 .ThenInclude(cd => cd.Category)
@@ -123,11 +126,14 @@ public partial class CheckResultsViewModel : ObservableObject
                 .Take(1000) // Limit to prevent performance issues
                 .ToListAsync();
 
+            // Filter out any results with null navigation properties to prevent crashes
+            var validResults = results.Where(r => r.Host != null && r.CheckDefinition != null).ToList();
+
             // Update UI on the main thread
             Application.Current.Dispatcher.Invoke(() =>
             {
                 CheckResults.Clear();
-                foreach (var result in results)
+                foreach (var result in validResults)
                 {
                     CheckResults.Add(result);
                 }
@@ -145,10 +151,52 @@ public partial class CheckResultsViewModel : ObservableObject
         {
             _logger.LogError(ex, "Failed to load check results");
             StatusMessage = $"Failed to load check results: {ex.Message}";
+            
+            // Ensure UI is updated even on error
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                CheckResults.Clear();
+            });
         }
         finally
         {
             IsLoading = false;
+        }
+    }
+
+    /// <summary>
+    /// Ensures the database has basic check categories and definitions
+    /// </summary>
+    private async Task EnsureDatabaseInitializedAsync()
+    {
+        try
+        {
+            // Check if we have any check categories
+            var categoriesExist = await _dbContext.CheckCategories.AnyAsync();
+            if (!categoriesExist)
+            {
+                _logger.LogInformation("No check categories found, creating default categories");
+                
+                var defaultCategory = new CheckCategory
+                {
+                    Name = "Infrastructure Health",
+                    Description = "Basic infrastructure health checks",
+                    Type = CheckCategoryType.Health,
+                    Enabled = true,
+                    SortOrder = 1,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+                
+                _dbContext.CheckCategories.Add(defaultCategory);
+                await _dbContext.SaveChangesAsync();
+                
+                _logger.LogInformation("Created default check category: {CategoryName}", defaultCategory.Name);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to ensure database initialization");
         }
     }
 
@@ -328,14 +376,18 @@ public partial class CheckResultsViewModel : ObservableObject
         if (obj is not CheckResult checkResult)
             return false;
 
+        // Skip results with null navigation properties to prevent crashes
+        if (checkResult.CheckDefinition == null || checkResult.Host == null)
+            return false;
+
         // Filter by text
         if (!string.IsNullOrEmpty(FilterText))
         {
             var searchText = FilterText.ToLower();
-            var matches = checkResult.CheckDefinition.Name.ToLower().Contains(searchText) ||
-                         checkResult.Host.Name.ToLower().Contains(searchText) ||
-                         checkResult.Output.ToLower().Contains(searchText) ||
-                         checkResult.ErrorMessage.ToLower().Contains(searchText);
+            var matches = (checkResult.CheckDefinition.Name?.ToLower().Contains(searchText) == true) ||
+                         (checkResult.Host.Name?.ToLower().Contains(searchText) == true) ||
+                         (checkResult.Output?.ToLower().Contains(searchText) == true) ||
+                         (checkResult.ErrorMessage?.ToLower().Contains(searchText) == true);
 
             if (!matches)
                 return false;
