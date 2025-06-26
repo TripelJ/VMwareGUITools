@@ -87,6 +87,22 @@ public class Program
             var connectionString = configuration.GetConnectionString("DefaultConnection") 
                 ?? "Data Source=vmware-gui-tools.db";
             options.UseSqlite(connectionString);
+            
+            // Enable sensitive data logging for better debugging
+            var environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Production";
+            var enableSensitiveDataLogging = environment == "Development" || 
+                                           configuration.GetValue<bool>("EntityFramework:EnableSensitiveDataLogging", false);
+            var enableDetailedErrors = configuration.GetValue<bool>("EntityFramework:EnableDetailedErrors", true);
+            
+            if (enableSensitiveDataLogging)
+            {
+                options.EnableSensitiveDataLogging();
+            }
+            
+            if (enableDetailedErrors)
+            {
+                options.EnableDetailedErrors();
+            }
         });
         
         // vSphere REST API Services - Replaces PowerShell/PowerCLI
