@@ -115,8 +115,7 @@ public partial class App : Application
             options.UseSqlite(connectionString);
             
             // Enable sensitive data logging for better debugging
-            var enableSensitiveDataLogging = context.HostingEnvironment.IsDevelopment() || 
-                                           configuration.GetValue<bool>("EntityFramework:EnableSensitiveDataLogging", false);
+            var enableSensitiveDataLogging = configuration.GetValue<bool>("EntityFramework:EnableSensitiveDataLogging", false);
             var enableDetailedErrors = configuration.GetValue<bool>("EntityFramework:EnableDetailedErrors", true);
             
             if (enableSensitiveDataLogging)
