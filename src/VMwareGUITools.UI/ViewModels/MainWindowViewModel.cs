@@ -425,7 +425,7 @@ public partial class MainWindowViewModel : ObservableObject
 
             // Use the same REST API discovery method that the Infrastructure tab uses
             VSphereSession? session = null;
-            var allHosts = new List<HostInfo>();
+            var allHosts = new List<(HostInfo Host, ClusterInfo Cluster)>();
             
             try
             {
@@ -441,7 +441,11 @@ public partial class MainWindowViewModel : ObservableObject
                     try
                     {
                         var hostsInCluster = await _restApiService.DiscoverHostsAsync(session, cluster.MoId);
-                        allHosts.AddRange(hostsInCluster);
+                        // Associate each host with its cluster
+                        foreach (var host in hostsInCluster)
+                        {
+                            allHosts.Add((host, cluster));
+                        }
                     }
                     catch (Exception ex)
                     {
@@ -462,29 +466,83 @@ public partial class MainWindowViewModel : ObservableObject
 
                 // Execute the check on each discovered host
                 // Convert HostInfo to Host entities for check execution
-                foreach (var hostInfo in allHosts)
+                foreach (var (hostInfo, clusterInfo) in allHosts)
                 {
                     try
                     {
-                        // Create a temporary Host entity for check execution
-                        var tempHost = new Host
+                        // Check if host already exists in database
+                        var existingHost = await _context.Hosts
+                            .FirstOrDefaultAsync(h => h.MoId == hostInfo.MoId && h.VCenterId == SelectedVCenter.Id);
+                        
+                        Host hostEntity;
+                        if (existingHost != null)
                         {
-                            Name = hostInfo.Name,
-                            MoId = hostInfo.MoId,
-                            IpAddress = hostInfo.IpAddress,
-                            VCenterId = SelectedVCenter.Id,
-                            HostType = hostInfo.Type,
-                            ClusterName = "Unknown", // We don't have cluster info directly in HostInfo
-                            ClusterId = 0, // Temporary - not stored in DB
-                            Enabled = true
-                        };
+                            // Use existing host from database
+                            hostEntity = existingHost;
+                        }
+                        else
+                        {
+                            // Create a new host entity with proper relationships
+                            // First, try to find or create the cluster
+                            var cluster = await _context.Clusters
+                                .FirstOrDefaultAsync(c => c.VCenterId == SelectedVCenter.Id && c.Name == clusterInfo.Name);
+                            
+                            if (cluster == null)
+                            {
+                                // Create a temporary cluster if it doesn't exist
+                                cluster = new Cluster
+                                {
+                                    Name = clusterInfo.Name,
+                                    VCenterId = SelectedVCenter.Id,
+                                    MoId = clusterInfo.MoId,
+                                    Enabled = true,
+                                    CreatedAt = DateTime.UtcNow,
+                                    UpdatedAt = DateTime.UtcNow
+                                };
+                                _context.Clusters.Add(cluster);
+                                await _context.SaveChangesAsync(); // Save to get the cluster ID
+                            }
+                            
+                            // Create the host entity with proper foreign key relationships
+                            hostEntity = new Host
+                            {
+                                Name = hostInfo.Name,
+                                MoId = hostInfo.MoId,
+                                IpAddress = hostInfo.IpAddress ?? "Unknown",
+                                VCenterId = SelectedVCenter.Id,
+                                ClusterId = cluster.Id,
+                                HostType = hostInfo.Type,
+                                ClusterName = clusterInfo.Name,
+                                Enabled = true,
+                                CreatedAt = DateTime.UtcNow,
+                                UpdatedAt = DateTime.UtcNow
+                            };
+                            
+                            // Add to database and save
+                            _context.Hosts.Add(hostEntity);
+                            await _context.SaveChangesAsync(); // Save to get the host ID
+                        }
 
-                        var result = await checkExecutionService.ExecuteCheckAsync(tempHost, iSCSICheck, SelectedVCenter);
+                        var result = await checkExecutionService.ExecuteCheckAsync(hostEntity, iSCSICheck, SelectedVCenter);
                         results.Add(result);
                     }
                     catch (Exception ex)
                     {
                         _logger.LogWarning(ex, "Failed to execute iSCSI check on host {HostName}", hostInfo.Name);
+                        
+                        // Create a failed result for reporting purposes
+                        var failedResult = new CheckResult
+                        {
+                            CheckDefinitionId = iSCSICheck.Id,
+                            HostId = 0, // No host ID available
+                            Status = CheckStatus.Error,
+                            ErrorMessage = $"Failed to execute check: {ex.Message}",
+                            ExecutedAt = DateTime.UtcNow,
+                            ExecutionTime = TimeSpan.Zero,
+                            Output = "Check execution failed",
+                            Details = $"Host: {hostInfo.Name}, Error: {ex.Message}"
+                        };
+                        results.Add(failedResult);
                     }
                 }
 
