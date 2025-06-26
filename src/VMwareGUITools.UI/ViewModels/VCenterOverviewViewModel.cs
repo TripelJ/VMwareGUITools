@@ -105,10 +105,8 @@ public partial class VCenterOverviewViewModel : ObservableObject, IDisposable
                 _overviewRefreshTimer.Start();
             }
 
-            _logger.LogInformation("Overview data loaded successfully for vCenter: {VCenterName} - CPU: {CpuUsage}%, Memory: {MemoryUsage}%, Storage: {StorageUsage}%", 
-                vCenter.Name, freshOverviewData.CpuUsage.UsagePercentage.ToString("F1"), 
-                freshOverviewData.MemoryUsage.UsagePercentage.ToString("F1"), 
-                freshOverviewData.StorageUsage.UsagePercentage.ToString("F1"));
+            _logger.LogInformation("Overview data loaded successfully for vCenter: {VCenterName} - Storage: {StorageUsage}%", 
+                vCenter.Name, freshOverviewData.StorageUsage.UsagePercentage.ToString("F1"));
         }
         catch (Exception ex)
         {
@@ -153,10 +151,8 @@ public partial class VCenterOverviewViewModel : ObservableObject, IDisposable
                 // Don't update status message during auto-refresh to avoid UI noise
             });
 
-            _logger.LogDebug("Auto-refresh completed for vCenter: {VCenterName} - CPU: {CpuUsage}%, Memory: {MemoryUsage}%, Storage: {StorageUsage}%", 
-                SelectedVCenter.Name, freshOverviewData.CpuUsage.UsagePercentage.ToString("F1"), 
-                freshOverviewData.MemoryUsage.UsagePercentage.ToString("F1"), 
-                freshOverviewData.StorageUsage.UsagePercentage.ToString("F1"));
+            _logger.LogDebug("Auto-refresh completed for vCenter: {VCenterName} - Storage: {StorageUsage}%", 
+                SelectedVCenter.Name, freshOverviewData.StorageUsage.UsagePercentage.ToString("F1"));
         }
         catch (Exception ex)
         {

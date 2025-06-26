@@ -1191,9 +1191,11 @@ public class VSphereRestAPIService : IVSphereRestAPIService
                     Unit = "MB"
                 };
                 
-                _logger.LogDebug("Cluster {ClusterName} resource usage - CPU: {CpuUsage}%, Memory: {MemoryUsage}%", 
-                    cluster.Name, clusterSummary.CpuUsage.UsagePercentage.ToString("F1"), 
-                    clusterSummary.MemoryUsage.UsagePercentage.ToString("F1"));
+                // Set storage usage for cluster (if we're tracking storage per cluster)
+                // For now, we don't track storage per cluster, only overall
+                
+                _logger.LogDebug("Cluster {ClusterName} resource usage - VMs: {VmCount}", 
+                    cluster.Name, clusterSummary.VmCount);
                 
                 overview.Clusters.Add(clusterSummary);
             }
@@ -1223,10 +1225,8 @@ public class VSphereRestAPIService : IVSphereRestAPIService
                 Unit = "GB"
             };
             
-            _logger.LogInformation("Overview data retrieved for vCenter {VCenterUrl}: {ClusterCount} clusters, {HostCount} hosts, {VmCount} VMs - CPU: {CpuUsage}%, Memory: {MemoryUsage}%, Storage: {StorageUsage}%", 
+            _logger.LogInformation("Overview data retrieved for vCenter {VCenterUrl}: {ClusterCount} clusters, {HostCount} hosts, {VmCount} VMs - Storage: {StorageUsage}%", 
                 session.VCenterUrl, overview.ClusterCount, overview.HostCount, overview.VmCount,
-                overview.CpuUsage.UsagePercentage.ToString("F1"), 
-                overview.MemoryUsage.UsagePercentage.ToString("F1"), 
                 overview.StorageUsage.UsagePercentage.ToString("F1"));
             
             return overview;
@@ -1289,10 +1289,8 @@ public class VSphereRestAPIService : IVSphereRestAPIService
             fallbackStats.StorageTotalGB = totalStorageCapacityGB;
             fallbackStats.StorageUsedGB = totalStorageUsedGB;
             
-            _logger.LogInformation("Cluster {ClusterMoId} resource summary - CPU: {CpuTotalMhz}MHz ({CpuUsedMhz}MHz used, {CpuUsagePercent:F1}%), Memory: {MemoryTotalMB}MB ({MemoryUsedMB}MB used, {MemoryUsagePercent:F1}%), Storage: {StorageTotalGB}GB ({StorageUsedGB}GB used, {StorageUsagePercent:F1}%), VMs: {VmCount}", 
-                clusterMoId, fallbackStats.CpuTotalMhz, fallbackStats.CpuUsedMhz, fallbackStats.CpuTotalMhz > 0 ? (double)fallbackStats.CpuUsedMhz / fallbackStats.CpuTotalMhz * 100 : 0,
-                fallbackStats.MemoryTotalMB, fallbackStats.MemoryUsedMB, fallbackStats.MemoryTotalMB > 0 ? (double)fallbackStats.MemoryUsedMB / fallbackStats.MemoryTotalMB * 100 : 0,
-                fallbackStats.StorageTotalGB, fallbackStats.StorageUsedGB, fallbackStats.StorageTotalGB > 0 ? (double)fallbackStats.StorageUsedGB / fallbackStats.StorageTotalGB * 100 : 0, fallbackStats.VmCount);
+            _logger.LogInformation("Cluster {ClusterMoId} resource summary - Storage: {StorageTotalGB}GB ({StorageUsedGB}GB used, {StorageUsagePercent:F1}%), VMs: {VmCount}", 
+                clusterMoId, fallbackStats.StorageTotalGB, fallbackStats.StorageUsedGB, fallbackStats.StorageTotalGB > 0 ? (double)fallbackStats.StorageUsedGB / fallbackStats.StorageTotalGB * 100 : 0, fallbackStats.VmCount);
             
             return fallbackStats;
         }
@@ -1357,17 +1355,17 @@ public class VSphereRestAPIService : IVSphereRestAPIService
     {
         var stats = new ClusterResourceStats
         {
-            CpuTotalMhz = hostCount * 24000, // 24 GHz per host
-            CpuUsedMhz = (long)(hostCount * 24000 * 0.35), // 35% usage
-            MemoryTotalMB = hostCount * 131072, // 128GB per host
-            MemoryUsedMB = (long)(hostCount * 131072 * 0.55), // 55% usage
+            CpuTotalMhz = 0, // No CPU data available
+            CpuUsedMhz = 0, // No CPU data available
+            MemoryTotalMB = 0, // No memory data available
+            MemoryUsedMB = 0, // No memory data available
             StorageTotalGB = hostCount * 2000, // 2TB per host
             StorageUsedGB = (long)(hostCount * 2000 * 0.4), // 40% usage
             VmCount = Math.Max(5, hostCount * 4) // Estimate VMs
         };
         
-        _logger.LogInformation("Using fallback resource data - CPU: {CpuTotalMhz}MHz ({CpuUsedMhz}MHz used), Memory: {MemoryTotalMB}MB ({MemoryUsedMB}MB used), Storage: {StorageTotalGB}GB ({StorageUsedGB}GB used), VMs: {VmCount}", 
-            stats.CpuTotalMhz, stats.CpuUsedMhz, stats.MemoryTotalMB, stats.MemoryUsedMB, stats.StorageTotalGB, stats.StorageUsedGB, stats.VmCount);
+        _logger.LogInformation("Using fallback resource data - Storage: {StorageTotalGB}GB ({StorageUsedGB}GB used), VMs: {VmCount}", 
+            stats.StorageTotalGB, stats.StorageUsedGB, stats.VmCount);
         
         return stats;
     }
