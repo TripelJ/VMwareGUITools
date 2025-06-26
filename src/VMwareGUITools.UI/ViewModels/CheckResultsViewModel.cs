@@ -123,11 +123,15 @@ public partial class CheckResultsViewModel : ObservableObject
                 .Take(1000) // Limit to prevent performance issues
                 .ToListAsync();
 
-            CheckResults.Clear();
-            foreach (var result in results)
+            // Update UI on the main thread
+            Application.Current.Dispatcher.Invoke(() =>
             {
-                CheckResults.Add(result);
-            }
+                CheckResults.Clear();
+                foreach (var result in results)
+                {
+                    CheckResults.Add(result);
+                }
+            });
 
             await GroupCheckResultsAsync();
 
@@ -270,33 +274,50 @@ public partial class CheckResultsViewModel : ObservableObject
     /// </summary>
     private async Task GroupCheckResultsAsync()
     {
-        await Task.Run(() =>
+        try
         {
-            var groups = CheckResults
-                .GroupBy(cr => new { HostName = cr.Host.Name, CategoryName = cr.CheckDefinition.Category?.Name })
-                .Select(g => new CheckResultGroup
-                {
-                    HostName = g.Key.HostName ?? "Unknown Host",
-                    CategoryName = g.Key.CategoryName ?? "Unknown Category",
-                    Results = new ObservableCollection<CheckResult>(g.OrderByDescending(r => r.ExecutedAt)),
-                    PassedCount = g.Count(r => r.Status == CheckStatus.Passed),
-                    FailedCount = g.Count(r => r.Status == CheckStatus.Failed),
-                    WarningCount = g.Count(r => r.Status == CheckStatus.Warning),
-                    LastExecuted = g.Max(r => r.ExecutedAt)
-                })
-                .OrderBy(g => g.HostName)
-                .ThenBy(g => g.CategoryName)
-                .ToList();
+            // Create a thread-safe copy of the CheckResults collection
+            var checkResultsCopy = CheckResults.ToList();
+            
+            await Task.Run(() =>
+            {
+                var groups = checkResultsCopy
+                    .Where(cr => cr.Host != null && cr.CheckDefinition != null) // Add null checks
+                    .GroupBy(cr => new { HostName = cr.Host.Name, CategoryName = cr.CheckDefinition.Category?.Name })
+                    .Select(g => new CheckResultGroup
+                    {
+                        HostName = g.Key.HostName ?? "Unknown Host",
+                        CategoryName = g.Key.CategoryName ?? "Unknown Category",
+                        Results = new ObservableCollection<CheckResult>(g.OrderByDescending(r => r.ExecutedAt)),
+                        PassedCount = g.Count(r => r.Status == CheckStatus.Passed),
+                        FailedCount = g.Count(r => r.Status == CheckStatus.Failed),
+                        WarningCount = g.Count(r => r.Status == CheckStatus.Warning),
+                        LastExecuted = g.Any() ? g.Max(r => r.ExecutedAt) : DateTime.MinValue
+                    })
+                    .OrderBy(g => g.HostName)
+                    .ThenBy(g => g.CategoryName)
+                    .ToList();
 
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    GroupedResults.Clear();
+                    foreach (var group in groups)
+                    {
+                        GroupedResults.Add(group);
+                    }
+                });
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to group check results");
+            
+            // Ensure UI is updated even on error
             Application.Current.Dispatcher.Invoke(() =>
             {
                 GroupedResults.Clear();
-                foreach (var group in groups)
-                {
-                    GroupedResults.Add(group);
-                }
             });
-        });
+        }
     }
 
     /// <summary>
