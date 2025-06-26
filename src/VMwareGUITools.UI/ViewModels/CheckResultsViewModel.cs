@@ -86,9 +86,9 @@ public partial class CheckResultsViewModel : ObservableObject
             IsLoading = true;
             StatusMessage = "Loading check results...";
 
-            _selectedVCenter = vCenter;
-            _selectedHostMoId = hostMoId ?? string.Empty;
-            _selectedClusterName = clusterName ?? string.Empty;
+            SelectedVCenter = vCenter;
+            SelectedHostMoId = hostMoId ?? string.Empty;
+            SelectedClusterName = clusterName ?? string.Empty;
 
             var query = _dbContext.CheckResults
                 .Include(cr => cr.CheckDefinition)
@@ -251,7 +251,7 @@ public partial class CheckResultsViewModel : ObservableObject
     [RelayCommand]
     private async Task RefreshAsync()
     {
-        await LoadCheckResultsAsync(SelectedVCenter, _selectedHostMoId, _selectedClusterName);
+        await LoadCheckResultsAsync(SelectedVCenter, SelectedHostMoId, SelectedClusterName);
     }
 
     /// <summary>
@@ -273,11 +273,11 @@ public partial class CheckResultsViewModel : ObservableObject
         await Task.Run(() =>
         {
             var groups = CheckResults
-                .GroupBy(cr => new { cr.Host.Name, cr.CheckDefinition.Category?.Name })
+                .GroupBy(cr => new { HostName = cr.Host.Name, CategoryName = cr.CheckDefinition.Category?.Name })
                 .Select(g => new CheckResultGroup
                 {
-                    HostName = g.Key.Name ?? "Unknown Host",
-                    CategoryName = g.Key.Name ?? "Unknown Category",
+                    HostName = g.Key.HostName ?? "Unknown Host",
+                    CategoryName = g.Key.CategoryName ?? "Unknown Category",
                     Results = new ObservableCollection<CheckResult>(g.OrderByDescending(r => r.ExecutedAt)),
                     PassedCount = g.Count(r => r.Status == CheckStatus.Passed),
                     FailedCount = g.Count(r => r.Status == CheckStatus.Failed),
