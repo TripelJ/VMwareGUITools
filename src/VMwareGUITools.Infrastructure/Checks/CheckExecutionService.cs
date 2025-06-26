@@ -4,7 +4,7 @@ using Microsoft.Extensions.Options;
 using System.Collections.Concurrent;
 using VMwareGUITools.Core.Models;
 using VMwareGUITools.Data;
-using VMwareGUITools.Infrastructure.PowerShell;
+
 using VMwareGUITools.Infrastructure.Security;
 
 namespace VMwareGUITools.Infrastructure.Checks;
@@ -15,7 +15,6 @@ namespace VMwareGUITools.Infrastructure.Checks;
 public class CheckExecutionService : ICheckExecutionService
 {
     private readonly ILogger<CheckExecutionService> _logger;
-    private readonly IPowerShellService _powerShellService;
     private readonly ICredentialService _credentialService;
     private readonly VMwareDbContext _dbContext;
     private readonly CheckExecutionOptions _options;
@@ -23,14 +22,12 @@ public class CheckExecutionService : ICheckExecutionService
 
     public CheckExecutionService(
         ILogger<CheckExecutionService> logger,
-        IPowerShellService powerShellService,
         ICredentialService credentialService,
         VMwareDbContext dbContext,
         IOptions<CheckExecutionOptions> options,
         IEnumerable<ICheckEngine> checkEngines)
     {
         _logger = logger;
-        _powerShellService = powerShellService;
         _credentialService = credentialService;
         _dbContext = dbContext;
         _options = options.Value;
