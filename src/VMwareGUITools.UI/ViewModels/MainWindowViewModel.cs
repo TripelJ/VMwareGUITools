@@ -423,37 +423,97 @@ public partial class MainWindowViewModel : ObservableObject
                 await _context.SaveChangesAsync();
             }
 
-            // Get all hosts for this vCenter
-            var hosts = await _context.Hosts
-                .Where(h => h.VCenterId == SelectedVCenter.Id)
-                .ToListAsync();
-
-            if (!hosts.Any())
+            // Use the same REST API discovery method that the Infrastructure tab uses
+            VSphereSession? session = null;
+            var allHosts = new List<HostInfo>();
+            
+            try
             {
-                StatusMessage = "No hosts found for the selected vCenter";
-                return;
+                // Establish REST API session (same as Infrastructure tab)
+                session = await _restApiService.ConnectAsync(SelectedVCenter);
+                
+                // Discover clusters first
+                var clusters = await _restApiService.DiscoverClustersAsync(session);
+                
+                // Get hosts from each cluster (same approach as Infrastructure tab)
+                foreach (var cluster in clusters)
+                {
+                    try
+                    {
+                        var hostsInCluster = await _restApiService.DiscoverHostsAsync(session, cluster.MoId);
+                        allHosts.AddRange(hostsInCluster);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to discover hosts in cluster {ClusterName}", cluster.Name);
+                    }
+                }
+                
+                if (!allHosts.Any())
+                {
+                    StatusMessage = "No hosts found for the selected vCenter";
+                    return;
+                }
+
+                _logger.LogInformation("Discovered {HostCount} hosts for iSCSI checks", allHosts.Count);
+
+                var checkExecutionService = _serviceProvider.GetRequiredService<ICheckExecutionService>();
+                var results = new List<CheckResult>();
+
+                // Execute the check on each discovered host
+                // Convert HostInfo to Host entities for check execution
+                foreach (var hostInfo in allHosts)
+                {
+                    try
+                    {
+                        // Create a temporary Host entity for check execution
+                        var tempHost = new Host
+                        {
+                            Name = hostInfo.Name,
+                            MoId = hostInfo.MoId,
+                            IpAddress = hostInfo.IpAddress,
+                            VCenterId = SelectedVCenter.Id,
+                            HostType = hostInfo.Type,
+                            ClusterName = "Unknown", // We don't have cluster info directly in HostInfo
+                            ClusterId = 0, // Temporary - not stored in DB
+                            Enabled = true
+                        };
+
+                        var result = await checkExecutionService.ExecuteCheckAsync(tempHost, iSCSICheck, SelectedVCenter);
+                        results.Add(result);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to execute iSCSI check on host {HostName}", hostInfo.Name);
+                    }
+                }
+
+                // Load the results into the check results view model
+                await CheckResultsViewModel.LoadCheckResultsAsync(SelectedVCenter);
+
+                var passedCount = results.Count(r => r.Status == CheckStatus.Passed);
+                var failedCount = results.Count(r => r.Status == CheckStatus.Failed);
+
+                StatusMessage = $"iSCSI checks completed: {passedCount} passed, {failedCount} failed on {allHosts.Count} hosts";
+
+                _logger.LogInformation("iSCSI checks completed for {HostCount} hosts: {PassedCount} passed, {FailedCount} failed",
+                    allHosts.Count, passedCount, failedCount);
             }
-
-            var checkExecutionService = _serviceProvider.GetRequiredService<ICheckExecutionService>();
-            var results = new List<CheckResult>();
-
-            // Execute the check on each host
-            foreach (var host in hosts)
+            finally
             {
-                var result = await checkExecutionService.ExecuteCheckAsync(host, iSCSICheck, SelectedVCenter);
-                results.Add(result);
+                // Clean up the session
+                if (session != null)
+                {
+                    try
+                    {
+                        await _restApiService.DisconnectAsync(session);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to disconnect REST API session");
+                    }
+                }
             }
-
-            // Load the results into the check results view model
-            await CheckResultsViewModel.LoadCheckResultsAsync(SelectedVCenter);
-
-            var passedCount = results.Count(r => r.Status == CheckStatus.Passed);
-            var failedCount = results.Count(r => r.Status == CheckStatus.Failed);
-
-            StatusMessage = $"iSCSI checks completed: {passedCount} passed, {failedCount} failed on {hosts.Count} hosts";
-
-            _logger.LogInformation("iSCSI checks completed for {HostCount} hosts: {PassedCount} passed, {FailedCount} failed",
-                hosts.Count, passedCount, failedCount);
         }
         catch (Exception ex)
         {
@@ -580,8 +640,6 @@ public partial class MainWindowViewModel : ObservableObject
     {
         await LoadVCentersAsync();
     }
-
-
 
     /// <summary>
     /// Monitor connections periodically to update status
