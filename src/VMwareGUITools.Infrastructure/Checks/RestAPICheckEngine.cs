@@ -181,7 +181,7 @@ public class RestAPICheckEngine : ICheckEngine
                         credentials?.Password ?? string.Empty, 
                         cancellationToken);
 
-                    if (!connectionResult.IsSuccess)
+                    if (!connectionResult.IsSuccessful)
                     {
                         warnings.Add($"Connection test failed: {connectionResult.ErrorMessage}");
                     }
