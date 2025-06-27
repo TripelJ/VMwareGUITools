@@ -134,6 +134,9 @@ public partial class App : Application
         services.AddHttpClient();
         services.AddScoped<IVSphereRestAPIService, VSphereRestAPIService>();
         
+        // vSphere SDK Services - For advanced operations like iSCSI path monitoring
+        services.AddScoped<IVSphereSDKService, VSphereSDKService>();
+        
         // Infrastructure Services
         services.AddSingleton<ICredentialService, CredentialService>();
         services.AddScoped<IVMwareConnectionService, RestVMwareConnectionService>();

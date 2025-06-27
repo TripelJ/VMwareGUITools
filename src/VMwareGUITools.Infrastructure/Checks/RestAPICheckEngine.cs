@@ -7,12 +7,13 @@ using VMwareGUITools.Infrastructure.VMware;
 namespace VMwareGUITools.Infrastructure.Checks;
 
 /// <summary>
-/// Check engine for executing REST API-based checks against vSphere
+/// Check engine for executing REST API-based checks against vSphere with SDK integration for specialized checks
 /// </summary>
 public class RestAPICheckEngine : ICheckEngine
 {
     private readonly ILogger<RestAPICheckEngine> _logger;
     private readonly IVSphereRestAPIService _vsphereService;
+    private readonly IVSphereSDKService _vsphereSDKService;
     private readonly ICredentialService _credentialService;
 
     public string ExecutionType => "vSphereRestAPI";
@@ -20,10 +21,12 @@ public class RestAPICheckEngine : ICheckEngine
     public RestAPICheckEngine(
         ILogger<RestAPICheckEngine> logger,
         IVSphereRestAPIService vsphereService,
+        IVSphereSDKService vsphereSDKService,
         ICredentialService credentialService)
     {
         _logger = logger;
         _vsphereService = vsphereService;
+        _vsphereSDKService = vsphereSDKService;
         _credentialService = credentialService;
     }
 
@@ -59,23 +62,42 @@ public class RestAPICheckEngine : ICheckEngine
 
                 // Execute the check based on the check type or script content
                 var checkType = DetermineCheckType(checkDefinition);
-                var apiResult = await _vsphereService.ExecuteCheckAsync(session, host.MoId, checkType, parameters, cancellationToken);
-
-                // Process results
-                result.IsSuccess = apiResult.IsSuccess;
-                result.ExecutionTime = stopwatch.Elapsed;
-                result.Output = apiResult.Data;
-                result.RawData = JsonSerializer.Serialize(apiResult);
-
-                if (!apiResult.IsSuccess)
+                
+                // Use vSphere SDK for iSCSI path checks for better accuracy
+                if (IsISCSIPathCheck(checkDefinition))
                 {
-                    result.ErrorMessage = apiResult.ErrorMessage ?? "Check execution failed";
+                    var sdkResult = await ExecuteISCSICheckWithSDK(vCenter, host.MoId, checkDefinition, parameters, cancellationToken);
+                    
+                    result.IsSuccess = sdkResult.IsSuccess;
+                    result.ExecutionTime = stopwatch.Elapsed;
+                    result.Output = sdkResult.Output;
+                    result.RawData = sdkResult.RawData;
+                    
+                    if (!sdkResult.IsSuccess)
+                    {
+                        result.ErrorMessage = sdkResult.ErrorMessage;
+                    }
                 }
-
-                // Evaluate thresholds if defined
-                if (checkDefinition.HasThreshold && result.IsSuccess)
+                else
                 {
-                    result = EvaluateThresholds(result, checkDefinition, apiResult);
+                    var apiResult = await _vsphereService.ExecuteCheckAsync(session, host.MoId, checkType, parameters, cancellationToken);
+
+                    // Process results
+                    result.IsSuccess = apiResult.IsSuccess;
+                    result.ExecutionTime = stopwatch.Elapsed;
+                    result.Output = apiResult.Data;
+                    result.RawData = JsonSerializer.Serialize(apiResult);
+
+                    if (!apiResult.IsSuccess)
+                    {
+                        result.ErrorMessage = apiResult.ErrorMessage ?? "Check execution failed";
+                    }
+
+                    // Evaluate thresholds if defined
+                    if (checkDefinition.HasThreshold && result.IsSuccess)
+                    {
+                        result = EvaluateThresholds(result, checkDefinition, apiResult);
+                    }
                 }
 
                 _logger.LogDebug("REST API check '{CheckName}' on host '{HostName}' completed in {ElapsedMs}ms with status: {Success}",
@@ -353,6 +375,150 @@ public class RestAPICheckEngine : ICheckEngine
             result.Warnings ??= new List<string>();
             result.Warnings.Add($"Threshold evaluation failed: {ex.Message}");
             return result;
+        }
+    }
+
+    /// <summary>
+    /// Determines if the check definition is for iSCSI path monitoring
+    /// </summary>
+    private static bool IsISCSIPathCheck(CheckDefinition checkDefinition)
+    {
+        if (string.IsNullOrWhiteSpace(checkDefinition.Name))
+            return false;
+
+        var name = checkDefinition.Name.ToLower();
+        return name.Contains("iscsi") && name.Contains("dead") && name.Contains("path");
+    }
+
+    /// <summary>
+    /// Executes iSCSI path check using the vSphere SDK for accurate results
+    /// </summary>
+    private async Task<CheckEngineResult> ExecuteISCSICheckWithSDK(VCenter vCenter, string hostMoId, CheckDefinition checkDefinition, Dictionary<string, object> parameters, CancellationToken cancellationToken)
+    {
+        VimClientConnection? sdkConnection = null;
+        try
+        {
+            _logger.LogInformation("Executing iSCSI dead path check using vSphere SDK for host {HostMoId}", hostMoId);
+
+            // Connect using vSphere SDK
+            sdkConnection = await _vsphereSDKService.ConnectAsync(vCenter, cancellationToken);
+
+            // Get iSCSI path status
+            var iscsiResult = await _vsphereSDKService.GetISCSIPathStatusAsync(sdkConnection, hostMoId, cancellationToken);
+
+            // Parse threshold parameter
+            var maxDeadPaths = 0;
+            if (parameters.TryGetValue("maxDeadPaths", out var maxDeadValue))
+            {
+                int.TryParse(maxDeadValue?.ToString(), out maxDeadPaths);
+            }
+
+            // Determine success based on dead path count vs threshold
+            var isSuccess = iscsiResult.IsSuccess && (iscsiResult.DeadPaths <= maxDeadPaths);
+            var errorMessage = string.Empty;
+
+            if (!iscsiResult.IsSuccess)
+            {
+                errorMessage = iscsiResult.ErrorMessage ?? "iSCSI path check failed";
+            }
+            else if (iscsiResult.DeadPaths > maxDeadPaths)
+            {
+                errorMessage = $"Found {iscsiResult.DeadPaths} dead paths, exceeding threshold of {maxDeadPaths}";
+                isSuccess = false;
+            }
+
+            // Build detailed output
+            var outputBuilder = new System.Text.StringBuilder();
+            outputBuilder.AppendLine($"iSCSI Path Check Results for Host: {iscsiResult.HostName}");
+            outputBuilder.AppendLine($"Check Time: {iscsiResult.CheckedAt:yyyy-MM-dd HH:mm:ss} UTC");
+            outputBuilder.AppendLine($"Host MORef ID: {iscsiResult.HostMoId}");
+            outputBuilder.AppendLine();
+            
+            outputBuilder.AppendLine("=== Path Summary ===");
+            outputBuilder.AppendLine($"Total iSCSI Adapters: {iscsiResult.ISCSIAdapters.Count}");
+            outputBuilder.AppendLine($"Total Paths: {iscsiResult.TotalPaths}");
+            outputBuilder.AppendLine($"Active Paths: {iscsiResult.ActivePaths}");
+            outputBuilder.AppendLine($"Dead Paths: {iscsiResult.DeadPaths}");
+            outputBuilder.AppendLine($"Standby Paths: {iscsiResult.StandbyPaths}");
+            outputBuilder.AppendLine($"Threshold (Max Dead Paths): {maxDeadPaths}");
+            outputBuilder.AppendLine($"Status: {(isSuccess ? "PASS" : "FAIL")}");
+            outputBuilder.AppendLine();
+
+            if (iscsiResult.ISCSIAdapters.Any())
+            {
+                outputBuilder.AppendLine("=== iSCSI Adapter Details ===");
+                foreach (var adapter in iscsiResult.ISCSIAdapters)
+                {
+                    outputBuilder.AppendLine($"Adapter: {adapter.AdapterName}");
+                    outputBuilder.AppendLine($"  Type: {adapter.HbaType}");
+                    outputBuilder.AppendLine($"  Online: {adapter.IsOnline}");
+                    outputBuilder.AppendLine($"  Portal Addresses: {string.Join(", ", adapter.PortalAddresses)}");
+                    outputBuilder.AppendLine($"  Path Count: {adapter.Paths.Count}");
+                    outputBuilder.AppendLine();
+                }
+
+                outputBuilder.AppendLine("=== Path Details ===");
+                foreach (var path in iscsiResult.PathDetails.OrderBy(p => p.Adapter).ThenBy(p => p.PathName))
+                {
+                    var status = path.IsActive ? "ACTIVE" : path.PathState.ToUpper();
+                    outputBuilder.AppendLine($"{path.PathName} -> {status} ({path.Transport})");
+                    if (!string.IsNullOrEmpty(path.Target))
+                    {
+                        outputBuilder.AppendLine($"  Target: {path.Target}, LUN: {path.Lun}");
+                    }
+                }
+            }
+            else
+            {
+                outputBuilder.AppendLine("No iSCSI adapters found on this host.");
+            }
+
+            if (!string.IsNullOrEmpty(errorMessage))
+            {
+                outputBuilder.AppendLine();
+                outputBuilder.AppendLine($"Error: {errorMessage}");
+            }
+
+            // Build raw data for detailed analysis
+            var rawData = JsonSerializer.Serialize(iscsiResult, new JsonSerializerOptions 
+            { 
+                WriteIndented = true 
+            });
+
+            return new CheckEngineResult
+            {
+                IsSuccess = isSuccess,
+                Output = outputBuilder.ToString(),
+                ErrorMessage = errorMessage,
+                RawData = rawData,
+                ExecutionTime = TimeSpan.FromMilliseconds(100) // Will be overwritten by caller
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to execute iSCSI check with vSphere SDK for host {HostMoId}", hostMoId);
+            return new CheckEngineResult
+            {
+                IsSuccess = false,
+                ErrorMessage = $"iSCSI SDK check failed: {ex.Message}",
+                Output = $"Failed to execute iSCSI dead path check using vSphere SDK.\nError: {ex.Message}\n\nThis indicates a problem with the vSphere SDK connection or host access.",
+                ExecutionTime = TimeSpan.FromMilliseconds(100)
+            };
+        }
+        finally
+        {
+            // Clean up SDK connection
+            if (sdkConnection != null)
+            {
+                try
+                {
+                    await _vsphereSDKService.DisconnectAsync(sdkConnection, cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Error disconnecting vSphere SDK session");
+                }
+            }
         }
     }
 } 
