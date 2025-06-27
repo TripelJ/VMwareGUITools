@@ -7,13 +7,12 @@ using VMwareGUITools.Infrastructure.VMware;
 namespace VMwareGUITools.Infrastructure.Checks;
 
 /// <summary>
-/// Check engine for executing REST API-based checks against vSphere with SDK integration for specialized checks
+/// Check engine for executing REST API-based checks against vSphere
 /// </summary>
 public class RestAPICheckEngine : ICheckEngine
 {
     private readonly ILogger<RestAPICheckEngine> _logger;
     private readonly IVSphereRestAPIService _vsphereService;
-    private readonly IVSphereSDKService _vsphereSDKService;
     private readonly ICredentialService _credentialService;
 
     public string ExecutionType => "vSphereRestAPI";
@@ -21,12 +20,10 @@ public class RestAPICheckEngine : ICheckEngine
     public RestAPICheckEngine(
         ILogger<RestAPICheckEngine> logger,
         IVSphereRestAPIService vsphereService,
-        IVSphereSDKService vsphereSDKService,
         ICredentialService credentialService)
     {
         _logger = logger;
         _vsphereService = vsphereService;
-        _vsphereSDKService = vsphereSDKService;
         _credentialService = credentialService;
     }
 
@@ -63,41 +60,24 @@ public class RestAPICheckEngine : ICheckEngine
                 // Execute the check based on the check type or script content
                 var checkType = DetermineCheckType(checkDefinition);
                 
-                // Use vSphere SDK for iSCSI path checks for better accuracy
-                if (IsISCSIPathCheck(checkDefinition))
+                // Execute check using REST API
+                var apiResult = await _vsphereService.ExecuteCheckAsync(session, host.MoId, checkType, parameters, cancellationToken);
+
+                // Process results
+                result.IsSuccess = apiResult.IsSuccess;
+                result.ExecutionTime = stopwatch.Elapsed;
+                result.Output = apiResult.Data;
+                result.RawData = JsonSerializer.Serialize(apiResult);
+
+                if (!apiResult.IsSuccess)
                 {
-                    var sdkResult = await ExecuteISCSICheckWithSDK(vCenter, host.MoId, checkDefinition, parameters, cancellationToken);
-                    
-                    result.IsSuccess = sdkResult.IsSuccess;
-                    result.ExecutionTime = stopwatch.Elapsed;
-                    result.Output = sdkResult.Output;
-                    result.RawData = sdkResult.RawData;
-                    
-                    if (!sdkResult.IsSuccess)
-                    {
-                        result.ErrorMessage = sdkResult.ErrorMessage;
-                    }
+                    result.ErrorMessage = apiResult.ErrorMessage ?? "Check execution failed";
                 }
-                else
+
+                // Evaluate thresholds if defined
+                if (checkDefinition.HasThreshold && result.IsSuccess)
                 {
-                    var apiResult = await _vsphereService.ExecuteCheckAsync(session, host.MoId, checkType, parameters, cancellationToken);
-
-                    // Process results
-                    result.IsSuccess = apiResult.IsSuccess;
-                    result.ExecutionTime = stopwatch.Elapsed;
-                    result.Output = apiResult.Data;
-                    result.RawData = JsonSerializer.Serialize(apiResult);
-
-                    if (!apiResult.IsSuccess)
-                    {
-                        result.ErrorMessage = apiResult.ErrorMessage ?? "Check execution failed";
-                    }
-
-                    // Evaluate thresholds if defined
-                    if (checkDefinition.HasThreshold && result.IsSuccess)
-                    {
-                        result = EvaluateThresholds(result, checkDefinition, apiResult);
-                    }
+                    result = EvaluateThresholds(result, checkDefinition, apiResult);
                 }
 
                 _logger.LogDebug("REST API check '{CheckName}' on host '{HostName}' completed in {ElapsedMs}ms with status: {Success}",
@@ -201,34 +181,36 @@ public class RestAPICheckEngine : ICheckEngine
                         credentials?.Password ?? string.Empty, 
                         cancellationToken);
 
-                    if (!connectionResult.IsSuccessful)
+                    if (!connectionResult.IsSuccess)
                     {
-                        warnings.Add($"vCenter connection test failed: {connectionResult.ErrorMessage}");
+                        warnings.Add($"Connection test failed: {connectionResult.ErrorMessage}");
                     }
                 }
             }
             catch (Exception ex)
             {
-                warnings.Add($"Connection validation failed: {ex.Message}");
+                warnings.Add($"Connection test error: {ex.Message}");
             }
+
+            var isValid = warnings.Count == 0;
+            var message = isValid ? "Check validation passed" : string.Join("; ", warnings);
 
             return new CheckEngineResult
             {
-                IsSuccess = warnings.Count == 0,
-                Output = warnings.Count == 0 ? "Validation successful" : "Validation completed with warnings",
-                Warnings = warnings,
-                ExecutionTime = TimeSpan.FromSeconds(1) // Minimal time for validation
+                IsSuccess = isValid,
+                Output = message,
+                Warnings = warnings.Count > 0 ? warnings : null,
+                ExecutionTime = TimeSpan.FromMilliseconds(50)
             };
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "REST API check validation failed for '{CheckName}'", checkDefinition.Name);
-
+            _logger.LogError(ex, "Validation failed for check '{CheckName}'", checkDefinition.Name);
             return new CheckEngineResult
             {
                 IsSuccess = false,
-                ErrorMessage = ex.Message,
-                ExecutionTime = TimeSpan.FromSeconds(1)
+                ErrorMessage = $"Validation error: {ex.Message}",
+                ExecutionTime = TimeSpan.FromMilliseconds(50)
             };
         }
     }
@@ -237,13 +219,11 @@ public class RestAPICheckEngine : ICheckEngine
     {
         try
         {
-            // REST API is always available as long as we can make HTTP requests
-            // No external dependencies like PowerShell modules
+            // Check if the REST API service is available
             return await Task.FromResult(true);
         }
-        catch (Exception ex)
+        catch
         {
-            _logger.LogError(ex, "Failed to check REST API availability");
             return false;
         }
     }
@@ -252,75 +232,74 @@ public class RestAPICheckEngine : ICheckEngine
     {
         var parameters = new Dictionary<string, object>();
 
-        // Parse JSON parameters
-        if (!string.IsNullOrWhiteSpace(checkDefinition.Parameters))
+        try
         {
-            try
+            // Parse JSON parameters if available
+            if (!string.IsNullOrWhiteSpace(checkDefinition.Parameters))
             {
-                var jsonParams = JsonSerializer.Deserialize<Dictionary<string, object>>(checkDefinition.Parameters);
-                if (jsonParams != null)
+                var jsonDoc = JsonDocument.Parse(checkDefinition.Parameters);
+                foreach (var property in jsonDoc.RootElement.EnumerateObject())
                 {
-                    foreach (var param in jsonParams)
+                    parameters[property.Name] = property.Value.ValueKind switch
                     {
-                        parameters[param.Key] = param.Value;
-                    }
+                        JsonValueKind.String => property.Value.GetString() ?? string.Empty,
+                        JsonValueKind.Number => property.Value.GetDouble(),
+                        JsonValueKind.True => true,
+                        JsonValueKind.False => false,
+                        _ => property.Value.ToString()
+                    };
                 }
             }
-            catch (Exception ex)
+
+            // Add default parameters based on check definition
+            if (!parameters.ContainsKey("timeout"))
             {
-                _logger.LogWarning(ex, "Failed to parse check parameters for '{CheckName}'", checkDefinition.Name);
+                parameters["timeout"] = checkDefinition.TimeoutSeconds;
             }
+
+            return parameters;
         }
-
-        // Add default parameters
-        parameters["timeout"] = checkDefinition.TimeoutSeconds;
-        parameters["category"] = checkDefinition.Category?.Name ?? "Unknown";
-        parameters["severity"] = checkDefinition.DefaultSeverity.ToString();
-
-        return parameters;
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to parse check parameters, using defaults");
+            return new Dictionary<string, object> { ["timeout"] = checkDefinition.TimeoutSeconds };
+        }
     }
 
     private string DetermineCheckType(CheckDefinition checkDefinition)
     {
-        // Map check definitions to REST API check types
-        // This could be enhanced to parse the script content or use a mapping table
+        var name = checkDefinition.Name?.ToLower() ?? string.Empty;
+        var script = checkDefinition.Script?.ToLower() ?? string.Empty;
 
-        // Check by name first for specific well-known checks
-        if (!string.IsNullOrWhiteSpace(checkDefinition.Name))
+        // Check for specific patterns in the name or script
+        if (name.Contains("storage") || script.Contains("datastore"))
         {
-            var name = checkDefinition.Name.ToLower();
-            
-            if (name.Contains("iscsi") && name.Contains("dead") && name.Contains("path"))
-                return "host-storage";
-            
-            if (name.Contains("multipath") || name.Contains("storage path"))
-                return "host-storage";
-            
-            if (name.Contains("ssh") && name.Contains("service"))
-                return "host-security";
+            return "storage-check";
         }
 
-        if (!string.IsNullOrWhiteSpace(checkDefinition.Script))
+        if (name.Contains("network") || script.Contains("network"))
         {
-            var script = checkDefinition.Script.ToLower();
+            return "network-check";
+        }
 
-            if (script.Contains("cpu") || script.Contains("memory") || script.Contains("performance"))
-                return "host-performance";
-            
-            if (script.Contains("hardware") || script.Contains("bios") || script.Contains("firmware"))
-                return "host-hardware";
-            
-            if (script.Contains("network") || script.Contains("vnic") || script.Contains("vmkernel"))
-                return "host-networking";
-            
-            if (script.Contains("iscsi") || script.Contains("storage") || script.Contains("datastore") || script.Contains("vmfs"))
-                return "host-storage";
-            
-            if (script.Contains("security") || script.Contains("firewall") || script.Contains("certificate") || script.Contains("ssh"))
-                return "host-security";
-            
-            if (script.Contains("configuration") || script.Contains("settings") || script.Contains("policy"))
-                return "host-configuration";
+        if (name.Contains("performance") || name.Contains("cpu") || name.Contains("memory"))
+        {
+            return "performance-check";
+        }
+
+        if (name.Contains("iscsi") || script.Contains("iscsi"))
+        {
+            return "iscsi-path-check";
+        }
+
+        if (name.Contains("vm") || script.Contains("virtual"))
+        {
+            return "vm-check";
+        }
+
+        if (name.Contains("service") || script.Contains("service"))
+        {
+            return "service-check";
         }
 
         // Default to configuration check
@@ -375,150 +354,6 @@ public class RestAPICheckEngine : ICheckEngine
             result.Warnings ??= new List<string>();
             result.Warnings.Add($"Threshold evaluation failed: {ex.Message}");
             return result;
-        }
-    }
-
-    /// <summary>
-    /// Determines if the check definition is for iSCSI path monitoring
-    /// </summary>
-    private static bool IsISCSIPathCheck(CheckDefinition checkDefinition)
-    {
-        if (string.IsNullOrWhiteSpace(checkDefinition.Name))
-            return false;
-
-        var name = checkDefinition.Name.ToLower();
-        return name.Contains("iscsi") && name.Contains("dead") && name.Contains("path");
-    }
-
-    /// <summary>
-    /// Executes iSCSI path check using the vSphere SDK for accurate results
-    /// </summary>
-    private async Task<CheckEngineResult> ExecuteISCSICheckWithSDK(VCenter vCenter, string hostMoId, CheckDefinition checkDefinition, Dictionary<string, object> parameters, CancellationToken cancellationToken)
-    {
-        VimClientConnection? sdkConnection = null;
-        try
-        {
-            _logger.LogInformation("Executing iSCSI dead path check using vSphere SDK for host {HostMoId}", hostMoId);
-
-            // Connect using vSphere SDK
-            sdkConnection = await _vsphereSDKService.ConnectAsync(vCenter, cancellationToken);
-
-            // Get iSCSI path status
-            var iscsiResult = await _vsphereSDKService.GetISCSIPathStatusAsync(sdkConnection, hostMoId, cancellationToken);
-
-            // Parse threshold parameter
-            var maxDeadPaths = 0;
-            if (parameters.TryGetValue("maxDeadPaths", out var maxDeadValue))
-            {
-                int.TryParse(maxDeadValue?.ToString(), out maxDeadPaths);
-            }
-
-            // Determine success based on dead path count vs threshold
-            var isSuccess = iscsiResult.IsSuccess && (iscsiResult.DeadPaths <= maxDeadPaths);
-            var errorMessage = string.Empty;
-
-            if (!iscsiResult.IsSuccess)
-            {
-                errorMessage = iscsiResult.ErrorMessage ?? "iSCSI path check failed";
-            }
-            else if (iscsiResult.DeadPaths > maxDeadPaths)
-            {
-                errorMessage = $"Found {iscsiResult.DeadPaths} dead paths, exceeding threshold of {maxDeadPaths}";
-                isSuccess = false;
-            }
-
-            // Build detailed output
-            var outputBuilder = new System.Text.StringBuilder();
-            outputBuilder.AppendLine($"iSCSI Path Check Results for Host: {iscsiResult.HostName}");
-            outputBuilder.AppendLine($"Check Time: {iscsiResult.CheckedAt:yyyy-MM-dd HH:mm:ss} UTC");
-            outputBuilder.AppendLine($"Host MORef ID: {iscsiResult.HostMoId}");
-            outputBuilder.AppendLine();
-            
-            outputBuilder.AppendLine("=== Path Summary ===");
-            outputBuilder.AppendLine($"Total iSCSI Adapters: {iscsiResult.ISCSIAdapters.Count}");
-            outputBuilder.AppendLine($"Total Paths: {iscsiResult.TotalPaths}");
-            outputBuilder.AppendLine($"Active Paths: {iscsiResult.ActivePaths}");
-            outputBuilder.AppendLine($"Dead Paths: {iscsiResult.DeadPaths}");
-            outputBuilder.AppendLine($"Standby Paths: {iscsiResult.StandbyPaths}");
-            outputBuilder.AppendLine($"Threshold (Max Dead Paths): {maxDeadPaths}");
-            outputBuilder.AppendLine($"Status: {(isSuccess ? "PASS" : "FAIL")}");
-            outputBuilder.AppendLine();
-
-            if (iscsiResult.ISCSIAdapters.Any())
-            {
-                outputBuilder.AppendLine("=== iSCSI Adapter Details ===");
-                foreach (var adapter in iscsiResult.ISCSIAdapters)
-                {
-                    outputBuilder.AppendLine($"Adapter: {adapter.AdapterName}");
-                    outputBuilder.AppendLine($"  Type: {adapter.HbaType}");
-                    outputBuilder.AppendLine($"  Online: {adapter.IsOnline}");
-                    outputBuilder.AppendLine($"  Portal Addresses: {string.Join(", ", adapter.PortalAddresses)}");
-                    outputBuilder.AppendLine($"  Path Count: {adapter.Paths.Count}");
-                    outputBuilder.AppendLine();
-                }
-
-                outputBuilder.AppendLine("=== Path Details ===");
-                foreach (var path in iscsiResult.PathDetails.OrderBy(p => p.Adapter).ThenBy(p => p.PathName))
-                {
-                    var status = path.IsActive ? "ACTIVE" : path.PathState.ToUpper();
-                    outputBuilder.AppendLine($"{path.PathName} -> {status} ({path.Transport})");
-                    if (!string.IsNullOrEmpty(path.Target))
-                    {
-                        outputBuilder.AppendLine($"  Target: {path.Target}, LUN: {path.Lun}");
-                    }
-                }
-            }
-            else
-            {
-                outputBuilder.AppendLine("No iSCSI adapters found on this host.");
-            }
-
-            if (!string.IsNullOrEmpty(errorMessage))
-            {
-                outputBuilder.AppendLine();
-                outputBuilder.AppendLine($"Error: {errorMessage}");
-            }
-
-            // Build raw data for detailed analysis
-            var rawData = JsonSerializer.Serialize(iscsiResult, new JsonSerializerOptions 
-            { 
-                WriteIndented = true 
-            });
-
-            return new CheckEngineResult
-            {
-                IsSuccess = isSuccess,
-                Output = outputBuilder.ToString(),
-                ErrorMessage = errorMessage,
-                RawData = rawData,
-                ExecutionTime = TimeSpan.FromMilliseconds(100) // Will be overwritten by caller
-            };
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to execute iSCSI check with vSphere SDK for host {HostMoId}", hostMoId);
-            return new CheckEngineResult
-            {
-                IsSuccess = false,
-                ErrorMessage = $"iSCSI SDK check failed: {ex.Message}",
-                Output = $"Failed to execute iSCSI dead path check using vSphere SDK.\nError: {ex.Message}\n\nThis indicates a problem with the vSphere SDK connection or host access.",
-                ExecutionTime = TimeSpan.FromMilliseconds(100)
-            };
-        }
-        finally
-        {
-            // Clean up SDK connection
-            if (sdkConnection != null)
-            {
-                try
-                {
-                    await _vsphereSDKService.DisconnectAsync(sdkConnection, cancellationToken);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Error disconnecting vSphere SDK session");
-                }
-            }
         }
     }
 } 

@@ -110,9 +110,6 @@ public class Program
         services.AddHttpClient();
         services.AddScoped<IVSphereRestAPIService, VSphereRestAPIService>();
         
-        // vSphere SDK Services - For advanced operations like iSCSI path monitoring
-        services.AddScoped<IVSphereSDKService, VSphereSDKService>();
-        
         // Infrastructure services
         services.AddScoped<ICredentialService, CredentialService>();
         services.AddScoped<IVMwareConnectionService, RestVMwareConnectionService>();
