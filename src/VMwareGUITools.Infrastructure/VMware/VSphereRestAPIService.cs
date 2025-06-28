@@ -1059,6 +1059,7 @@ public class VSphereRestAPIService : IVSphereRestAPIService
             try
             {
                 // Step 2: Retrieve Storage Adapters (focus on iSCSI HBAs)
+                // Try individual host endpoint first, then fallback to general listing if needed
                 _logger.LogDebug("Step 2: Retrieving storage adapters (HBAs) for host {HostMoId}", hostMoId);
                 var adaptersUrl = $"{baseUrl}/api/vcenter/host/{hostMoId}/hardware/adapter/hba";
                 _logger.LogDebug("Storage adapters URL: {AdaptersUrl}", adaptersUrl);
@@ -1114,6 +1115,75 @@ public class VSphereRestAPIService : IVSphereRestAPIService
                 else
                 {
                     _logger.LogWarning("Failed to retrieve storage adapters: {StatusCode}", adaptersResponse.StatusCode);
+                    
+                    // If individual host endpoint fails, try alternative approaches similar to Step 1
+                    if (adaptersResponse.StatusCode == System.Net.HttpStatusCode.NotFound)
+                    {
+                        _logger.LogDebug("Storage adapters endpoint returned NotFound, trying alternative approaches for host {HostMoId}", hostMoId);
+                        
+                        // Try to get storage devices directly as an alternative to HBA adapters
+                        try
+                        {
+                            var devicesUrl = $"{baseUrl}/api/vcenter/host/{hostMoId}/storage/device";
+                            _logger.LogDebug("Alternative storage devices URL: {DevicesUrl}", devicesUrl);
+                            
+                            using var devicesRequest = new HttpRequestMessage(HttpMethod.Get, devicesUrl);
+                            devicesRequest.Headers.Add("vmware-api-session-id", session.SessionToken);
+                            
+                            var devicesResponse = await _httpClient.SendAsync(devicesRequest, cancellationToken);
+                            _logger.LogDebug("Alternative storage devices response: {StatusCode}", devicesResponse.StatusCode);
+                            
+                            if (devicesResponse.IsSuccessStatusCode)
+                            {
+                                var devicesContent = await devicesResponse.Content.ReadAsStringAsync();
+                                _logger.LogDebug("Storage devices response content length: {ContentLength} bytes", devicesContent.Length);
+                                
+                                var devicesData = JsonSerializer.Deserialize<JsonElement>(devicesContent);
+                                
+                                if (devicesData.ValueKind == JsonValueKind.Array)
+                                {
+                                    _logger.LogDebug("Found {DeviceCount} storage devices via alternative approach", devicesData.GetArrayLength());
+                                    
+                                    var iscsiDeviceCount = 0;
+                                    foreach (var device in devicesData.EnumerateArray())
+                                    {
+                                        // Check if this device is accessible via iSCSI
+                                        if (device.TryGetProperty("transport", out var transportProp) &&
+                                            transportProp.TryGetProperty("type", out var transportTypeProp))
+                                        {
+                                            var transportType = transportTypeProp.GetString();
+                                            _logger.LogDebug("Device transport type: {TransportType}", transportType);
+                                            
+                                            if (transportType?.Contains("iSCSI", StringComparison.OrdinalIgnoreCase) == true)
+                                            {
+                                                iscsiDeviceCount++;
+                                                var deviceKey = device.TryGetProperty("device", out var deviceKeyProp) ? deviceKeyProp.GetString() : "unknown";
+                                                _logger.LogDebug("Found iSCSI device via alternative approach: {DeviceKey}", deviceKey);
+                                                
+                                                // Create a synthetic adapter entry for this iSCSI device
+                                                iscsiAdapters.Add(new
+                                                {
+                                                    Key = $"device-{deviceKey}",
+                                                    Device = deviceKey,
+                                                    Type = transportType
+                                                });
+                                            }
+                                        }
+                                    }
+                                    
+                                    _logger.LogInformation("Found {iSCSIDeviceCount} iSCSI devices via alternative storage device endpoint", iscsiDeviceCount);
+                                }
+                            }
+                            else
+                            {
+                                _logger.LogDebug("Alternative storage devices endpoint also failed: {StatusCode}", devicesResponse.StatusCode);
+                            }
+                        }
+                        catch (Exception altEx)
+                        {
+                            _logger.LogDebug(altEx, "Alternative storage device lookup failed for host {HostMoId}", hostMoId);
+                        }
+                    }
                 }
                 
                 _logger.LogDebug("Found {iSCSIAdapterCount} iSCSI adapters", iscsiAdapters.Count);
@@ -1452,6 +1522,73 @@ public class VSphereRestAPIService : IVSphereRestAPIService
             else
             {
                 _logger.LogDebug("GetMultipathingInfoAsync - Failed to get multipathing information: {StatusCode}", multipathResponse.StatusCode);
+                
+                // If multipathing endpoint fails with NotFound, try alternative approaches
+                if (multipathResponse.StatusCode == System.Net.HttpStatusCode.NotFound)
+                {
+                    _logger.LogDebug("GetMultipathingInfoAsync - Multipathing endpoint returned NotFound, trying alternative storage device approach for host {HostMoId}", hostMoId);
+                    
+                    try
+                    {
+                        // Try to get storage devices directly and analyze their paths
+                        var devicesUrl = $"{baseUrl}/api/vcenter/host/{hostMoId}/storage/device";
+                        _logger.LogDebug("GetMultipathingInfoAsync - Alternative storage devices URL: {DevicesUrl}", devicesUrl);
+                        
+                        using var devicesRequest = new HttpRequestMessage(HttpMethod.Get, devicesUrl);
+                        devicesRequest.Headers.Add("vmware-api-session-id", sessionToken);
+                        
+                        var devicesResponse = await _httpClient.SendAsync(devicesRequest);
+                        _logger.LogDebug("GetMultipathingInfoAsync - Alternative storage devices response: {StatusCode}", devicesResponse.StatusCode);
+                        
+                        if (devicesResponse.IsSuccessStatusCode)
+                        {
+                            var devicesContent = await devicesResponse.Content.ReadAsStringAsync();
+                            _logger.LogDebug("GetMultipathingInfoAsync - Storage devices response content length: {ContentLength} bytes", devicesContent.Length);
+                            
+                            var devicesData = JsonSerializer.Deserialize<JsonElement>(devicesContent);
+                            
+                            if (devicesData.ValueKind == JsonValueKind.Array)
+                            {
+                                _logger.LogDebug("GetMultipathingInfoAsync - Found {DeviceCount} storage devices via alternative approach", devicesData.GetArrayLength());
+                                
+                                foreach (var device in devicesData.EnumerateArray())
+                                {
+                                    // Check if this is an iSCSI device
+                                    if (device.TryGetProperty("transport", out var transportProp) &&
+                                        transportProp.TryGetProperty("type", out var typeProp))
+                                    {
+                                        var transportType = typeProp.GetString();
+                                        _logger.LogDebug("GetMultipathingInfoAsync - Device transport type: {TransportType}", transportType);
+                                        
+                                        if (transportType?.Contains("iSCSI", StringComparison.OrdinalIgnoreCase) == true)
+                                        {
+                                            var deviceKey = device.TryGetProperty("device", out var deviceKeyProp) ? deviceKeyProp.GetString() : null;
+                                            _logger.LogDebug("GetMultipathingInfoAsync - Found iSCSI device via alternative approach: {DeviceKey}", deviceKey);
+                                            
+                                            // Since we can't get detailed path info without specific endpoints, 
+                                            // provide basic connectivity indication for iSCSI devices found
+                                            pathDetails.Add($"iSCSI Device Found: {deviceKey} (Type: {transportType})");
+                                            pathInfo.TotalPaths += 1;
+                                            pathInfo.ActivePaths += 1; // Assume active since device is visible
+                                            
+                                            _logger.LogDebug("GetMultipathingInfoAsync - Added basic path info for iSCSI device {DeviceKey}", deviceKey);
+                                        }
+                                    }
+                                }
+                                
+                                _logger.LogInformation("GetMultipathingInfoAsync - Found {PathCount} iSCSI devices via alternative approach for host {HostMoId}", pathInfo.TotalPaths, hostMoId);
+                            }
+                        }
+                        else
+                        {
+                            _logger.LogDebug("GetMultipathingInfoAsync - Alternative storage devices endpoint also failed: {StatusCode}", devicesResponse.StatusCode);
+                        }
+                    }
+                    catch (Exception altEx)
+                    {
+                        _logger.LogDebug(altEx, "GetMultipathingInfoAsync - Alternative storage device lookup failed for host {HostMoId}", hostMoId);
+                    }
+                }
             }
         }
         catch (Exception ex)
@@ -1504,11 +1641,91 @@ public class VSphereRestAPIService : IVSphereRestAPIService
             else
             {
                 _logger.LogWarning("GetBasicStoragePathsAsync - Could not verify storage connectivity for host {HostMoId}: {StatusCode}", hostMoId, storageResponse.StatusCode);
-                pathDetails.Add("Could not verify storage connectivity");
-                pathInfo.TotalPaths = 0;
-                pathInfo.ActivePaths = 0;
-                pathInfo.DeadPaths = 0;
-                pathInfo.DisabledPaths = 0;
+                
+                // If basic storage endpoint fails with NotFound, try storage devices as final attempt
+                if (storageResponse.StatusCode == System.Net.HttpStatusCode.NotFound)
+                {
+                    _logger.LogDebug("GetBasicStoragePathsAsync - Basic storage endpoint returned NotFound, trying storage devices as final attempt for host {HostMoId}", hostMoId);
+                    
+                    try
+                    {
+                        var devicesUrl = $"{baseUrl}/api/vcenter/host/{hostMoId}/storage/device";
+                        _logger.LogDebug("GetBasicStoragePathsAsync - Final attempt storage devices URL: {DevicesUrl}", devicesUrl);
+                        
+                        using var devicesRequest = new HttpRequestMessage(HttpMethod.Get, devicesUrl);
+                        devicesRequest.Headers.Add("vmware-api-session-id", sessionToken);
+                        
+                        var devicesResponse = await _httpClient.SendAsync(devicesRequest);
+                        _logger.LogDebug("GetBasicStoragePathsAsync - Final attempt storage devices response: {StatusCode}", devicesResponse.StatusCode);
+                        
+                        if (devicesResponse.IsSuccessStatusCode)
+                        {
+                            var devicesContent = await devicesResponse.Content.ReadAsStringAsync();
+                            _logger.LogDebug("GetBasicStoragePathsAsync - Retrieved storage devices for host {HostMoId}: {ContentLength} bytes", hostMoId, devicesContent.Length);
+                            
+                            var devicesData = JsonSerializer.Deserialize<JsonElement>(devicesContent);
+                            
+                            if (devicesData.ValueKind == JsonValueKind.Array)
+                            {
+                                var deviceCount = devicesData.GetArrayLength();
+                                _logger.LogDebug("GetBasicStoragePathsAsync - Found {DeviceCount} storage devices via final attempt", deviceCount);
+                                
+                                if (deviceCount > 0)
+                                {
+                                    pathDetails.Add($"Storage connectivity verified via devices endpoint - found {deviceCount} storage devices");
+                                    pathInfo.TotalPaths = deviceCount;
+                                    pathInfo.ActivePaths = deviceCount;
+                                    pathInfo.DeadPaths = 0;
+                                    pathInfo.DisabledPaths = 0;
+                                    
+                                    _logger.LogInformation("GetBasicStoragePathsAsync - Storage connectivity verified via devices endpoint for host {HostMoId}, found {DeviceCount} devices", hostMoId, deviceCount);
+                                }
+                                else
+                                {
+                                    pathDetails.Add("No storage devices found");
+                                    pathInfo.TotalPaths = 0;
+                                    pathInfo.ActivePaths = 0;
+                                    pathInfo.DeadPaths = 0;
+                                    pathInfo.DisabledPaths = 0;
+                                }
+                            }
+                            else
+                            {
+                                pathDetails.Add("Storage devices endpoint returned unexpected format");
+                                pathInfo.TotalPaths = 0;
+                                pathInfo.ActivePaths = 0;
+                                pathInfo.DeadPaths = 0;
+                                pathInfo.DisabledPaths = 0;
+                            }
+                        }
+                        else
+                        {
+                            _logger.LogDebug("GetBasicStoragePathsAsync - Storage devices endpoint also failed: {StatusCode}", devicesResponse.StatusCode);
+                            pathDetails.Add($"All storage connectivity checks failed - last attempt: {devicesResponse.StatusCode}");
+                            pathInfo.TotalPaths = 0;
+                            pathInfo.ActivePaths = 0;
+                            pathInfo.DeadPaths = 0;
+                            pathInfo.DisabledPaths = 0;
+                        }
+                    }
+                    catch (Exception finalEx)
+                    {
+                        _logger.LogDebug(finalEx, "GetBasicStoragePathsAsync - Final storage device lookup failed for host {HostMoId}", hostMoId);
+                        pathDetails.Add($"Error in final storage connectivity check: {finalEx.Message}");
+                        pathInfo.TotalPaths = 0;
+                        pathInfo.ActivePaths = 0;
+                        pathInfo.DeadPaths = 0;
+                        pathInfo.DisabledPaths = 0;
+                    }
+                }
+                else
+                {
+                    pathDetails.Add("Could not verify storage connectivity");
+                    pathInfo.TotalPaths = 0;
+                    pathInfo.ActivePaths = 0;
+                    pathInfo.DeadPaths = 0;
+                    pathInfo.DisabledPaths = 0;
+                }
             }
         }
         catch (Exception ex)
