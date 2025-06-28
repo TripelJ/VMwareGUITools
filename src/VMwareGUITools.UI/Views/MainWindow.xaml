@@ -1093,15 +1093,18 @@
 
                                                 <!-- Empty State -->
                                                 <StackPanel VerticalAlignment="Center" 
-                                                          HorizontalAlignment="Center"
-                                                          Visibility="{Binding CheckResultsViewModel.IsLoading, Converter={StaticResource InverseBooleanToVisibilityConverter}}">
+                                                          HorizontalAlignment="Center">
                                                     <StackPanel.Style>
                                                         <Style TargetType="StackPanel">
                                                             <Setter Property="Visibility" Value="Collapsed"/>
                                                             <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding CheckResultsViewModel.FilteredResultsCount}" Value="0">
+                                                                <MultiDataTrigger>
+                                                                    <MultiDataTrigger.Conditions>
+                                                                        <Condition Binding="{Binding CheckResultsViewModel.IsLoading}" Value="False"/>
+                                                                        <Condition Binding="{Binding CheckResultsViewModel.HasFilteredResults}" Value="False"/>
+                                                                    </MultiDataTrigger.Conditions>
                                                                     <Setter Property="Visibility" Value="Visible"/>
-                                                                </DataTrigger>
+                                                                </MultiDataTrigger>
                                                             </Style.Triggers>
                                                         </Style>
                                                     </StackPanel.Style>

@@ -60,6 +60,9 @@ public partial class CheckResultsViewModel : ObservableObject
     [ObservableProperty]
     private int _filteredResultsCount = 0;
 
+    [ObservableProperty]
+    private bool _hasFilteredResults = false;
+
     public ICollectionView CheckResultsView { get; }
 
     public CheckResultsViewModel(
@@ -80,6 +83,9 @@ public partial class CheckResultsViewModel : ObservableObject
         
         // Watch for property changes to update filters
         PropertyChanged += OnPropertyChanged;
+        
+        // Initialize filtered count
+        UpdateFilteredResultsCount();
     }
 
     /// <summary>
@@ -427,6 +433,9 @@ public partial class CheckResultsViewModel : ObservableObject
                 }
             }
             FilteredResultsCount = count;
+            HasFilteredResults = count > 0;
+            _logger.LogDebug("Updated FilteredResultsCount to {Count} (total CheckResults: {Total}), HasFilteredResults: {HasResults}", 
+                FilteredResultsCount, CheckResults.Count, HasFilteredResults);
         }
         catch (Exception ex)
         {
