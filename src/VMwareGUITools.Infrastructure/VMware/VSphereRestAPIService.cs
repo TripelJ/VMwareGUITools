@@ -334,6 +334,7 @@ public class VSphereRestAPIService : IVSphereRestAPIService
                 "host-storage" => await GetHostStorageAsync(session, hostMoId, parameters, cancellationToken),
                 "host-security" => await GetHostSecurityAsync(session, hostMoId, parameters, cancellationToken),
                 "host-configuration" => await GetHostConfigurationAsync(session, hostMoId, parameters, cancellationToken),
+                "iscsi-path-check" => await CheckiSCSIDeadPathsAsync(session, hostMoId, parameters, cancellationToken),
                 _ => throw new NotSupportedException($"Check type '{checkType}' is not supported")
             };
 
