@@ -1099,7 +1099,7 @@
                                                         <Style TargetType="StackPanel">
                                                             <Setter Property="Visibility" Value="Collapsed"/>
                                                             <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding CheckResultsViewModel.CheckResults.Count}" Value="0">
+                                                                <DataTrigger Binding="{Binding CheckResultsViewModel.FilteredResultsCount}" Value="0">
                                                                     <Setter Property="Visibility" Value="Visible"/>
                                                                 </DataTrigger>
                                                             </Style.Triggers>

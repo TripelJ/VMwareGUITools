@@ -57,6 +57,9 @@ public partial class CheckResultsViewModel : ObservableObject
     [ObservableProperty]
     private string _selectedClusterName = string.Empty;
 
+    [ObservableProperty]
+    private int _filteredResultsCount = 0;
+
     public ICollectionView CheckResultsView { get; }
 
     public CheckResultsViewModel(
@@ -72,6 +75,9 @@ public partial class CheckResultsViewModel : ObservableObject
         CheckResultsView.Filter = FilterCheckResults;
         CheckResultsView.SortDescriptions.Add(new SortDescription(nameof(CheckResult.ExecutedAt), ListSortDirection.Descending));
 
+        // Watch for collection and filter changes
+        CheckResults.CollectionChanged += (s, e) => UpdateFilteredResultsCount();
+        
         // Watch for property changes to update filters
         PropertyChanged += OnPropertyChanged;
     }
@@ -139,6 +145,7 @@ public partial class CheckResultsViewModel : ObservableObject
                 }
             });
 
+            UpdateFilteredResultsCount();
             await GroupCheckResultsAsync();
 
             StatusMessage = $"Loaded {CheckResults.Count} check results";
@@ -157,6 +164,7 @@ public partial class CheckResultsViewModel : ObservableObject
             {
                 CheckResults.Clear();
             });
+            UpdateFilteredResultsCount();
         }
         finally
         {
@@ -223,6 +231,7 @@ public partial class CheckResultsViewModel : ObservableObject
 
             // Add the new result to the collection
             CheckResults.Insert(0, result);
+            UpdateFilteredResultsCount();
             
             await GroupCheckResultsAsync();
 
@@ -275,6 +284,7 @@ public partial class CheckResultsViewModel : ObservableObject
             {
                 CheckResults.Insert(0, result);
             }
+            UpdateFilteredResultsCount();
 
             await GroupCheckResultsAsync();
 
@@ -401,6 +411,31 @@ public partial class CheckResultsViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Updates the count of filtered results
+    /// </summary>
+    private void UpdateFilteredResultsCount()
+    {
+        try
+        {
+            // Count items that pass the current filter
+            var count = 0;
+            foreach (var item in CheckResults)
+            {
+                if (FilterCheckResults(item))
+                {
+                    count++;
+                }
+            }
+            FilteredResultsCount = count;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to update filtered results count");
+            FilteredResultsCount = 0;
+        }
+    }
+
+    /// <summary>
     /// Handles property changes to update filters
     /// </summary>
     private void OnPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -408,6 +443,7 @@ public partial class CheckResultsViewModel : ObservableObject
         if (e.PropertyName == nameof(FilterText) || e.PropertyName == nameof(FilterStatus))
         {
             CheckResultsView.Refresh();
+            UpdateFilteredResultsCount();
         }
     }
 }
