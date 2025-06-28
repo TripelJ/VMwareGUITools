@@ -1002,7 +1002,13 @@ public class VSphereRestAPIService : IVSphereRestAPIService
                                         var deviceKey = device.TryGetProperty("device", out var deviceKeyProp) ? deviceKeyProp.GetString() : "unknown";
                                         
                                         // Step 4: Get multipathing information for this device
-                                        await GetDevicePathsAsync(baseUrl, session.SessionToken, hostMoId, deviceKey, pathDetails, ref totalPaths, ref activePaths, ref deadPaths, ref disabledPaths);
+                                        var devicePathInfo = await GetDevicePathsAsync(baseUrl, session.SessionToken, hostMoId, deviceKey, pathDetails);
+                                        
+                                        // Aggregate the counts
+                                        totalPaths += devicePathInfo.TotalPaths;
+                                        activePaths += devicePathInfo.ActivePaths;
+                                        deadPaths += devicePathInfo.DeadPaths;
+                                        disabledPaths += devicePathInfo.DisabledPaths;
                                     }
                                 }
                             }
@@ -1018,7 +1024,13 @@ public class VSphereRestAPIService : IVSphereRestAPIService
                 if (iscsiAdapters.Count == 0)
                 {
                     _logger.LogInformation("No iSCSI adapters found via HBA endpoint, checking multipathing information");
-                    await GetMultipathingInfoAsync(baseUrl, session.SessionToken, hostMoId, pathDetails, ref totalPaths, ref activePaths, ref deadPaths, ref disabledPaths);
+                    var multipathInfo = await GetMultipathingInfoAsync(baseUrl, session.SessionToken, hostMoId, pathDetails);
+                    
+                    // Aggregate the counts
+                    totalPaths += multipathInfo.TotalPaths;
+                    activePaths += multipathInfo.ActivePaths;
+                    deadPaths += multipathInfo.DeadPaths;
+                    disabledPaths += multipathInfo.DisabledPaths;
                 }
             }
             catch (Exception ex)
@@ -1026,7 +1038,13 @@ public class VSphereRestAPIService : IVSphereRestAPIService
                 _logger.LogWarning(ex, "Error during iSCSI path discovery for host {HostMoId}, falling back to basic storage check", hostMoId);
                 
                 // Fallback: Basic storage system check
-                await GetBasicStoragePathsAsync(baseUrl, session.SessionToken, hostMoId, pathDetails, ref totalPaths, ref activePaths, ref deadPaths, ref disabledPaths);
+                var basicStorageInfo = await GetBasicStoragePathsAsync(baseUrl, session.SessionToken, hostMoId, pathDetails);
+                
+                // Aggregate the counts
+                totalPaths += basicStorageInfo.TotalPaths;
+                activePaths += basicStorageInfo.ActivePaths;
+                deadPaths += basicStorageInfo.DeadPaths;
+                disabledPaths += basicStorageInfo.DisabledPaths;
             }
             
             // Evaluate the results
@@ -1084,12 +1102,14 @@ public class VSphereRestAPIService : IVSphereRestAPIService
     /// <summary>
     /// Helper method to get device paths using the multipathing API
     /// </summary>
-    private async Task GetDevicePathsAsync(string baseUrl, string sessionToken, string hostMoId, string? deviceKey, 
-        List<string> pathDetails, ref int totalPaths, ref int activePaths, ref int deadPaths, ref int disabledPaths)
+    private async Task<PathCountInfo> GetDevicePathsAsync(string baseUrl, string sessionToken, string hostMoId, string? deviceKey, 
+        List<string> pathDetails)
     {
+        var pathInfo = new PathCountInfo();
+        
         try
         {
-            if (string.IsNullOrEmpty(deviceKey)) return;
+            if (string.IsNullOrEmpty(deviceKey)) return pathInfo;
             
             // Try to get multipathing information for the device
             var multipathUrl = $"{baseUrl}/api/vcenter/host/{hostMoId}/storage/multipathing/{deviceKey}";
@@ -1107,24 +1127,24 @@ public class VSphereRestAPIService : IVSphereRestAPIService
                 {
                     foreach (var path in pathsProperty.EnumerateArray())
                     {
-                        totalPaths++;
+                        pathInfo.TotalPaths++;
                         
-                        var pathName = path.TryGetProperty("name", out var pathNameProp) ? pathNameProp.GetString() : $"Path_{totalPaths}";
+                        var pathName = path.TryGetProperty("name", out var pathNameProp) ? pathNameProp.GetString() : $"Path_{pathInfo.TotalPaths}";
                         var pathState = path.TryGetProperty("path_status", out var stateProp) ? stateProp.GetString() : "unknown";
                         var adapter = path.TryGetProperty("adapter", out var adapterProp) ? adapterProp.GetString() : "unknown";
                         
                         switch (pathState?.ToLowerInvariant())
                         {
                             case "active":
-                                activePaths++;
+                                pathInfo.ActivePaths++;
                                 pathDetails.Add($"{pathName} ({adapter}) -> ACTIVE");
                                 break;
                             case "dead":
-                                deadPaths++;
+                                pathInfo.DeadPaths++;
                                 pathDetails.Add($"{pathName} ({adapter}) -> DEAD");
                                 break;
                             case "disabled":
-                                disabledPaths++;
+                                pathInfo.DisabledPaths++;
                                 pathDetails.Add($"{pathName} ({adapter}) -> DISABLED");
                                 break;
                             default:
@@ -1139,14 +1159,18 @@ public class VSphereRestAPIService : IVSphereRestAPIService
         {
             _logger.LogDebug(ex, "Could not get multipathing information for device {DeviceKey}", deviceKey);
         }
+        
+        return pathInfo;
     }
     
     /// <summary>
     /// Helper method to get multipathing information using alternative API endpoints
     /// </summary>
-    private async Task GetMultipathingInfoAsync(string baseUrl, string sessionToken, string hostMoId, 
-        List<string> pathDetails, ref int totalPaths, ref int activePaths, ref int deadPaths, ref int disabledPaths)
+    private async Task<PathCountInfo> GetMultipathingInfoAsync(string baseUrl, string sessionToken, string hostMoId, 
+        List<string> pathDetails)
     {
+        var pathInfo = new PathCountInfo();
+        
         try
         {
             // Try to get general multipathing information
@@ -1171,7 +1195,13 @@ public class VSphereRestAPIService : IVSphereRestAPIService
                             typeProp.GetString()?.Contains("iSCSI", StringComparison.OrdinalIgnoreCase) == true)
                         {
                             var deviceKey = device.TryGetProperty("device", out var deviceKeyProp) ? deviceKeyProp.GetString() : null;
-                            await GetDevicePathsAsync(baseUrl, sessionToken, hostMoId, deviceKey, pathDetails, ref totalPaths, ref activePaths, ref deadPaths, ref disabledPaths);
+                            var devicePathInfo = await GetDevicePathsAsync(baseUrl, sessionToken, hostMoId, deviceKey, pathDetails);
+                            
+                            // Aggregate the counts
+                            pathInfo.TotalPaths += devicePathInfo.TotalPaths;
+                            pathInfo.ActivePaths += devicePathInfo.ActivePaths;
+                            pathInfo.DeadPaths += devicePathInfo.DeadPaths;
+                            pathInfo.DisabledPaths += devicePathInfo.DisabledPaths;
                         }
                     }
                 }
@@ -1181,14 +1211,18 @@ public class VSphereRestAPIService : IVSphereRestAPIService
         {
             _logger.LogDebug(ex, "Could not get multipathing information for host {HostMoId}", hostMoId);
         }
+        
+        return pathInfo;
     }
     
     /// <summary>
     /// Fallback method to get basic storage path information
     /// </summary>
-    private async Task GetBasicStoragePathsAsync(string baseUrl, string sessionToken, string hostMoId, 
-        List<string> pathDetails, ref int totalPaths, ref int activePaths, ref int deadPaths, ref int disabledPaths)
+    private async Task<PathCountInfo> GetBasicStoragePathsAsync(string baseUrl, string sessionToken, string hostMoId, 
+        List<string> pathDetails)
     {
+        var pathInfo = new PathCountInfo();
+        
         try
         {
             // Fallback: Try to get basic storage system information
@@ -1205,18 +1239,18 @@ public class VSphereRestAPIService : IVSphereRestAPIService
                 
                 // For the fallback, provide a basic indication that storage is accessible
                 pathDetails.Add("Basic storage connectivity verified - detailed path information requires PowerCLI");
-                totalPaths = 1;
-                activePaths = 1;
-                deadPaths = 0;
-                disabledPaths = 0;
+                pathInfo.TotalPaths = 1;
+                pathInfo.ActivePaths = 1;
+                pathInfo.DeadPaths = 0;
+                pathInfo.DisabledPaths = 0;
             }
             else
             {
                 pathDetails.Add("Could not verify storage connectivity");
-                totalPaths = 0;
-                activePaths = 0;
-                deadPaths = 0;
-                disabledPaths = 0;
+                pathInfo.TotalPaths = 0;
+                pathInfo.ActivePaths = 0;
+                pathInfo.DeadPaths = 0;
+                pathInfo.DisabledPaths = 0;
             }
         }
         catch (Exception ex)
@@ -1224,6 +1258,8 @@ public class VSphereRestAPIService : IVSphereRestAPIService
             _logger.LogDebug(ex, "Could not get basic storage information for host {HostMoId}", hostMoId);
             pathDetails.Add($"Error retrieving storage information: {ex.Message}");
         }
+        
+        return pathInfo;
     }
 
     private async Task<VSphereApiResult> GetHostSecurityAsync(VSphereSession session, string hostMoId, Dictionary<string, object>? parameters, CancellationToken cancellationToken)
@@ -1634,6 +1670,14 @@ internal class ClusterResourceStats
     public long StorageTotalGB { get; set; }
     public long StorageUsedGB { get; set; }
     public int VmCount { get; set; }
+}
+
+internal class PathCountInfo
+{
+    public int TotalPaths { get; set; }
+    public int ActivePaths { get; set; }
+    public int DeadPaths { get; set; }
+    public int DisabledPaths { get; set; }
 }
 
 
