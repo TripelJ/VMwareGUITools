@@ -301,7 +301,8 @@ public class VSphereRestAPIService : IVSphereRestAPIService
         {
             _logger.LogInformation("Getting host details for {HostMoId} for session: {SessionId}", 
                 hostMoId, session.SessionId);
-
+            _logger.LogDebug("GetHostDetailsAsync - Attempting to get details for host MoId: '{HostMoId}'", hostMoId);
+            
             await EnsureSessionValidAsync(session, cancellationToken);
 
             var hostDetails = await GetHostDetailInfoAsync(session.VCenterUrl, session.SessionToken, hostMoId, cancellationToken);
@@ -323,6 +324,9 @@ public class VSphereRestAPIService : IVSphereRestAPIService
         {
             _logger.LogInformation("Executing check {CheckType} on host {HostMoId} for session: {SessionId}", 
                 checkType, hostMoId, session.SessionId);
+            
+            _logger.LogDebug("ExecuteCheckAsync - Received host MoId: '{HostMoId}' for check type: '{CheckType}'", 
+                hostMoId, checkType);
 
             await EnsureSessionValidAsync(session, cancellationToken);
 
@@ -538,10 +542,16 @@ public class VSphereRestAPIService : IVSphereRestAPIService
         var hosts = new List<HostInfo>();
         foreach (var host in hostsData.EnumerateArray())
         {
+            var hostMoId = host.GetProperty("host").GetString() ?? "";
+            var hostName = host.GetProperty("name").GetString() ?? "";
+            
+            _logger.LogDebug("GetHostsInClusterAsync - Found host in cluster {ClusterMoId}: MoId={HostMoId}, Name={HostName}", 
+                clusterMoId, hostMoId, hostName);
+            
             hosts.Add(new HostInfo
             {
-                MoId = host.GetProperty("host").GetString() ?? "",
-                Name = host.GetProperty("name").GetString() ?? "",
+                MoId = hostMoId,
+                Name = hostName,
                 ConnectionState = host.GetProperty("connection_state").GetString() ?? "",
                 PowerState = host.GetProperty("power_state").GetString() ?? "",
                 Type = isVsanCluster ? HostType.VsanNode : HostType.Standard
@@ -920,6 +930,67 @@ public class VSphereRestAPIService : IVSphereRestAPIService
             if (!hostResponse.IsSuccessStatusCode)
             {
                 _logger.LogError("Failed to get host details for {HostMoId}: {StatusCode}", hostMoId, hostResponse.StatusCode);
+                
+                // If host not found, let's list all available hosts to debug the MoId format
+                if (hostResponse.StatusCode == System.Net.HttpStatusCode.NotFound)
+                {
+                    _logger.LogDebug("Host not found, listing all available hosts to debug MoId format...");
+                    try
+                    {
+                        var allHostsUrl = $"{baseUrl}/api/vcenter/host";
+                        _logger.LogDebug("All hosts URL: {AllHostsUrl}", allHostsUrl);
+                        
+                        using var allHostsRequest = new HttpRequestMessage(HttpMethod.Get, allHostsUrl);
+                        allHostsRequest.Headers.Add("vmware-api-session-id", session.SessionToken);
+                        
+                        var allHostsResponse = await _httpClient.SendAsync(allHostsRequest, cancellationToken);
+                        _logger.LogDebug("All hosts response: {StatusCode}", allHostsResponse.StatusCode);
+                        
+                        if (allHostsResponse.IsSuccessStatusCode)
+                        {
+                            var allHostsContent = await allHostsResponse.Content.ReadAsStringAsync();
+                            _logger.LogDebug("All hosts response content length: {ContentLength} bytes", allHostsContent.Length);
+                            
+                            var allHostsData = JsonSerializer.Deserialize<JsonElement>(allHostsContent);
+                            
+                            if (allHostsData.ValueKind == JsonValueKind.Array)
+                            {
+                                _logger.LogDebug("Found {HostCount} total hosts available", allHostsData.GetArrayLength());
+                                
+                                foreach (var host in allHostsData.EnumerateArray())
+                                {
+                                    var availableHostId = host.TryGetProperty("host", out var hostIdProp) ? hostIdProp.GetString() : "unknown";
+                                    var availableHostName = host.TryGetProperty("name", out var hostNameProp) ? hostNameProp.GetString() : "unknown";
+                                    var availableConnectionState = host.TryGetProperty("connection_state", out var connProp) ? connProp.GetString() : "unknown";
+                                    
+                                    _logger.LogDebug("Available host - ID: {HostId}, Name: {HostName}, Connection: {ConnectionState}", 
+                                        availableHostId, availableHostName, availableConnectionState);
+                                    
+                                    // Check if this might be our target host by name matching
+                                    if (availableHostName?.Contains("esx-m03", StringComparison.OrdinalIgnoreCase) == true ||
+                                        availableHostName?.Contains("dkaz3-kol01-esx-m03", StringComparison.OrdinalIgnoreCase) == true)
+                                    {
+                                        _logger.LogWarning("Found potential target host by name match - ID: {HostId}, Name: {HostName} (we were looking for MoId: {TargetMoId})", 
+                                            availableHostId, availableHostName, hostMoId);
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                _logger.LogDebug("All hosts response is not an array. ValueKind: {ValueKind}", allHostsData.ValueKind);
+                            }
+                        }
+                        else
+                        {
+                            _logger.LogWarning("Failed to retrieve all hosts for debugging: {StatusCode}", allHostsResponse.StatusCode);
+                        }
+                    }
+                    catch (Exception debugEx)
+                    {
+                        _logger.LogWarning(debugEx, "Failed to retrieve all hosts for debugging");
+                    }
+                }
+                
                 result.IsSuccess = false;
                 result.ErrorMessage = $"Failed to get host details: {hostResponse.StatusCode}";
                 return result;
