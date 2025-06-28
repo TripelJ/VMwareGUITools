@@ -883,6 +883,7 @@ public class VSphereRestAPIService : IVSphereRestAPIService
         try
         {
             _logger.LogInformation("Checking iSCSI dead paths for host {HostMoId}", hostMoId);
+            _logger.LogDebug("Starting iSCSI dead path check - Session: {SessionId}, Host: {HostMoId}", session.SessionId, hostMoId);
             
             var baseUrl = session.VCenterUrl.TrimEnd('/');
             var result = new VSphereApiResult
@@ -906,20 +907,27 @@ public class VSphereRestAPIService : IVSphereRestAPIService
             var iscsiAdapters = new List<object>();
             
             // Step 1: Get host details first to ensure the host exists and is accessible
+            _logger.LogDebug("Step 1: Retrieving host details for {HostMoId}", hostMoId);
             var hostUrl = $"{baseUrl}/api/vcenter/host/{hostMoId}";
+            _logger.LogDebug("Host details URL: {HostUrl}", hostUrl);
+            
             using var hostRequest = new HttpRequestMessage(HttpMethod.Get, hostUrl);
             hostRequest.Headers.Add("vmware-api-session-id", session.SessionToken);
             
             var hostResponse = await _httpClient.SendAsync(hostRequest, cancellationToken);
+            _logger.LogDebug("Host details response: {StatusCode}", hostResponse.StatusCode);
             
             if (!hostResponse.IsSuccessStatusCode)
             {
+                _logger.LogError("Failed to get host details for {HostMoId}: {StatusCode}", hostMoId, hostResponse.StatusCode);
                 result.IsSuccess = false;
                 result.ErrorMessage = $"Failed to get host details: {hostResponse.StatusCode}";
                 return result;
             }
             
             var hostContent = await hostResponse.Content.ReadAsStringAsync();
+            _logger.LogDebug("Host details response content length: {ContentLength} bytes", hostContent.Length);
+            
             var hostData = JsonSerializer.Deserialize<JsonElement>(hostContent);
             
             // Extract host information
@@ -931,9 +939,12 @@ public class VSphereRestAPIService : IVSphereRestAPIService
                 ? connectionProperty.GetString() ?? "UNKNOWN" 
                 : "UNKNOWN";
             
+            _logger.LogDebug("Host details - Name: {HostName}, Connection State: {ConnectionState}", hostName, connectionState);
+            
             // Only proceed if host is connected
             if (!string.Equals(connectionState, "CONNECTED", StringComparison.OrdinalIgnoreCase))
             {
+                _logger.LogWarning("Host {HostName} is not connected (state: {ConnectionState}). Cannot check iSCSI paths.", hostName, connectionState);
                 result.IsSuccess = false;
                 result.ErrorMessage = $"Host {hostName} is not connected (state: {connectionState}). Cannot check iSCSI paths.";
                 result.Properties["host_name"] = hostName;
@@ -944,75 +955,134 @@ public class VSphereRestAPIService : IVSphereRestAPIService
             try
             {
                 // Step 2: Retrieve Storage Adapters (focus on iSCSI HBAs)
+                _logger.LogDebug("Step 2: Retrieving storage adapters (HBAs) for host {HostMoId}", hostMoId);
                 var adaptersUrl = $"{baseUrl}/api/vcenter/host/{hostMoId}/hardware/adapter/hba";
+                _logger.LogDebug("Storage adapters URL: {AdaptersUrl}", adaptersUrl);
+                
                 using var adaptersRequest = new HttpRequestMessage(HttpMethod.Get, adaptersUrl);
                 adaptersRequest.Headers.Add("vmware-api-session-id", session.SessionToken);
                 
                 var adaptersResponse = await _httpClient.SendAsync(adaptersRequest, cancellationToken);
+                _logger.LogDebug("Storage adapters response: {StatusCode}", adaptersResponse.StatusCode);
                 
                 if (adaptersResponse.IsSuccessStatusCode)
                 {
                     var adaptersContent = await adaptersResponse.Content.ReadAsStringAsync();
+                    _logger.LogDebug("Storage adapters response content length: {ContentLength} bytes", adaptersContent.Length);
+                    
                     var adaptersData = JsonSerializer.Deserialize<JsonElement>(adaptersContent);
                     
                     // Filter for iSCSI adapters
                     if (adaptersData.ValueKind == JsonValueKind.Array)
                     {
+                        _logger.LogDebug("Found {AdapterCount} total adapters", adaptersData.GetArrayLength());
+                        
                         foreach (var adapter in adaptersData.EnumerateArray())
                         {
-                            if (adapter.TryGetProperty("type", out var typeProperty) &&
-                                typeProperty.GetString()?.Contains("iSCSI", StringComparison.OrdinalIgnoreCase) == true)
+                            if (adapter.TryGetProperty("type", out var typeProperty))
                             {
-                                iscsiAdapters.Add(new
+                                var adapterType = typeProperty.GetString();
+                                _logger.LogDebug("Adapter type: {AdapterType}", adapterType);
+                                
+                                if (adapterType?.Contains("iSCSI", StringComparison.OrdinalIgnoreCase) == true)
                                 {
-                                    Key = adapter.TryGetProperty("key", out var keyProp) ? keyProp.GetString() : "unknown",
-                                    Device = adapter.TryGetProperty("device", out var deviceProp) ? deviceProp.GetString() : "unknown",
-                                    Type = typeProperty.GetString()
-                                });
+                                    var adapterKey = adapter.TryGetProperty("key", out var keyProp) ? keyProp.GetString() : "unknown";
+                                    var adapterDevice = adapter.TryGetProperty("device", out var deviceProp) ? deviceProp.GetString() : "unknown";
+                                    
+                                    _logger.LogDebug("Found iSCSI adapter - Key: {AdapterKey}, Device: {AdapterDevice}, Type: {AdapterType}", 
+                                        adapterKey, adapterDevice, adapterType);
+                                    
+                                    iscsiAdapters.Add(new
+                                    {
+                                        Key = adapterKey,
+                                        Device = adapterDevice,
+                                        Type = adapterType
+                                    });
+                                }
                             }
                         }
                     }
+                    else
+                    {
+                        _logger.LogDebug("Storage adapters response is not an array. ValueKind: {ValueKind}", adaptersData.ValueKind);
+                    }
                 }
+                else
+                {
+                    _logger.LogWarning("Failed to retrieve storage adapters: {StatusCode}", adaptersResponse.StatusCode);
+                }
+                
+                _logger.LogDebug("Found {iSCSIAdapterCount} iSCSI adapters", iscsiAdapters.Count);
                 
                 // Step 3: For each iSCSI adapter, get storage devices and paths
                 foreach (var adapter in iscsiAdapters)
                 {
+                    _logger.LogDebug("Step 3: Processing iSCSI adapter: {Adapter}", adapter);
+                    
                     try
                     {
-                        // Get storage devices for this host
+                        // Get storage devices
                         var devicesUrl = $"{baseUrl}/api/vcenter/host/{hostMoId}/storage/device";
+                        _logger.LogDebug("Storage devices URL: {DevicesUrl}", devicesUrl);
+                        
                         using var devicesRequest = new HttpRequestMessage(HttpMethod.Get, devicesUrl);
                         devicesRequest.Headers.Add("vmware-api-session-id", session.SessionToken);
                         
                         var devicesResponse = await _httpClient.SendAsync(devicesRequest, cancellationToken);
+                        _logger.LogDebug("Storage devices response: {StatusCode}", devicesResponse.StatusCode);
                         
                         if (devicesResponse.IsSuccessStatusCode)
                         {
                             var devicesContent = await devicesResponse.Content.ReadAsStringAsync();
+                            _logger.LogDebug("Storage devices response content length: {ContentLength} bytes", devicesContent.Length);
+                            
                             var devicesData = JsonSerializer.Deserialize<JsonElement>(devicesContent);
                             
                             if (devicesData.ValueKind == JsonValueKind.Array)
                             {
+                                _logger.LogDebug("Found {DeviceCount} total storage devices", devicesData.GetArrayLength());
+                                
                                 foreach (var device in devicesData.EnumerateArray())
                                 {
                                     // Check if this device is accessible via iSCSI
                                     if (device.TryGetProperty("transport", out var transportProp) &&
-                                        transportProp.TryGetProperty("type", out var transportTypeProp) &&
-                                        transportTypeProp.GetString()?.Contains("iSCSI", StringComparison.OrdinalIgnoreCase) == true)
+                                        transportProp.TryGetProperty("type", out var transportTypeProp))
                                     {
-                                        var deviceKey = device.TryGetProperty("device", out var deviceKeyProp) ? deviceKeyProp.GetString() : "unknown";
+                                        var transportType = transportTypeProp.GetString();
+                                        _logger.LogDebug("Device transport type: {TransportType}", transportType);
                                         
-                                        // Step 4: Get multipathing information for this device
-                                        var devicePathInfo = await GetDevicePathsAsync(baseUrl, session.SessionToken, hostMoId, deviceKey, pathDetails);
-                                        
-                                        // Aggregate the counts
-                                        totalPaths += devicePathInfo.TotalPaths;
-                                        activePaths += devicePathInfo.ActivePaths;
-                                        deadPaths += devicePathInfo.DeadPaths;
-                                        disabledPaths += devicePathInfo.DisabledPaths;
+                                        if (transportType?.Contains("iSCSI", StringComparison.OrdinalIgnoreCase) == true)
+                                        {
+                                            var deviceKey = device.TryGetProperty("device", out var deviceKeyProp) ? deviceKeyProp.GetString() : "unknown";
+                                            _logger.LogDebug("Found iSCSI device: {DeviceKey}", deviceKey);
+                                            
+                                            // Step 4: Get multipathing information for this device
+                                            var devicePathInfo = await GetDevicePathsAsync(baseUrl, session.SessionToken, hostMoId, deviceKey, pathDetails);
+                                            
+                                            _logger.LogDebug("Device {DeviceKey} path info - Total: {Total}, Active: {Active}, Dead: {Dead}, Disabled: {Disabled}", 
+                                                deviceKey, devicePathInfo.TotalPaths, devicePathInfo.ActivePaths, devicePathInfo.DeadPaths, devicePathInfo.DisabledPaths);
+                                            
+                                            // Aggregate the counts
+                                            totalPaths += devicePathInfo.TotalPaths;
+                                            activePaths += devicePathInfo.ActivePaths;
+                                            deadPaths += devicePathInfo.DeadPaths;
+                                            disabledPaths += devicePathInfo.DisabledPaths;
+                                        }
+                                    }
+                                    else
+                                    {
+                                        _logger.LogDebug("Device has no transport property or transport type");
                                     }
                                 }
                             }
+                            else
+                            {
+                                _logger.LogDebug("Storage devices response is not an array. ValueKind: {ValueKind}", devicesData.ValueKind);
+                            }
+                        }
+                        else
+                        {
+                            _logger.LogWarning("Failed to retrieve storage devices for adapter: {StatusCode}", devicesResponse.StatusCode);
                         }
                     }
                     catch (Exception ex)
@@ -1026,6 +1096,9 @@ public class VSphereRestAPIService : IVSphereRestAPIService
                 {
                     _logger.LogInformation("No iSCSI adapters found via HBA endpoint, checking multipathing information");
                     var multipathInfo = await GetMultipathingInfoAsync(baseUrl, session.SessionToken, hostMoId, pathDetails);
+                    
+                    _logger.LogDebug("Multipath info - Total: {Total}, Active: {Active}, Dead: {Dead}, Disabled: {Disabled}", 
+                        multipathInfo.TotalPaths, multipathInfo.ActivePaths, multipathInfo.DeadPaths, multipathInfo.DisabledPaths);
                     
                     // Aggregate the counts
                     totalPaths += multipathInfo.TotalPaths;
@@ -1041,6 +1114,9 @@ public class VSphereRestAPIService : IVSphereRestAPIService
                 // Fallback: Basic storage system check
                 var basicStorageInfo = await GetBasicStoragePathsAsync(baseUrl, session.SessionToken, hostMoId, pathDetails);
                 
+                _logger.LogDebug("Basic storage info - Total: {Total}, Active: {Active}, Dead: {Dead}, Disabled: {Disabled}", 
+                    basicStorageInfo.TotalPaths, basicStorageInfo.ActivePaths, basicStorageInfo.DeadPaths, basicStorageInfo.DisabledPaths);
+                
                 // Aggregate the counts
                 totalPaths += basicStorageInfo.TotalPaths;
                 activePaths += basicStorageInfo.ActivePaths;
@@ -1054,6 +1130,9 @@ public class VSphereRestAPIService : IVSphereRestAPIService
             {
                 int.TryParse(maxDeadValue.ToString(), out maxDeadPaths);
             }
+            
+            _logger.LogDebug("Final path counts - Total: {Total}, Active: {Active}, Dead: {Dead}, Disabled: {Disabled}, Max allowed dead: {MaxDead}", 
+                totalPaths, activePaths, deadPaths, disabledPaths, maxDeadPaths);
             
             result.IsSuccess = deadPaths <= maxDeadPaths;
             result.Properties["total_paths"] = totalPaths;
@@ -1083,8 +1162,8 @@ public class VSphereRestAPIService : IVSphereRestAPIService
                 result.ErrorMessage = $"Found {deadPaths} dead paths, exceeding threshold of {maxDeadPaths}";
             }
             
-            _logger.LogInformation("iSCSI dead path check completed for host {HostMoId}: {DeadPaths} dead paths found", 
-                hostMoId, deadPaths);
+            _logger.LogInformation("iSCSI dead path check completed for host {HostMoId}: {DeadPaths} dead paths found (threshold: {MaxDeadPaths})", 
+                hostMoId, deadPaths, maxDeadPaths);
             
             return result;
         }
@@ -1110,22 +1189,35 @@ public class VSphereRestAPIService : IVSphereRestAPIService
         
         try
         {
-            if (string.IsNullOrEmpty(deviceKey)) return pathInfo;
+            _logger.LogDebug("GetDevicePathsAsync - Starting path discovery for device {DeviceKey} on host {HostMoId}", deviceKey, hostMoId);
+            
+            if (string.IsNullOrEmpty(deviceKey)) 
+            {
+                _logger.LogDebug("GetDevicePathsAsync - Device key is null or empty, returning empty path info");
+                return pathInfo;
+            }
             
             // Try to get multipathing information for the device
             var multipathUrl = $"{baseUrl}/api/vcenter/host/{hostMoId}/storage/multipathing/{deviceKey}";
+            _logger.LogDebug("GetDevicePathsAsync - Multipathing URL: {MultipathUrl}", multipathUrl);
+            
             using var multipathRequest = new HttpRequestMessage(HttpMethod.Get, multipathUrl);
             multipathRequest.Headers.Add("vmware-api-session-id", sessionToken);
             
             var multipathResponse = await _httpClient.SendAsync(multipathRequest);
+            _logger.LogDebug("GetDevicePathsAsync - Multipathing response: {StatusCode}", multipathResponse.StatusCode);
             
             if (multipathResponse.IsSuccessStatusCode)
             {
                 var multipathContent = await multipathResponse.Content.ReadAsStringAsync();
+                _logger.LogDebug("GetDevicePathsAsync - Multipathing response content length: {ContentLength} bytes", multipathContent.Length);
+                
                 var multipathData = JsonSerializer.Deserialize<JsonElement>(multipathContent);
                 
                 if (multipathData.TryGetProperty("paths", out var pathsProperty) && pathsProperty.ValueKind == JsonValueKind.Array)
                 {
+                    _logger.LogDebug("GetDevicePathsAsync - Found {PathCount} paths for device {DeviceKey}", pathsProperty.GetArrayLength(), deviceKey);
+                    
                     foreach (var path in pathsProperty.EnumerateArray())
                     {
                         pathInfo.TotalPaths++;
@@ -1133,6 +1225,8 @@ public class VSphereRestAPIService : IVSphereRestAPIService
                         var pathName = path.TryGetProperty("name", out var pathNameProp) ? pathNameProp.GetString() : $"Path_{pathInfo.TotalPaths}";
                         var pathState = path.TryGetProperty("path_status", out var stateProp) ? stateProp.GetString() : "unknown";
                         var adapter = path.TryGetProperty("adapter", out var adapterProp) ? adapterProp.GetString() : "unknown";
+                        
+                        _logger.LogDebug("GetDevicePathsAsync - Path {PathName} (adapter: {Adapter}) has status: {PathState}", pathName, adapter, pathState);
                         
                         switch (pathState?.ToLowerInvariant())
                         {
@@ -1143,6 +1237,7 @@ public class VSphereRestAPIService : IVSphereRestAPIService
                             case "dead":
                                 pathInfo.DeadPaths++;
                                 pathDetails.Add($"{pathName} ({adapter}) -> DEAD");
+                                _logger.LogWarning("GetDevicePathsAsync - Found DEAD path: {PathName} ({Adapter})", pathName, adapter);
                                 break;
                             case "disabled":
                                 pathInfo.DisabledPaths++;
@@ -1150,16 +1245,28 @@ public class VSphereRestAPIService : IVSphereRestAPIService
                                 break;
                             default:
                                 pathDetails.Add($"{pathName} ({adapter}) -> {pathState?.ToUpperInvariant() ?? "UNKNOWN"}");
+                                _logger.LogDebug("GetDevicePathsAsync - Path {PathName} has unknown state: {PathState}", pathName, pathState);
                                 break;
                         }
                     }
                 }
+                else
+                {
+                    _logger.LogDebug("GetDevicePathsAsync - No paths property found or paths is not an array");
+                }
+            }
+            else
+            {
+                _logger.LogDebug("GetDevicePathsAsync - Failed to get multipathing info for device {DeviceKey}: {StatusCode}", deviceKey, multipathResponse.StatusCode);
             }
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "Could not get multipathing information for device {DeviceKey}", deviceKey);
+            _logger.LogDebug(ex, "GetDevicePathsAsync - Could not get multipathing information for device {DeviceKey}", deviceKey);
         }
+        
+        _logger.LogDebug("GetDevicePathsAsync - Completed for device {DeviceKey} - Total: {Total}, Active: {Active}, Dead: {Dead}, Disabled: {Disabled}", 
+            deviceKey, pathInfo.TotalPaths, pathInfo.ActivePaths, pathInfo.DeadPaths, pathInfo.DisabledPaths);
         
         return pathInfo;
     }
@@ -1174,44 +1281,82 @@ public class VSphereRestAPIService : IVSphereRestAPIService
         
         try
         {
+            _logger.LogDebug("GetMultipathingInfoAsync - Starting multipathing discovery for host {HostMoId}", hostMoId);
+            
             // Try to get general multipathing information
             var multipathUrl = $"{baseUrl}/api/vcenter/host/{hostMoId}/storage/multipathing";
+            _logger.LogDebug("GetMultipathingInfoAsync - Multipathing URL: {MultipathUrl}", multipathUrl);
+            
             using var multipathRequest = new HttpRequestMessage(HttpMethod.Get, multipathUrl);
             multipathRequest.Headers.Add("vmware-api-session-id", sessionToken);
             
             var multipathResponse = await _httpClient.SendAsync(multipathRequest);
+            _logger.LogDebug("GetMultipathingInfoAsync - Multipathing response: {StatusCode}", multipathResponse.StatusCode);
             
             if (multipathResponse.IsSuccessStatusCode)
             {
                 var multipathContent = await multipathResponse.Content.ReadAsStringAsync();
+                _logger.LogDebug("GetMultipathingInfoAsync - Multipathing response content length: {ContentLength} bytes", multipathContent.Length);
+                
                 var multipathData = JsonSerializer.Deserialize<JsonElement>(multipathContent);
                 
                 if (multipathData.ValueKind == JsonValueKind.Array)
                 {
+                    _logger.LogDebug("GetMultipathingInfoAsync - Found {DeviceCount} multipathing devices", multipathData.GetArrayLength());
+                    
                     foreach (var device in multipathData.EnumerateArray())
                     {
                         // Check if this is an iSCSI device
                         if (device.TryGetProperty("transport", out var transportProp) &&
-                            transportProp.TryGetProperty("type", out var typeProp) &&
-                            typeProp.GetString()?.Contains("iSCSI", StringComparison.OrdinalIgnoreCase) == true)
+                            transportProp.TryGetProperty("type", out var typeProp))
                         {
-                            var deviceKey = device.TryGetProperty("device", out var deviceKeyProp) ? deviceKeyProp.GetString() : null;
-                            var devicePathInfo = await GetDevicePathsAsync(baseUrl, sessionToken, hostMoId, deviceKey, pathDetails);
+                            var transportType = typeProp.GetString();
+                            _logger.LogDebug("GetMultipathingInfoAsync - Device transport type: {TransportType}", transportType);
                             
-                            // Aggregate the counts
-                            pathInfo.TotalPaths += devicePathInfo.TotalPaths;
-                            pathInfo.ActivePaths += devicePathInfo.ActivePaths;
-                            pathInfo.DeadPaths += devicePathInfo.DeadPaths;
-                            pathInfo.DisabledPaths += devicePathInfo.DisabledPaths;
+                            if (transportType?.Contains("iSCSI", StringComparison.OrdinalIgnoreCase) == true)
+                            {
+                                var deviceKey = device.TryGetProperty("device", out var deviceKeyProp) ? deviceKeyProp.GetString() : null;
+                                _logger.LogDebug("GetMultipathingInfoAsync - Found iSCSI multipathing device: {DeviceKey}", deviceKey);
+                                
+                                var devicePathInfo = await GetDevicePathsAsync(baseUrl, sessionToken, hostMoId, deviceKey, pathDetails);
+                                
+                                _logger.LogDebug("GetMultipathingInfoAsync - Device {DeviceKey} contributed - Total: {Total}, Active: {Active}, Dead: {Dead}, Disabled: {Disabled}", 
+                                    deviceKey, devicePathInfo.TotalPaths, devicePathInfo.ActivePaths, devicePathInfo.DeadPaths, devicePathInfo.DisabledPaths);
+                                
+                                // Aggregate the counts
+                                pathInfo.TotalPaths += devicePathInfo.TotalPaths;
+                                pathInfo.ActivePaths += devicePathInfo.ActivePaths;
+                                pathInfo.DeadPaths += devicePathInfo.DeadPaths;
+                                pathInfo.DisabledPaths += devicePathInfo.DisabledPaths;
+                            }
+                            else
+                            {
+                                _logger.LogDebug("GetMultipathingInfoAsync - Skipping non-iSCSI device with transport type: {TransportType}", transportType);
+                            }
+                        }
+                        else
+                        {
+                            _logger.LogDebug("GetMultipathingInfoAsync - Device has no transport property or transport type");
                         }
                     }
                 }
+                else
+                {
+                    _logger.LogDebug("GetMultipathingInfoAsync - Multipathing response is not an array. ValueKind: {ValueKind}", multipathData.ValueKind);
+                }
+            }
+            else
+            {
+                _logger.LogDebug("GetMultipathingInfoAsync - Failed to get multipathing information: {StatusCode}", multipathResponse.StatusCode);
             }
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "Could not get multipathing information for host {HostMoId}", hostMoId);
+            _logger.LogDebug(ex, "GetMultipathingInfoAsync - Could not get multipathing information for host {HostMoId}", hostMoId);
         }
+        
+        _logger.LogDebug("GetMultipathingInfoAsync - Completed for host {HostMoId} - Total: {Total}, Active: {Active}, Dead: {Dead}, Disabled: {Disabled}", 
+            hostMoId, pathInfo.TotalPaths, pathInfo.ActivePaths, pathInfo.DeadPaths, pathInfo.DisabledPaths);
         
         return pathInfo;
     }
@@ -1226,17 +1371,22 @@ public class VSphereRestAPIService : IVSphereRestAPIService
         
         try
         {
+            _logger.LogDebug("GetBasicStoragePathsAsync - Starting basic storage check for host {HostMoId}", hostMoId);
+            
             // Fallback: Try to get basic storage system information
             var storageUrl = $"{baseUrl}/api/vcenter/host/{hostMoId}/storage";
+            _logger.LogDebug("GetBasicStoragePathsAsync - Storage URL: {StorageUrl}", storageUrl);
+            
             using var storageRequest = new HttpRequestMessage(HttpMethod.Get, storageUrl);
             storageRequest.Headers.Add("vmware-api-session-id", sessionToken);
             
             var storageResponse = await _httpClient.SendAsync(storageRequest);
+            _logger.LogDebug("GetBasicStoragePathsAsync - Storage response: {StatusCode}", storageResponse.StatusCode);
             
             if (storageResponse.IsSuccessStatusCode)
             {
                 var storageContent = await storageResponse.Content.ReadAsStringAsync();
-                _logger.LogDebug("Retrieved basic storage information for host {HostMoId}: {ContentLength} bytes", hostMoId, storageContent.Length);
+                _logger.LogDebug("GetBasicStoragePathsAsync - Retrieved basic storage information for host {HostMoId}: {ContentLength} bytes", hostMoId, storageContent.Length);
                 
                 // For the fallback, provide a basic indication that storage is accessible
                 pathDetails.Add("Basic storage connectivity verified - detailed path information requires PowerCLI");
@@ -1244,9 +1394,12 @@ public class VSphereRestAPIService : IVSphereRestAPIService
                 pathInfo.ActivePaths = 1;
                 pathInfo.DeadPaths = 0;
                 pathInfo.DisabledPaths = 0;
+                
+                _logger.LogDebug("GetBasicStoragePathsAsync - Basic storage connectivity verified for host {HostMoId}", hostMoId);
             }
             else
             {
+                _logger.LogWarning("GetBasicStoragePathsAsync - Could not verify storage connectivity for host {HostMoId}: {StatusCode}", hostMoId, storageResponse.StatusCode);
                 pathDetails.Add("Could not verify storage connectivity");
                 pathInfo.TotalPaths = 0;
                 pathInfo.ActivePaths = 0;
@@ -1256,9 +1409,12 @@ public class VSphereRestAPIService : IVSphereRestAPIService
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "Could not get basic storage information for host {HostMoId}", hostMoId);
+            _logger.LogDebug(ex, "GetBasicStoragePathsAsync - Could not get basic storage information for host {HostMoId}", hostMoId);
             pathDetails.Add($"Error retrieving storage information: {ex.Message}");
         }
+        
+        _logger.LogDebug("GetBasicStoragePathsAsync - Completed for host {HostMoId} - Total: {Total}, Active: {Active}, Dead: {Dead}, Disabled: {Disabled}", 
+            hostMoId, pathInfo.TotalPaths, pathInfo.ActivePaths, pathInfo.DeadPaths, pathInfo.DisabledPaths);
         
         return pathInfo;
     }
