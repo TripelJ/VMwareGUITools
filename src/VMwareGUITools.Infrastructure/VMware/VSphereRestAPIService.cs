@@ -901,6 +901,10 @@ public class VSphereRestAPIService : IVSphereRestAPIService
                 Timestamp = DateTime.UtcNow
             };
             
+            // Declare variables that will be used throughout the method
+            string hostName = "Unknown";
+            string connectionState = "UNKNOWN";
+            
             // REAL iSCSI DEAD PATH IMPLEMENTATION using vSphere REST API
             // ========================================================
             // This implementation follows the approach described in the VMware documentation:
@@ -966,6 +970,33 @@ public class VSphereRestAPIService : IVSphereRestAPIService
                                     _logger.LogDebug("Available host - ID: {HostId}, Name: {HostName}, Connection: {ConnectionState}", 
                                         availableHostId, availableHostName, availableConnectionState);
                                     
+                                    // Check if this is our target host
+                                    if (availableHostId == hostMoId)
+                                    {
+                                        _logger.LogInformation("Found target host {HostMoId} in all-hosts response. Using data from listing since individual API failed.", hostMoId);
+                                        
+                                        // Extract host information directly from the all-hosts response
+                                        hostName = availableHostName ?? "Unknown";
+                                        connectionState = availableConnectionState ?? "UNKNOWN";
+                                        
+                                        _logger.LogDebug("Host details from listing - Name: {HostName}, Connection State: {ConnectionState}", hostName, connectionState);
+                                        
+                                        // Only proceed if host is connected
+                                        if (!string.Equals(connectionState, "CONNECTED", StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            _logger.LogWarning("Host {HostName} is not connected (state: {ConnectionState}). Cannot check iSCSI paths.", hostName, connectionState);
+                                            result.IsSuccess = false;
+                                            result.ErrorMessage = $"Host {hostName} is not connected (state: {connectionState}). Cannot check iSCSI paths.";
+                                            result.Properties["host_name"] = hostName;
+                                            result.Properties["connection_state"] = connectionState;
+                                            return result;
+                                        }
+                                        
+                                        // Continue with the iSCSI check using the host info from the listing
+                                        _logger.LogInformation("Proceeding with iSCSI check for host {HostName} using data from all-hosts listing", hostName);
+                                        goto ContinueWithIscsiCheck;
+                                    }
+                                    
                                     // Check if this might be our target host by name matching
                                     if (availableHostName?.Contains("esx-m03", StringComparison.OrdinalIgnoreCase) == true ||
                                         availableHostName?.Contains("dkaz3-kol01-esx-m03", StringComparison.OrdinalIgnoreCase) == true)
@@ -1002,11 +1033,11 @@ public class VSphereRestAPIService : IVSphereRestAPIService
             var hostData = JsonSerializer.Deserialize<JsonElement>(hostContent);
             
             // Extract host information
-            var hostName = hostData.TryGetProperty("name", out var nameProperty) 
+            hostName = hostData.TryGetProperty("name", out var nameProperty) 
                 ? nameProperty.GetString() ?? "Unknown" 
                 : "Unknown";
             
-            var connectionState = hostData.TryGetProperty("connection_state", out var connectionProperty) 
+            connectionState = hostData.TryGetProperty("connection_state", out var connectionProperty) 
                 ? connectionProperty.GetString() ?? "UNKNOWN" 
                 : "UNKNOWN";
             
@@ -1022,6 +1053,8 @@ public class VSphereRestAPIService : IVSphereRestAPIService
                 result.Properties["connection_state"] = connectionState;
                 return result;
             }
+            
+            ContinueWithIscsiCheck:
             
             try
             {
