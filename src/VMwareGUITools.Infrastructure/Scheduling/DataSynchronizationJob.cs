@@ -166,7 +166,7 @@ public class DataSynchronizationJob : IJob
     /// <summary>
     /// Synchronize clusters in the database
     /// </summary>
-    private async Task SynchronizeClustersAsync(VMwareDbContext dbContext, VCenter vCenter, List<ClusterInfo> discoveredClusters, CancellationToken cancellationToken)
+    private async Task SynchronizeClustersAsync(VMwareDbContext dbContext, VCenter vCenter, List<VMwareGUITools.Core.Models.ClusterInfo> discoveredClusters, CancellationToken cancellationToken)
     {
         // Get existing clusters for this vCenter
         var existingClusters = await dbContext.Clusters
@@ -226,7 +226,7 @@ public class DataSynchronizationJob : IJob
     /// <summary>
     /// Synchronize hosts in the database
     /// </summary>
-    private async Task SynchronizeHostsAsync(VMwareDbContext dbContext, VCenter vCenter, ClusterInfo clusterInfo, List<HostInfo> discoveredHosts, CancellationToken cancellationToken)
+    private async Task SynchronizeHostsAsync(VMwareDbContext dbContext, VCenter vCenter, VMwareGUITools.Core.Models.ClusterInfo clusterInfo, List<VMwareGUITools.Core.Models.HostInfo> discoveredHosts, CancellationToken cancellationToken)
     {
         // Get the cluster from the database
         var cluster = await dbContext.Clusters
@@ -305,7 +305,7 @@ public class DataSynchronizationJob : IJob
     /// <summary>
     /// Synchronize datastores in the database
     /// </summary>
-    private async Task SynchronizeDatastoresAsync(VMwareDbContext dbContext, VCenter vCenter, List<DatastoreInfo> discoveredDatastores, CancellationToken cancellationToken)
+    private async Task SynchronizeDatastoresAsync(VMwareDbContext dbContext, VCenter vCenter, List<VMwareGUITools.Core.Models.DatastoreInfo> discoveredDatastores, CancellationToken cancellationToken)
     {
         // Get existing datastores for this vCenter
         var existingDatastores = await dbContext.Datastores
