@@ -15,18 +15,15 @@ namespace VMwareGUITools.Infrastructure.Services;
 public class ServiceConfigurationManager : IServiceConfigurationManager
 {
     private readonly ILogger<ServiceConfigurationManager> _logger;
-    private readonly VMwareDbContext _dbContext;
     private readonly IServiceProvider _serviceProvider;
     private readonly Timer _commandProcessingTimer;
     private readonly Timer _heartbeatTimer;
 
     public ServiceConfigurationManager(
         ILogger<ServiceConfigurationManager> logger,
-        VMwareDbContext dbContext,
         IServiceProvider serviceProvider)
     {
         _logger = logger;
-        _dbContext = dbContext;
         _serviceProvider = serviceProvider;
 
         // Process commands every 5 seconds
@@ -40,7 +37,10 @@ public class ServiceConfigurationManager : IServiceConfigurationManager
     {
         try
         {
-            var config = await _dbContext.ServiceConfigurations
+            using var scope = _serviceProvider.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<VMwareDbContext>();
+            
+            var config = await dbContext.ServiceConfigurations
                 .FirstOrDefaultAsync(c => c.Key == key && 
                     (string.IsNullOrEmpty(category) || c.Category == category));
 
@@ -62,7 +62,10 @@ public class ServiceConfigurationManager : IServiceConfigurationManager
     {
         try
         {
-            var config = await _dbContext.ServiceConfigurations
+            using var scope = _serviceProvider.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<VMwareDbContext>();
+            
+            var config = await dbContext.ServiceConfigurations
                 .FirstOrDefaultAsync(c => c.Key == key && c.Category == category);
 
             var jsonValue = JsonSerializer.Serialize(value);
@@ -79,7 +82,7 @@ public class ServiceConfigurationManager : IServiceConfigurationManager
                     LastModified = DateTime.UtcNow,
                     ModifiedBy = "Service"
                 };
-                _dbContext.ServiceConfigurations.Add(config);
+                dbContext.ServiceConfigurations.Add(config);
             }
             else
             {
@@ -88,7 +91,7 @@ public class ServiceConfigurationManager : IServiceConfigurationManager
                 config.ModifiedBy = "Service";
             }
 
-            await _dbContext.SaveChangesAsync();
+            await dbContext.SaveChangesAsync();
             _logger.LogInformation("Configuration updated: {Key} = {Value}", key, jsonValue);
         }
         catch (Exception ex)
@@ -101,6 +104,9 @@ public class ServiceConfigurationManager : IServiceConfigurationManager
     {
         try
         {
+            using var scope = _serviceProvider.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<VMwareDbContext>();
+            
             var command = new ServiceCommand
             {
                 CommandType = commandType,
@@ -109,8 +115,8 @@ public class ServiceConfigurationManager : IServiceConfigurationManager
                 Status = "Pending"
             };
 
-            _dbContext.ServiceCommands.Add(command);
-            await _dbContext.SaveChangesAsync();
+            dbContext.ServiceCommands.Add(command);
+            await dbContext.SaveChangesAsync();
 
             _logger.LogInformation("Command sent: {CommandType} with ID: {CommandId}", commandType, command.Id);
             return command.Id.ToString();
@@ -131,7 +137,10 @@ public class ServiceConfigurationManager : IServiceConfigurationManager
                 return null;
             }
 
-            return await _dbContext.ServiceCommands
+            using var scope = _serviceProvider.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<VMwareDbContext>();
+
+            return await dbContext.ServiceCommands
                 .FirstOrDefaultAsync(c => c.Id == id);
         }
         catch (Exception ex)
@@ -145,7 +154,10 @@ public class ServiceConfigurationManager : IServiceConfigurationManager
     {
         try
         {
-            var serviceStatus = await _dbContext.ServiceStatuses.FirstOrDefaultAsync();
+            using var scope = _serviceProvider.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<VMwareDbContext>();
+            
+            var serviceStatus = await dbContext.ServiceStatuses.FirstOrDefaultAsync();
 
             if (serviceStatus == null)
             {
@@ -158,7 +170,7 @@ public class ServiceConfigurationManager : IServiceConfigurationManager
                     NextExecution = nextExecution,
                     Statistics = statistics != null ? JsonSerializer.Serialize(statistics) : "{}"
                 };
-                _dbContext.ServiceStatuses.Add(serviceStatus);
+                dbContext.ServiceStatuses.Add(serviceStatus);
             }
             else
             {
@@ -172,7 +184,7 @@ public class ServiceConfigurationManager : IServiceConfigurationManager
                 }
             }
 
-            await _dbContext.SaveChangesAsync();
+            await dbContext.SaveChangesAsync();
         }
         catch (Exception ex)
         {
@@ -184,7 +196,10 @@ public class ServiceConfigurationManager : IServiceConfigurationManager
     {
         try
         {
-            return await _dbContext.ServiceStatuses.FirstOrDefaultAsync();
+            using var scope = _serviceProvider.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<VMwareDbContext>();
+            
+            return await dbContext.ServiceStatuses.FirstOrDefaultAsync();
         }
         catch (Exception ex)
         {
@@ -197,7 +212,10 @@ public class ServiceConfigurationManager : IServiceConfigurationManager
     {
         try
         {
-            var pendingCommands = await _dbContext.ServiceCommands
+            using var scope = _serviceProvider.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<VMwareDbContext>();
+            
+            var pendingCommands = await dbContext.ServiceCommands
                 .Where(c => c.Status == "Pending")
                 .OrderBy(c => c.CreatedAt)
                 .Take(10)
@@ -216,13 +234,18 @@ public class ServiceConfigurationManager : IServiceConfigurationManager
 
     private async Task ProcessCommandAsync(ServiceCommand command)
     {
+        using var scope = _serviceProvider.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<VMwareDbContext>();
+        
         try
         {
             _logger.LogInformation("Processing command: {CommandType} (ID: {CommandId})", command.CommandType, command.Id);
 
+            // Attach the command to this context and update it
+            dbContext.Attach(command);
             command.Status = "Processing";
             command.ProcessedAt = DateTime.UtcNow;
-            await _dbContext.SaveChangesAsync();
+            await dbContext.SaveChangesAsync();
 
             var result = command.CommandType switch
             {
@@ -237,7 +260,7 @@ public class ServiceConfigurationManager : IServiceConfigurationManager
 
             command.Status = "Completed";
             command.Result = result;
-            await _dbContext.SaveChangesAsync();
+            await dbContext.SaveChangesAsync();
 
             _logger.LogInformation("Command completed: {CommandType} (ID: {CommandId})", command.CommandType, command.Id);
         }
@@ -247,7 +270,7 @@ public class ServiceConfigurationManager : IServiceConfigurationManager
             
             command.Status = "Failed";
             command.ErrorMessage = ex.Message;
-            await _dbContext.SaveChangesAsync();
+            await dbContext.SaveChangesAsync();
         }
     }
 
@@ -331,11 +354,14 @@ public class ServiceConfigurationManager : IServiceConfigurationManager
     private async Task<CheckResult> ExecuteSingleHostCheck(ICheckExecutionService checkExecutionService, 
         int hostId, int checkDefinitionId, int vCenterId)
     {
-        var host = await _dbContext.Hosts
+        using var scope = _serviceProvider.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<VMwareDbContext>();
+        
+        var host = await dbContext.Hosts
             .FirstOrDefaultAsync(h => h.Id == hostId);
-        var checkDefinition = await _dbContext.CheckDefinitions
+        var checkDefinition = await dbContext.CheckDefinitions
             .FirstOrDefaultAsync(cd => cd.Id == checkDefinitionId);
-        var vCenter = await _dbContext.VCenters
+        var vCenter = await dbContext.VCenters
             .FirstOrDefaultAsync(v => v.Id == vCenterId);
 
         if (host == null || checkDefinition == null || vCenter == null)
@@ -349,9 +375,12 @@ public class ServiceConfigurationManager : IServiceConfigurationManager
     private async Task<List<CheckResult>> ExecuteClusterChecks(ICheckExecutionService checkExecutionService, 
         int clusterId, int vCenterId)
     {
-        var cluster = await _dbContext.Clusters
+        using var scope = _serviceProvider.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<VMwareDbContext>();
+        
+        var cluster = await dbContext.Clusters
             .FirstOrDefaultAsync(c => c.Id == clusterId);
-        var vCenter = await _dbContext.VCenters
+        var vCenter = await dbContext.VCenters
             .FirstOrDefaultAsync(v => v.Id == vCenterId);
 
         if (cluster == null || vCenter == null)
@@ -365,7 +394,10 @@ public class ServiceConfigurationManager : IServiceConfigurationManager
     private async Task<List<CheckResult>> ExecuteSpecialChecks(ICheckExecutionService checkExecutionService, 
         string checkType, int vCenterId)
     {
-        var vCenter = await _dbContext.VCenters
+        using var scope = _serviceProvider.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<VMwareDbContext>();
+        
+        var vCenter = await dbContext.VCenters
             .FirstOrDefaultAsync(v => v.Id == vCenterId);
 
         if (vCenter == null)
@@ -384,14 +416,17 @@ public class ServiceConfigurationManager : IServiceConfigurationManager
 
     private async Task<List<CheckResult>> ExecuteiSCSIChecks(ICheckExecutionService checkExecutionService, VCenter vCenter)
     {
+        using var scope = _serviceProvider.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<VMwareDbContext>();
+        
         // Get or create the iSCSI check definition
-        var iSCSICheck = await _dbContext.CheckDefinitions
+        var iSCSICheck = await dbContext.CheckDefinitions
             .FirstOrDefaultAsync(cd => cd.Name.Contains("iSCSI") && cd.Name.Contains("Dead Path"));
 
         if (iSCSICheck == null)
         {
             // Create the iSCSI check if it doesn't exist
-            var storageCategory = await _dbContext.CheckCategories
+            var storageCategory = await dbContext.CheckCategories
                 .FirstOrDefaultAsync(cc => cc.Name == "Storage")
                 ?? new CheckCategory
                 {
@@ -404,8 +439,8 @@ public class ServiceConfigurationManager : IServiceConfigurationManager
 
             if (storageCategory.Id == 0)
             {
-                _dbContext.CheckCategories.Add(storageCategory);
-                await _dbContext.SaveChangesAsync();
+                dbContext.CheckCategories.Add(storageCategory);
+                await dbContext.SaveChangesAsync();
             }
 
             iSCSICheck = new CheckDefinition
@@ -423,12 +458,12 @@ public class ServiceConfigurationManager : IServiceConfigurationManager
                 Thresholds = """{"maxDeadPaths": 0}"""
             };
 
-            _dbContext.CheckDefinitions.Add(iSCSICheck);
-            await _dbContext.SaveChangesAsync();
+            dbContext.CheckDefinitions.Add(iSCSICheck);
+            await dbContext.SaveChangesAsync();
         }
 
         // Get all hosts for this vCenter
-        var hosts = await _dbContext.Hosts
+        var hosts = await dbContext.Hosts
             .Where(h => h.VCenterId == vCenter.Id && h.Enabled)
             .ToListAsync();
 
@@ -503,13 +538,14 @@ public class ServiceConfigurationManager : IServiceConfigurationManager
                 int intValue => intValue,
                 _ => Convert.ToInt32(vCenterIdObj)
             };
-            var vCenter = await _dbContext.VCenters.FirstOrDefaultAsync(v => v.Id == vCenterId);
+            using var scope = _serviceProvider.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<VMwareDbContext>();
+            
+            var vCenter = await dbContext.VCenters.FirstOrDefaultAsync(v => v.Id == vCenterId);
             if (vCenter == null)
             {
                 throw new ArgumentException($"vCenter with ID {vCenterId} not found");
             }
-
-            using var scope = _serviceProvider.CreateScope();
             var restApiService = scope.ServiceProvider.GetRequiredService<IVSphereRestAPIService>();
             
             var session = await restApiService.ConnectAsync(vCenter);
@@ -543,13 +579,14 @@ public class ServiceConfigurationManager : IServiceConfigurationManager
                 int intValue => intValue,
                 _ => Convert.ToInt32(vCenterIdObj)
             };
-            var vCenter = await _dbContext.VCenters.FirstOrDefaultAsync(v => v.Id == vCenterId);
+            using var scope = _serviceProvider.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<VMwareDbContext>();
+            
+            var vCenter = await dbContext.VCenters.FirstOrDefaultAsync(v => v.Id == vCenterId);
             if (vCenter == null)
             {
                 throw new ArgumentException($"vCenter with ID {vCenterId} not found");
             }
-
-            using var scope = _serviceProvider.CreateScope();
             var restApiService = scope.ServiceProvider.GetRequiredService<IVSphereRestAPIService>();
             
             var session = await restApiService.ConnectAsync(vCenter);
