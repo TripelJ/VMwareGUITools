@@ -70,6 +70,9 @@ public class Program
             
             var host = builder.Build();
             
+            // Initialize database before starting the service
+            await InitializeDatabaseAsync(host.Services);
+            
             await host.RunAsync();
         }
         catch (Exception ex)
@@ -79,6 +82,33 @@ public class Program
         finally
         {
             Log.CloseAndFlush();
+        }
+    }
+    
+    private static async Task InitializeDatabaseAsync(IServiceProvider services)
+    {
+        try
+        {
+            using var scope = services.CreateScope();
+            var context = scope.ServiceProvider.GetRequiredService<VMwareDbContext>();
+            
+            Log.Information("Initializing database...");
+            await context.Database.EnsureCreatedAsync();
+            
+            // Run any pending migrations
+            var pendingMigrations = await context.Database.GetPendingMigrationsAsync();
+            if (pendingMigrations.Any())
+            {
+                Log.Information("Applying {Count} pending migrations", pendingMigrations.Count());
+                await context.Database.MigrateAsync();
+            }
+            
+            Log.Information("Database initialized successfully");
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Failed to initialize database");
+            throw;
         }
     }
     
