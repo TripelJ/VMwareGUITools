@@ -631,7 +631,7 @@ public partial class MainWindowViewModel : ObservableObject
             await MonitorServiceStatusAsync();
 
             // Check vCenter connections health for connected vCenters
-            foreach (var vCenter in VCenters.Where(v => v.IsConnected))
+            foreach (var vCenter in VCenters.Where(v => v.IsCurrentlyConnected))
             {
                 try
                 {

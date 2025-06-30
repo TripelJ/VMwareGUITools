@@ -11,6 +11,7 @@ using VMwareGUITools.Infrastructure.Checks;
 using VMwareGUITools.Infrastructure.Notifications;
 using VMwareGUITools.Infrastructure.Scheduling;
 using VMwareGUITools.Infrastructure.Security;
+using VMwareGUITools.Infrastructure.Services;
 using VMwareGUITools.Infrastructure.VMware;
 using VMwareGUITools.UI.ViewModels;
 using VMwareGUITools.UI.Views;
