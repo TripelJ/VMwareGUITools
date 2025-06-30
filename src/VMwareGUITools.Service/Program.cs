@@ -42,6 +42,9 @@ public class Program
             // Add Windows Service support
             builder.Services.AddWindowsService();
             
+            // Add our background service that manages the heartbeat and service operations
+            builder.Services.AddHostedService<VMwareBackgroundService>();
+            
             // Add Quartz.NET
             builder.Services.AddQuartz(q =>
             {

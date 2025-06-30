@@ -5,7 +5,8 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using VMwareGUITools.Core.Models;
-using VMwareGUITools.Infrastructure.VMware;
+using VMwareGUITools.Infrastructure.Services;
+using System.Text.Json;
 
 namespace VMwareGUITools.UI.ViewModels;
 
@@ -15,10 +16,8 @@ namespace VMwareGUITools.UI.ViewModels;
 public partial class VCenterOverviewViewModel : ObservableObject, IDisposable
 {
     private readonly ILogger<VCenterOverviewViewModel> _logger;
-    private readonly IVMwareConnectionService _vmwareService;
-    private readonly IVSphereRestAPIService _restApiService;
+    private readonly IServiceConfigurationManager _serviceConfigurationManager;
     private readonly System.Timers.Timer _overviewRefreshTimer;
-    private VSphereSession? _currentSession;
 
     [ObservableProperty]
     private VCenterOverview? _overviewData;
@@ -40,12 +39,10 @@ public partial class VCenterOverviewViewModel : ObservableObject, IDisposable
 
     public VCenterOverviewViewModel(
         ILogger<VCenterOverviewViewModel> logger,
-        IVMwareConnectionService vmwareService,
-        IVSphereRestAPIService restApiService)
+        IServiceConfigurationManager serviceConfigurationManager)
     {
         _logger = logger;
-        _vmwareService = vmwareService;
-        _restApiService = restApiService;
+        _serviceConfigurationManager = serviceConfigurationManager;
 
         // Setup auto-refresh timer for overview data (every 30 seconds)
         _overviewRefreshTimer = new System.Timers.Timer(30000);
@@ -54,7 +51,7 @@ public partial class VCenterOverviewViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Loads overview data for the specified vCenter
+    /// Loads overview data for the specified vCenter via Windows Service
     /// </summary>
     public async Task LoadOverviewDataAsync(VCenter vCenter)
     {
@@ -62,7 +59,6 @@ public partial class VCenterOverviewViewModel : ObservableObject, IDisposable
         {
             OverviewData = null;
             _overviewRefreshTimer.Stop();
-            _currentSession = null;
             return;
         }
 
@@ -71,46 +67,57 @@ public partial class VCenterOverviewViewModel : ObservableObject, IDisposable
             IsLoading = true;
             StatusMessage = "Loading vCenter overview...";
             
-            // Stop any previous refresh timer and clear current session
+            // Stop any previous refresh timer
             _overviewRefreshTimer.Stop();
-            _currentSession = null;
             
             // Clear previous data to ensure fresh display
             OverviewData = null;
             
             SelectedVCenter = vCenter;
 
-            _logger.LogInformation("Loading overview data for vCenter: {VCenterName}", vCenter.Name);
+            _logger.LogInformation("Loading overview data for vCenter: {VCenterName} via Windows Service", vCenter.Name);
 
-            // Establish a fresh connection using REST API service
-            _currentSession = await _restApiService.ConnectAsync(vCenter);
-
-            // Get fresh overview data (always live, never from database)
-            var freshOverviewData = await _restApiService.GetOverviewDataAsync(_currentSession);
-            
-            // Update UI on dispatcher thread
-            await Application.Current.Dispatcher.InvokeAsync(() =>
+            // Check if service is running
+            var serviceStatus = await _serviceConfigurationManager.GetServiceStatusAsync();
+            if (serviceStatus == null || serviceStatus.LastHeartbeat < DateTime.UtcNow.AddMinutes(-2))
             {
-                OverviewData = freshOverviewData;
-                LastUpdated = DateTime.Now;
-                StatusMessage = $"Overview loaded successfully at {LastUpdated:HH:mm:ss}";
-            });
-
-            // Update connection status since we successfully loaded overview data
-            vCenter.UpdateConnectionStatus(true);
-
-            // Start auto-refresh if enabled
-            if (AutoRefreshEnabled)
-            {
-                _overviewRefreshTimer.Start();
+                StatusMessage = "Windows Service is not running. Cannot load overview data.";
+                return;
             }
 
-            _logger.LogInformation("Overview data loaded successfully for vCenter: {VCenterName} - Storage: {StorageUsage}%", 
-                vCenter.Name, freshOverviewData.StorageUsage.UsagePercentage.ToString("F1"));
+            // Send command to service
+            var parameters = new { VCenterId = vCenter.Id };
+            var commandId = await _serviceConfigurationManager.SendCommandAsync(
+                ServiceCommandTypes.GetOverviewData, 
+                parameters);
+
+            StatusMessage = $"Overview request sent to service (ID: {commandId}). Loading...";
+
+            // Monitor for completion
+            var overviewData = await MonitorCommandCompletionAsync<VCenterOverview>(commandId, "Overview data");
+            
+            if (overviewData != null)
+            {
+                // Update UI on dispatcher thread
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    OverviewData = overviewData;
+                    LastUpdated = DateTime.Now;
+                    StatusMessage = $"Overview loaded successfully at {LastUpdated:HH:mm:ss}";
+                });
+
+                // Start auto-refresh if enabled
+                if (AutoRefreshEnabled)
+                {
+                    _overviewRefreshTimer.Start();
+                }
+
+                _logger.LogInformation("Overview data loaded successfully for vCenter: {VCenterName} via Windows Service", 
+                    vCenter.Name);
+            }
         }
         catch (Exception ex)
         {
-            vCenter?.UpdateConnectionStatus(false);
             _logger.LogError(ex, "Failed to load overview data for vCenter: {VCenterName}", vCenter?.Name);
             
             await Application.Current.Dispatcher.InvokeAsync(() =>
@@ -120,7 +127,6 @@ public partial class VCenterOverviewViewModel : ObservableObject, IDisposable
             });
             
             _overviewRefreshTimer.Stop();
-            _currentSession = null;
         }
         finally
         {
@@ -129,46 +135,103 @@ public partial class VCenterOverviewViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Auto-refresh overview data (CPU, memory, disk usage) without using database
+    /// Auto-refresh overview data via Windows Service
     /// </summary>
     private async Task AutoRefreshOverviewAsync()
     {
-        if (SelectedVCenter == null || IsLoading || _currentSession == null || !AutoRefreshEnabled)
+        if (SelectedVCenter == null || IsLoading || !AutoRefreshEnabled)
             return;
 
         try
         {
-            _logger.LogDebug("Auto-refreshing overview data for vCenter: {VCenterName}", SelectedVCenter.Name);
+            _logger.LogDebug("Auto-refreshing overview data for vCenter: {VCenterName} via Windows Service", SelectedVCenter.Name);
 
-            // Get fresh overview data directly from vCenter API (no database)
-            var freshOverviewData = await _restApiService.GetOverviewDataAsync(_currentSession);
-            
-            // Update UI on dispatcher thread
-            await Application.Current.Dispatcher.InvokeAsync(() =>
+            // Check if service is running
+            var serviceStatus = await _serviceConfigurationManager.GetServiceStatusAsync();
+            if (serviceStatus == null || serviceStatus.LastHeartbeat < DateTime.UtcNow.AddMinutes(-2))
             {
-                OverviewData = freshOverviewData;
-                LastUpdated = DateTime.Now;
-                // Don't update status message during auto-refresh to avoid UI noise
-            });
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    StatusMessage = "Windows Service is not running - auto-refresh disabled";
+                });
+                _overviewRefreshTimer.Stop();
+                return;
+            }
 
-            _logger.LogDebug("Auto-refresh completed for vCenter: {VCenterName} - Storage: {StorageUsage}%", 
-                SelectedVCenter.Name, freshOverviewData.StorageUsage.UsagePercentage.ToString("F1"));
+            // Send command to service
+            var parameters = new { VCenterId = SelectedVCenter.Id };
+            var commandId = await _serviceConfigurationManager.SendCommandAsync(
+                ServiceCommandTypes.GetOverviewData, 
+                parameters);
+
+            // Monitor for completion
+            var overviewData = await MonitorCommandCompletionAsync<VCenterOverview>(commandId, "Overview auto-refresh");
+            
+            if (overviewData != null)
+            {
+                // Update UI on dispatcher thread
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    OverviewData = overviewData;
+                    LastUpdated = DateTime.Now;
+                    // Don't update status message during auto-refresh to avoid UI noise
+                });
+
+                _logger.LogDebug("Auto-refresh completed for vCenter: {VCenterName} via Windows Service", 
+                    SelectedVCenter.Name);
+            }
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Auto-refresh failed for vCenter overview: {VCenterName}", SelectedVCenter?.Name);
             
-            // Stop auto-refresh on connection errors
-            if (ex.Message.Contains("connection") || ex.Message.Contains("session"))
+            // Stop auto-refresh on repeated failures
+            _overviewRefreshTimer.Stop();
+            await Application.Current.Dispatcher.InvokeAsync(() =>
             {
-                _overviewRefreshTimer.Stop();
-                _currentSession = null;
-                await Application.Current.Dispatcher.InvokeAsync(() =>
+                StatusMessage = $"Auto-refresh failed - disabled";
+            });
+        }
+    }
+
+    /// <summary>
+    /// Monitors a service command for completion and returns the deserialized result
+    /// </summary>
+    private async Task<T?> MonitorCommandCompletionAsync<T>(string commandId, string operationName) where T : class
+    {
+        var timeout = DateTime.UtcNow.AddMinutes(5); // 5 minute timeout
+        
+        while (DateTime.UtcNow < timeout)
+        {
+            await Task.Delay(2000); // Check every 2 seconds
+            
+            var command = await _serviceConfigurationManager.GetCommandResultAsync(commandId);
+            if (command != null)
+            {
+                if (command.Status == "Completed")
                 {
-                    StatusMessage = $"Connection lost - auto-refresh disabled";
-                });
+                    try
+                    {
+                        if (!string.IsNullOrEmpty(command.Result))
+                        {
+                            return JsonSerializer.Deserialize<T>(command.Result);
+                        }
+                    }
+                    catch (JsonException ex)
+                    {
+                        _logger.LogError(ex, "Failed to deserialize {OperationName} result", operationName);
+                        throw new InvalidOperationException($"Failed to parse {operationName} response");
+                    }
+                    return null;
+                }
+                else if (command.Status == "Failed")
+                {
+                    throw new InvalidOperationException($"{operationName} failed: {command.ErrorMessage}");
+                }
             }
         }
+        
+        throw new TimeoutException($"{operationName} timed out");
     }
 
     /// <summary>
@@ -191,7 +254,7 @@ public partial class VCenterOverviewViewModel : ObservableObject, IDisposable
     {
         AutoRefreshEnabled = !AutoRefreshEnabled;
         
-        if (AutoRefreshEnabled && SelectedVCenter != null && _currentSession != null)
+        if (AutoRefreshEnabled && SelectedVCenter != null)
         {
             _overviewRefreshTimer.Start();
             StatusMessage = "Auto-refresh enabled";
@@ -212,7 +275,6 @@ public partial class VCenterOverviewViewModel : ObservableObject, IDisposable
     public void StopRefresh()
     {
         _overviewRefreshTimer.Stop();
-        _currentSession = null;
     }
 
     /// <summary>

@@ -101,7 +101,7 @@ public class ServiceCommand
     public int Id { get; set; }
     
     /// <summary>
-    /// Command type (StartSchedule, StopSchedule, ReloadConfig, ExecuteCheck, etc.)
+    /// Command type identifier
     /// </summary>
     [Required]
     [MaxLength(50)]
@@ -113,45 +113,46 @@ public class ServiceCommand
     public string Parameters { get; set; } = "{}";
     
     /// <summary>
-    /// When the command was created
+    /// Command result as JSON
     /// </summary>
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public string Result { get; set; } = string.Empty;
     
     /// <summary>
-    /// When the command was processed by the service
-    /// </summary>
-    public DateTime? ProcessedAt { get; set; }
-    
-    /// <summary>
-    /// Command execution status
+    /// Command status (Pending, Processing, Completed, Failed)
     /// </summary>
     [MaxLength(20)]
     public string Status { get; set; } = "Pending";
     
     /// <summary>
-    /// Command execution result
-    /// </summary>
-    public string Result { get; set; } = string.Empty;
-    
-    /// <summary>
     /// Error message if command failed
     /// </summary>
-    public string? ErrorMessage { get; set; }
+    public string ErrorMessage { get; set; } = string.Empty;
+    
+    /// <summary>
+    /// When this command was created
+    /// </summary>
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    
+    /// <summary>
+    /// When this command was processed by the service
+    /// </summary>
+    public DateTime? ProcessedAt { get; set; }
+    
+    /// <summary>
+    /// Command priority (1 = highest, 10 = lowest)
+    /// </summary>
+    public int Priority { get; set; } = 5;
 }
 
 /// <summary>
-/// Available service command types
+/// Service command types
 /// </summary>
 public static class ServiceCommandTypes
 {
-    public const string StartSchedule = "StartSchedule";
-    public const string StopSchedule = "StopSchedule";
-    public const string PauseSchedule = "PauseSchedule";
-    public const string ResumeSchedule = "ResumeSchedule";
     public const string ExecuteCheck = "ExecuteCheck";
-    public const string ReloadConfiguration = "ReloadConfiguration";
     public const string ValidatePowerCLI = "ValidatePowerCLI";
-    public const string TestConnection = "TestConnection";
     public const string GetServiceStatus = "GetServiceStatus";
-    public const string RestartService = "RestartService";
+    public const string ReloadConfiguration = "ReloadConfiguration";
+    public const string GetOverviewData = "GetOverviewData";
+    public const string GetInfrastructureData = "GetInfrastructureData";
 } 

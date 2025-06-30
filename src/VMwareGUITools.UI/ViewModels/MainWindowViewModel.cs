@@ -102,12 +102,11 @@ public partial class MainWindowViewModel : ObservableObject
         // Initialize view models
         _infrastructureViewModel = new InfrastructureViewModel(
             _serviceProvider.GetRequiredService<ILogger<InfrastructureViewModel>>(),
-            restApiService);
+            serviceConfigurationManager);
         
         _vCenterOverviewViewModel = new VCenterOverviewViewModel(
             _serviceProvider.GetRequiredService<ILogger<VCenterOverviewViewModel>>(),
-            vmwareService,
-            restApiService);
+            serviceConfigurationManager);
 
         _checkResultsViewModel = new CheckResultsViewModel(
             _serviceProvider.GetRequiredService<ILogger<CheckResultsViewModel>>(),

@@ -5,6 +5,7 @@ using System.Text.Json;
 using VMwareGUITools.Core.Models;
 using VMwareGUITools.Data;
 using VMwareGUITools.Infrastructure.Checks;
+using VMwareGUITools.Infrastructure.VMware;
 
 namespace VMwareGUITools.Infrastructure.Services;
 
@@ -229,6 +230,8 @@ public class ServiceConfigurationManager : IServiceConfigurationManager
                 ServiceCommandTypes.ValidatePowerCLI => await ValidatePowerCLICommand(),
                 ServiceCommandTypes.GetServiceStatus => await GetServiceStatusCommand(),
                 ServiceCommandTypes.ReloadConfiguration => await ReloadConfigurationCommand(),
+                ServiceCommandTypes.GetOverviewData => await GetOverviewDataCommand(command.Parameters),
+                ServiceCommandTypes.GetInfrastructureData => await GetInfrastructureDataCommand(command.Parameters),
                 _ => $"Unknown command type: {command.CommandType}"
             };
 
@@ -480,6 +483,84 @@ public class ServiceConfigurationManager : IServiceConfigurationManager
         // Implementation would reload configuration
         await Task.Delay(100); // Placeholder
         return JsonSerializer.Serialize(new { Success = true, Message = "Configuration reloaded" });
+    }
+
+    private async Task<string> GetOverviewDataCommand(string parametersJson)
+    {
+        try
+        {
+            _logger.LogInformation("Executing GetOverviewData command");
+            
+            var parameters = JsonSerializer.Deserialize<Dictionary<string, object>>(parametersJson);
+            if (parameters == null || !parameters.TryGetValue("VCenterId", out var vCenterIdObj))
+            {
+                throw new ArgumentException("VCenterId parameter is required");
+            }
+
+            var vCenterId = Convert.ToInt32(vCenterIdObj);
+            var vCenter = await _dbContext.VCenters.FirstOrDefaultAsync(v => v.Id == vCenterId);
+            if (vCenter == null)
+            {
+                throw new ArgumentException($"vCenter with ID {vCenterId} not found");
+            }
+
+            using var scope = _serviceProvider.CreateScope();
+            var restApiService = scope.ServiceProvider.GetRequiredService<IVSphereRestAPIService>();
+            
+            var session = await restApiService.ConnectAsync(vCenter);
+            var overviewData = await restApiService.GetOverviewDataAsync(session);
+            await restApiService.DisconnectAsync(session);
+
+            return JsonSerializer.Serialize(overviewData);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get overview data");
+            throw;
+        }
+    }
+
+    private async Task<string> GetInfrastructureDataCommand(string parametersJson)
+    {
+        try
+        {
+            _logger.LogInformation("Executing GetInfrastructureData command");
+            
+            var parameters = JsonSerializer.Deserialize<Dictionary<string, object>>(parametersJson);
+            if (parameters == null || !parameters.TryGetValue("VCenterId", out var vCenterIdObj))
+            {
+                throw new ArgumentException("VCenterId parameter is required");
+            }
+
+            var vCenterId = Convert.ToInt32(vCenterIdObj);
+            var vCenter = await _dbContext.VCenters.FirstOrDefaultAsync(v => v.Id == vCenterId);
+            if (vCenter == null)
+            {
+                throw new ArgumentException($"vCenter with ID {vCenterId} not found");
+            }
+
+            using var scope = _serviceProvider.CreateScope();
+            var restApiService = scope.ServiceProvider.GetRequiredService<IVSphereRestAPIService>();
+            
+            var session = await restApiService.ConnectAsync(vCenter);
+            var clusters = await restApiService.DiscoverClustersAsync(session);
+            var datastores = await restApiService.DiscoverDatastoresAsync(session);
+            await restApiService.DisconnectAsync(session);
+
+            var infrastructureData = new
+            {
+                Clusters = clusters,
+                Datastores = datastores,
+                LastUpdated = DateTime.UtcNow
+            };
+
+            return JsonSerializer.Serialize(infrastructureData);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get infrastructure data");
+            throw;
+        }
     }
 
     private async void UpdateHeartbeat(object? state)
