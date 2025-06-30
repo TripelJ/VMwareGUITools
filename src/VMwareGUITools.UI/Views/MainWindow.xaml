@@ -459,7 +459,7 @@
                                 </StackPanel>
                                 
                                 <TextBlock Grid.Column="2"
-                                           Text="{Binding ServiceActiveExecutions, StringFormat='{0} active'}"
+                                           Text="{Binding ServiceActiveExecutions, StringFormat=\{0\} active}"
                                            FontSize="10"
                                            Foreground="{DynamicResource MaterialDesignBodyLight}"
                                            VerticalAlignment="Center"
