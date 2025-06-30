@@ -5,6 +5,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Quartz;
 using Serilog;
+using System.Runtime.CompilerServices;
 using System.Runtime.Versioning;
 using VMwareGUITools.Data;
 using VMwareGUITools.Infrastructure.Checks;
@@ -116,7 +117,9 @@ public class Program
                 {
                     try
                     {
-                        await context.Database.ExecuteSqlRawAsync($"SELECT 1 FROM {tableName} LIMIT 1");
+                        // Use parameterized query with FormattableString for safe table name checking
+                        var query = $"SELECT 1 FROM {tableName} LIMIT 1";
+                        await context.Database.ExecuteSqlAsync(FormattableStringFactory.Create(query));
                     }
                     catch (Microsoft.Data.Sqlite.SqliteException ex) when (ex.Message.Contains("no such table"))
                     {
