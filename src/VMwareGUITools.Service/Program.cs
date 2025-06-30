@@ -112,7 +112,7 @@ public class Program
                 {
                     try
                     {
-                        await context.Database.ExecuteSqlAsync($"SELECT 1 FROM {tableName} LIMIT 1");
+                        await context.Database.ExecuteSqlRawAsync($"SELECT 1 FROM {tableName} LIMIT 1");
                     }
                     catch (Microsoft.Data.Sqlite.SqliteException ex) when (ex.Message.Contains("no such table"))
                     {
