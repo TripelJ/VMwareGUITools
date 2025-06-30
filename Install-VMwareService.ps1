@@ -97,9 +97,33 @@ function Uninstall-Service {
             Start-Sleep -Seconds 3
         }
         
-        # Remove service
+        # Remove service using sc.exe (compatible with all PowerShell versions)
         Write-Log "Removing service..."
-        Remove-Service -Name $ServiceName
+        
+        # Try Remove-Service first (PowerShell 6.0+), fallback to sc.exe for older versions
+        try {
+            if (Get-Command Remove-Service -ErrorAction SilentlyContinue) {
+                Remove-Service -Name $ServiceName -ErrorAction Stop
+            } else {
+                # Fallback to sc.exe for Windows PowerShell 5.1 and older
+                $scResult = & sc.exe delete $ServiceName
+                if ($LASTEXITCODE -ne 0) {
+                    throw "sc.exe delete failed with exit code: $LASTEXITCODE. Output: $($scResult -join ' ')"
+                }
+            }
+        } catch {
+            # Final fallback using WMI
+            Write-Log "Remove-Service and sc.exe failed, trying WMI method..." -Level "WARN"
+            $service = Get-WmiObject -Class Win32_Service -Filter "Name='$ServiceName'"
+            if ($service) {
+                $deleteResult = $service.Delete()
+                if ($deleteResult.ReturnValue -ne 0) {
+                    throw "WMI service deletion failed with return code: $($deleteResult.ReturnValue)"
+                }
+            } else {
+                throw "Service not found for WMI deletion"
+            }
+        }
         
         Write-Log "Service '$ServiceName' uninstalled successfully!" -Level "SUCCESS"
         
