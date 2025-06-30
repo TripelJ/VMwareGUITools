@@ -199,7 +199,7 @@ public partial class App : Application
                 {
                     try
                     {
-                        await context.Database.ExecuteSqlRawAsync($"SELECT 1 FROM {tableName} LIMIT 1");
+                        await context.Database.ExecuteSqlAsync($"SELECT 1 FROM {tableName} LIMIT 1");
                     }
                     catch (Microsoft.Data.Sqlite.SqliteException ex) when (ex.Message.Contains("no such table"))
                     {

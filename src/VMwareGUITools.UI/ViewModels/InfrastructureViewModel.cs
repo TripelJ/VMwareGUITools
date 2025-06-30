@@ -172,7 +172,7 @@ public partial class InfrastructureViewModel : ObservableObject, IDisposable
     /// <summary>
     /// Build the infrastructure tree from discovered data
     /// </summary>
-    private async Task BuildInfrastructureTreeAsync(IEnumerable<ClusterInfo> clusters, IEnumerable<DatastoreInfo> datastores)
+    private Task BuildInfrastructureTreeAsync(IEnumerable<ClusterInfo> clusters, IEnumerable<DatastoreInfo> datastores)
     {
         // Build cluster tree with hosts
         foreach (var cluster in clusters.OrderBy(c => c.Name))
@@ -240,15 +240,17 @@ public partial class InfrastructureViewModel : ObservableObject, IDisposable
 
             InfrastructureItems.Add(datastoresSection);
         }
+        
+        return Task.CompletedTask;
     }
 
     /// <summary>
     /// Check for status updates without rebuilding the entire tree
     /// </summary>
-    private async Task CheckStatusUpdatesAsync()
+    private Task CheckStatusUpdatesAsync()
     {
         if (CurrentVCenter == null || IsLoading)
-            return;
+            return Task.CompletedTask;
 
         try
         {
@@ -264,6 +266,8 @@ public partial class InfrastructureViewModel : ObservableObject, IDisposable
         {
             _logger.LogWarning(ex, "Status update failed for vCenter: {VCenterName}", CurrentVCenter?.Name);
         }
+        
+        return Task.CompletedTask;
     }
 
     /// <summary>
