@@ -24,7 +24,7 @@ public class Program
         // Configure Serilog
         Log.Logger = new LoggerConfiguration()
             .WriteTo.Console()
-            .WriteTo.File("logs/vmware-service-.txt", rollingInterval: RollingInterval.Day)
+            .WriteTo.File("logs/vmware-service-.log", rollingInterval: RollingInterval.Day)
             .CreateLogger();
 
         try
@@ -93,14 +93,53 @@ public class Program
             var context = scope.ServiceProvider.GetRequiredService<VMwareDbContext>();
             
             Log.Information("Initializing database...");
-            await context.Database.EnsureCreatedAsync();
             
-            // Run any pending migrations
-            var pendingMigrations = await context.Database.GetPendingMigrationsAsync();
-            if (pendingMigrations.Any())
+            // Check if database exists
+            var databaseExists = await context.Database.CanConnectAsync();
+            
+            if (!databaseExists)
             {
-                Log.Information("Applying {Count} pending migrations", pendingMigrations.Count());
-                await context.Database.MigrateAsync();
+                Log.Information("Creating new database...");
+                await context.Database.EnsureCreatedAsync();
+            }
+            else
+            {
+                // Check if all required tables exist
+                var requiredTables = new[] { "ServiceCommands", "ServiceStatuses", "ServiceConfigurations" };
+                var missingTables = new List<string>();
+                
+                foreach (var tableName in requiredTables)
+                {
+                    try
+                    {
+                        await context.Database.ExecuteSqlRawAsync($"SELECT 1 FROM {tableName} LIMIT 1");
+                    }
+                    catch (Microsoft.Data.Sqlite.SqliteException ex) when (ex.Message.Contains("no such table"))
+                    {
+                        missingTables.Add(tableName);
+                    }
+                }
+                
+                if (missingTables.Any())
+                {
+                    Log.Information("Missing tables detected: {MissingTables}. Recreating database to add new schema...", string.Join(", ", missingTables));
+                    
+                    // Delete the database file and recreate it with the current schema
+                    await context.Database.EnsureDeletedAsync();
+                    await context.Database.EnsureCreatedAsync();
+                    
+                    Log.Information("Database recreated successfully with updated schema");
+                }
+                else
+                {
+                    // Run any pending migrations
+                    var pendingMigrations = await context.Database.GetPendingMigrationsAsync();
+                    if (pendingMigrations.Any())
+                    {
+                        Log.Information("Applying {Count} pending migrations", pendingMigrations.Count());
+                        await context.Database.MigrateAsync();
+                    }
+                }
             }
             
             Log.Information("Database initialized successfully");
