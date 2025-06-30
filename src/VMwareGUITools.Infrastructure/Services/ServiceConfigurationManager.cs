@@ -1,8 +1,10 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
 using VMwareGUITools.Core.Models;
 using VMwareGUITools.Data;
+using VMwareGUITools.Infrastructure.Checks;
 
 namespace VMwareGUITools.Infrastructure.Services;
 
@@ -13,15 +15,18 @@ public class ServiceConfigurationManager : IServiceConfigurationManager
 {
     private readonly ILogger<ServiceConfigurationManager> _logger;
     private readonly VMwareDbContext _dbContext;
+    private readonly IServiceProvider _serviceProvider;
     private readonly Timer _commandProcessingTimer;
     private readonly Timer _heartbeatTimer;
 
     public ServiceConfigurationManager(
         ILogger<ServiceConfigurationManager> logger,
-        VMwareDbContext dbContext)
+        VMwareDbContext dbContext,
+        IServiceProvider serviceProvider)
     {
         _logger = logger;
         _dbContext = dbContext;
+        _serviceProvider = serviceProvider;
 
         // Process commands every 5 seconds
         _commandProcessingTimer = new Timer(ProcessPendingCommands, null, TimeSpan.Zero, TimeSpan.FromSeconds(5));
@@ -220,6 +225,7 @@ public class ServiceConfigurationManager : IServiceConfigurationManager
 
             var result = command.CommandType switch
             {
+                ServiceCommandTypes.ExecuteCheck => await ExecuteCheckCommand(command.Parameters),
                 ServiceCommandTypes.ValidatePowerCLI => await ValidatePowerCLICommand(),
                 ServiceCommandTypes.GetServiceStatus => await GetServiceStatusCommand(),
                 ServiceCommandTypes.ReloadConfiguration => await ReloadConfigurationCommand(),
@@ -240,6 +246,220 @@ public class ServiceConfigurationManager : IServiceConfigurationManager
             command.ErrorMessage = ex.Message;
             await _dbContext.SaveChangesAsync();
         }
+    }
+
+    private async Task<string> ExecuteCheckCommand(string parametersJson)
+    {
+        try
+        {
+            using var scope = _serviceProvider.CreateScope();
+            var checkExecutionService = scope.ServiceProvider.GetRequiredService<ICheckExecutionService>();
+
+            var parameters = JsonSerializer.Deserialize<JsonElement>(parametersJson);
+            
+            // Handle different types of check execution requests
+            if (parameters.TryGetProperty("HostId", out var hostIdProperty) && 
+                parameters.TryGetProperty("CheckDefinitionId", out var checkDefIdProperty) &&
+                parameters.TryGetProperty("VCenterId", out var vCenterIdProperty))
+            {
+                // Single host check execution
+                var result = await ExecuteSingleHostCheck(checkExecutionService, 
+                    hostIdProperty.GetInt32(), 
+                    checkDefIdProperty.GetInt32(), 
+                    vCenterIdProperty.GetInt32());
+                    
+                return JsonSerializer.Serialize(new { 
+                    Success = true, 
+                    Message = $"Check executed with status: {result.Status}",
+                    ResultId = result.Id
+                });
+            }
+            else if (parameters.TryGetProperty("ClusterId", out var clusterIdProperty) &&
+                     parameters.TryGetProperty("VCenterId", out var clusterVCenterIdProperty))
+            {
+                // Cluster checks execution
+                var results = await ExecuteClusterChecks(checkExecutionService, 
+                    clusterIdProperty.GetInt32(), 
+                    clusterVCenterIdProperty.GetInt32());
+                    
+                return JsonSerializer.Serialize(new { 
+                    Success = true, 
+                    Message = $"Cluster checks executed: {results.Count} checks completed",
+                    ResultCount = results.Count,
+                    PassedCount = results.Count(r => r.Status == CheckStatus.Passed),
+                    FailedCount = results.Count(r => r.Status == CheckStatus.Failed)
+                });
+            }
+            else if (parameters.TryGetProperty("CheckType", out var checkTypeProperty) &&
+                     parameters.TryGetProperty("VCenterId", out var specialVCenterIdProperty))
+            {
+                // Special check types (like iSCSI checks)
+                var checkType = checkTypeProperty.GetString();
+                var results = await ExecuteSpecialChecks(checkExecutionService, 
+                    checkType!, 
+                    specialVCenterIdProperty.GetInt32());
+                    
+                return JsonSerializer.Serialize(new { 
+                    Success = true, 
+                    Message = $"{checkType} checks executed: {results.Count} checks completed",
+                    ResultCount = results.Count,
+                    PassedCount = results.Count(r => r.Status == CheckStatus.Passed),
+                    FailedCount = results.Count(r => r.Status == CheckStatus.Failed)
+                });
+            }
+            else
+            {
+                return JsonSerializer.Serialize(new { 
+                    Success = false, 
+                    Message = "Invalid check execution parameters" 
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to execute check command");
+            return JsonSerializer.Serialize(new { 
+                Success = false, 
+                Message = $"Check execution failed: {ex.Message}" 
+            });
+        }
+    }
+
+    private async Task<CheckResult> ExecuteSingleHostCheck(ICheckExecutionService checkExecutionService, 
+        int hostId, int checkDefinitionId, int vCenterId)
+    {
+        var host = await _dbContext.Hosts
+            .FirstOrDefaultAsync(h => h.Id == hostId);
+        var checkDefinition = await _dbContext.CheckDefinitions
+            .FirstOrDefaultAsync(cd => cd.Id == checkDefinitionId);
+        var vCenter = await _dbContext.VCenters
+            .FirstOrDefaultAsync(v => v.Id == vCenterId);
+
+        if (host == null || checkDefinition == null || vCenter == null)
+        {
+            throw new ArgumentException("Invalid host, check definition, or vCenter ID");
+        }
+
+        return await checkExecutionService.ExecuteCheckAsync(host, checkDefinition, vCenter);
+    }
+
+    private async Task<List<CheckResult>> ExecuteClusterChecks(ICheckExecutionService checkExecutionService, 
+        int clusterId, int vCenterId)
+    {
+        var cluster = await _dbContext.Clusters
+            .FirstOrDefaultAsync(c => c.Id == clusterId);
+        var vCenter = await _dbContext.VCenters
+            .FirstOrDefaultAsync(v => v.Id == vCenterId);
+
+        if (cluster == null || vCenter == null)
+        {
+            throw new ArgumentException("Invalid cluster or vCenter ID");
+        }
+
+        return await checkExecutionService.ExecuteClusterChecksAsync(cluster, vCenter);
+    }
+
+    private async Task<List<CheckResult>> ExecuteSpecialChecks(ICheckExecutionService checkExecutionService, 
+        string checkType, int vCenterId)
+    {
+        var vCenter = await _dbContext.VCenters
+            .FirstOrDefaultAsync(v => v.Id == vCenterId);
+
+        if (vCenter == null)
+        {
+            throw new ArgumentException("Invalid vCenter ID");
+        }
+
+        switch (checkType.ToLower())
+        {
+            case "iscsi":
+                return await ExecuteiSCSIChecks(checkExecutionService, vCenter);
+            default:
+                throw new ArgumentException($"Unknown check type: {checkType}");
+        }
+    }
+
+    private async Task<List<CheckResult>> ExecuteiSCSIChecks(ICheckExecutionService checkExecutionService, VCenter vCenter)
+    {
+        // Get or create the iSCSI check definition
+        var iSCSICheck = await _dbContext.CheckDefinitions
+            .FirstOrDefaultAsync(cd => cd.Name.Contains("iSCSI") && cd.Name.Contains("Dead Path"));
+
+        if (iSCSICheck == null)
+        {
+            // Create the iSCSI check if it doesn't exist
+            var storageCategory = await _dbContext.CheckCategories
+                .FirstOrDefaultAsync(cc => cc.Name == "Storage")
+                ?? new CheckCategory
+                {
+                    Name = "Storage",
+                    Description = "Storage health and configuration checks",
+                    Type = CheckCategoryType.Health,
+                    Enabled = true,
+                    SortOrder = 5
+                };
+
+            if (storageCategory.Id == 0)
+            {
+                _dbContext.CheckCategories.Add(storageCategory);
+                await _dbContext.SaveChangesAsync();
+            }
+
+            iSCSICheck = new CheckDefinition
+            {
+                CategoryId = storageCategory.Id,
+                Name = "iSCSI Dead Path Check",
+                Description = "Check for dead or inactive iSCSI storage paths",
+                ExecutionType = CheckExecutionType.vSphereRestAPI,
+                DefaultSeverity = CheckSeverity.Critical,
+                IsEnabled = true,
+                TimeoutSeconds = 120,
+                ScriptPath = "Scripts/Storage/Check-iSCSIDeadPaths.ps1",
+                Script = "# PowerShell script to check iSCSI path status",
+                Parameters = """{"checkAllAdapters": true}""",
+                Thresholds = """{"maxDeadPaths": 0}"""
+            };
+
+            _dbContext.CheckDefinitions.Add(iSCSICheck);
+            await _dbContext.SaveChangesAsync();
+        }
+
+        // Get all hosts for this vCenter
+        var hosts = await _dbContext.Hosts
+            .Where(h => h.VCenterId == vCenter.Id && h.Enabled)
+            .ToListAsync();
+
+        var results = new List<CheckResult>();
+        
+        // Execute the check on each host
+        foreach (var host in hosts)
+        {
+            try
+            {
+                var result = await checkExecutionService.ExecuteCheckAsync(host, iSCSICheck, vCenter);
+                results.Add(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to execute iSCSI check on host {HostName}", host.Name);
+                
+                // Create a failed result for reporting purposes
+                var failedResult = new CheckResult
+                {
+                    CheckDefinitionId = iSCSICheck.Id,
+                    HostId = host.Id,
+                    Status = CheckStatus.Error,
+                    ErrorMessage = $"Failed to execute check: {ex.Message}",
+                    ExecutedAt = DateTime.UtcNow,
+                    ExecutionTime = TimeSpan.Zero,
+                    Output = "Check execution failed",
+                    Details = $"Host: {host.Name}, Error: {ex.Message}"
+                };
+                results.Add(failedResult);
+            }
+        }
+
+        return results;
     }
 
     private async Task<string> ValidatePowerCLICommand()

@@ -100,6 +100,7 @@
                             <RowDefinition Height="*"/>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
 
                         <!-- vCenter Panel Header -->
@@ -400,6 +401,69 @@
                                         </Style>
                                     </TextBlock.Style>
                                 </TextBlock>
+                            </Grid>
+                        </Border>
+
+                        <!-- Windows Service Status -->
+                        <Border Grid.Row="4" 
+                                BorderBrush="{DynamicResource MaterialDesignDivider}"
+                                BorderThickness="0,1,0,0"
+                                Padding="16,8">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                
+                                <materialDesign:PackIcon Grid.Column="0"
+                                                         Kind="Cog"
+                                                         Height="16" Width="16"
+                                                         VerticalAlignment="Center"
+                                                         Margin="0,0,8,0">
+                                    <materialDesign:PackIcon.Style>
+                                        <Style TargetType="materialDesign:PackIcon">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsServiceRunning}" Value="True">
+                                                    <Setter Property="Foreground" Value="{StaticResource SuccessBrush}"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding IsServiceRunning}" Value="False">
+                                                    <Setter Property="Foreground" Value="{StaticResource ErrorBrush}"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </materialDesign:PackIcon.Style>
+                                </materialDesign:PackIcon>
+                                
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock FontSize="11">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsServiceRunning}" Value="True">
+                                                        <Setter Property="Text" Value="Windows Service Running"/>
+                                                        <Setter Property="Foreground" Value="{StaticResource SuccessBrush}"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding IsServiceRunning}" Value="False">
+                                                        <Setter Property="Text" Value="Windows Service Stopped"/>
+                                                        <Setter Property="Foreground" Value="{StaticResource ErrorBrush}"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                    <TextBlock Text="{Binding ServiceStatus, StringFormat='Status: {0}'}"
+                                               FontSize="10"
+                                               Foreground="{DynamicResource MaterialDesignBodyLight}"
+                                               Visibility="{Binding ServiceStatus, Converter={StaticResource StringToVisibilityConverter}}"/>
+                                </StackPanel>
+                                
+                                <TextBlock Grid.Column="2"
+                                           Text="{Binding ServiceActiveExecutions, StringFormat='{0} active'}"
+                                           FontSize="10"
+                                           Foreground="{DynamicResource MaterialDesignBodyLight}"
+                                           VerticalAlignment="Center"
+                                           Visibility="{Binding IsServiceRunning, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                             </Grid>
                         </Border>
                     </Grid>

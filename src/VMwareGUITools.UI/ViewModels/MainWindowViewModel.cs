@@ -13,6 +13,8 @@ using VMwareGUITools.Infrastructure.Security;
 using VMwareGUITools.Infrastructure.VMware;
 using VMwareGUITools.Infrastructure.Checks;
 using VMwareGUITools.UI.Views;
+using VMwareGUITools.Infrastructure.Services;
+using System.Text.Json;
 
 namespace VMwareGUITools.UI.ViewModels;
 
@@ -26,8 +28,10 @@ public partial class MainWindowViewModel : ObservableObject
     private readonly IVMwareConnectionService _vmwareService;
     private readonly IVSphereRestAPIService _restApiService;
     private readonly IServiceProvider _serviceProvider;
+    private readonly IServiceConfigurationManager _serviceConfigurationManager;
     private readonly System.Timers.Timer _clockTimer;
     private readonly System.Timers.Timer _connectionMonitorTimer;
+    private readonly System.Timers.Timer _serviceMonitorTimer;
 
     [ObservableProperty]
     private ObservableCollection<VCenter> _vCenters = new();
@@ -54,6 +58,18 @@ public partial class MainWindowViewModel : ObservableObject
     private bool _isDatabaseConnected = false;
 
     [ObservableProperty]
+    private bool _isServiceRunning = false;
+
+    [ObservableProperty]
+    private string _serviceStatus = "Unknown";
+
+    [ObservableProperty]
+    private DateTime _serviceLastHeartbeat = DateTime.MinValue;
+
+    [ObservableProperty]
+    private int _serviceActiveExecutions = 0;
+
+    [ObservableProperty]
     private bool _isLoading = false;
 
     [ObservableProperty]
@@ -73,13 +89,15 @@ public partial class MainWindowViewModel : ObservableObject
         VMwareDbContext context,
         IVMwareConnectionService vmwareService,
         IVSphereRestAPIService restApiService,
-        IServiceProvider serviceProvider)
+        IServiceProvider serviceProvider,
+        IServiceConfigurationManager serviceConfigurationManager)
     {
         _logger = logger;
         _context = context;
         _vmwareService = vmwareService;
         _restApiService = restApiService;
         _serviceProvider = serviceProvider;
+        _serviceConfigurationManager = serviceConfigurationManager;
 
         // Initialize view models
         _infrastructureViewModel = new InfrastructureViewModel(
@@ -94,7 +112,7 @@ public partial class MainWindowViewModel : ObservableObject
         _checkResultsViewModel = new CheckResultsViewModel(
             _serviceProvider.GetRequiredService<ILogger<CheckResultsViewModel>>(),
             context,
-            _serviceProvider.GetRequiredService<ICheckExecutionService>());
+            serviceConfigurationManager);
 
         _availabilityZoneViewModel = new AvailabilityZoneViewModel(
             _serviceProvider.GetRequiredService<ILogger<AvailabilityZoneViewModel>>(),
@@ -113,6 +131,11 @@ public partial class MainWindowViewModel : ObservableObject
         _connectionMonitorTimer = new System.Timers.Timer(30000);
         _connectionMonitorTimer.Elapsed += async (s, e) => await MonitorConnectionsAsync();
         _connectionMonitorTimer.Start();
+
+        // Setup service monitoring timer - check every 10 seconds
+        _serviceMonitorTimer = new System.Timers.Timer(10000);
+        _serviceMonitorTimer.Elapsed += async (s, e) => await MonitorServiceStatusAsync();
+        _serviceMonitorTimer.Start();
 
         // Initialize data
         _ = InitializeAsync();
@@ -361,7 +384,7 @@ public partial class MainWindowViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Command to run iSCSI dead path checks on all hosts
+    /// Command to run iSCSI checks via Windows Service
     /// </summary>
     [RelayCommand]
     private async Task RuniSCSICheckAsync()
@@ -372,215 +395,110 @@ public partial class MainWindowViewModel : ObservableObject
             return;
         }
 
+        if (!IsServiceRunning)
+        {
+            StatusMessage = "Windows Service is not running. Cannot execute checks.";
+            return;
+        }
+
         try
         {
             IsLoading = true;
-            StatusMessage = "Running iSCSI dead path checks...";
+            StatusMessage = "Sending iSCSI check command to Windows Service...";
 
-            _logger.LogInformation("Running iSCSI checks for vCenter: {VCenterName}", SelectedVCenter.Name);
-
-            // Get the iSCSI check definition
-            var iSCSICheck = await _context.CheckDefinitions
-                .Include(cd => cd.Category)
-                .FirstOrDefaultAsync(cd => cd.Name.Contains("iSCSI") && cd.Name.Contains("Dead Path"));
-
-            if (iSCSICheck == null)
+            // Send command to service instead of executing directly
+            var parameters = new
             {
-                // Create the iSCSI check if it doesn't exist
-                var storageCategory = await _context.CheckCategories
-                    .FirstOrDefaultAsync(cc => cc.Name == "Storage")
-                    ?? new CheckCategory
-                    {
-                        Name = "Storage",
-                        Description = "Storage health and configuration checks",
-                        Type = CheckCategoryType.Health,
-                        Enabled = true,
-                        SortOrder = 5
-                    };
+                VCenterId = SelectedVCenter.Id,
+                CheckType = "iSCSI",
+                IsManualRun = true
+            };
 
-                if (storageCategory.Id == 0)
-                {
-                    _context.CheckCategories.Add(storageCategory);
-                    await _context.SaveChangesAsync();
-                }
+            var commandId = await _serviceConfigurationManager.SendCommandAsync(
+                ServiceCommandTypes.ExecuteCheck, 
+                parameters);
 
-                iSCSICheck = new CheckDefinition
-                {
-                    CategoryId = storageCategory.Id,
-                    Name = "iSCSI Dead Path Check",
-                    Description = "Check for dead or inactive iSCSI storage paths",
-                    ExecutionType = CheckExecutionType.vSphereRestAPI,
-                    DefaultSeverity = CheckSeverity.Critical,
-                    IsEnabled = true,
-                    TimeoutSeconds = 120,
-                    ScriptPath = "Scripts/Storage/Check-iSCSIDeadPaths.ps1",
-                    Script = "# PowerShell script to check iSCSI path status",
-                    Parameters = """{"checkAllAdapters": true}""",
-                    Thresholds = """{"maxDeadPaths": 0}"""
-                };
+            StatusMessage = $"iSCSI check command sent to service (ID: {commandId}). Monitoring for results...";
 
-                _context.CheckDefinitions.Add(iSCSICheck);
-                await _context.SaveChangesAsync();
-            }
+            // Monitor for completion
+            await MonitorCommandCompletionAsync(commandId, "iSCSI check");
 
-            // Use the same REST API discovery method that the Infrastructure tab uses
-            VSphereSession? session = null;
-            var allHosts = new List<(HostInfo Host, ClusterInfo Cluster)>();
-            
-            try
-            {
-                // Establish REST API session (same as Infrastructure tab)
-                session = await _restApiService.ConnectAsync(SelectedVCenter);
-                
-                // Discover clusters first
-                var clusters = await _restApiService.DiscoverClustersAsync(session);
-                
-                // Get hosts from each cluster (same approach as Infrastructure tab)
-                foreach (var cluster in clusters)
-                {
-                    try
-                    {
-                        var hostsInCluster = await _restApiService.DiscoverHostsAsync(session, cluster.MoId);
-                        // Associate each host with its cluster
-                        foreach (var host in hostsInCluster)
-                        {
-                            allHosts.Add((host, cluster));
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, "Failed to discover hosts in cluster {ClusterName}", cluster.Name);
-                    }
-                }
-                
-                if (!allHosts.Any())
-                {
-                    StatusMessage = "No hosts found for the selected vCenter";
-                    return;
-                }
+            // Refresh check results
+            await CheckResultsViewModel.LoadCheckResultsAsync(SelectedVCenter);
 
-                _logger.LogInformation("Discovered {HostCount} hosts for iSCSI checks", allHosts.Count);
-
-                var checkExecutionService = _serviceProvider.GetRequiredService<ICheckExecutionService>();
-                var results = new List<CheckResult>();
-
-                // Execute the check on each discovered host
-                // Convert HostInfo to Host entities for check execution
-                foreach (var (hostInfo, clusterInfo) in allHosts)
-                {
-                    try
-                    {
-                        // Check if host already exists in database
-                        var existingHost = await _context.Hosts
-                            .FirstOrDefaultAsync(h => h.MoId == hostInfo.MoId && h.VCenterId == SelectedVCenter.Id);
-                        
-                        Host hostEntity;
-                        if (existingHost != null)
-                        {
-                            // Use existing host from database
-                            hostEntity = existingHost;
-                        }
-                        else
-                        {
-                            // Create a new host entity with proper relationships
-                            // First, try to find or create the cluster
-                            var cluster = await _context.Clusters
-                                .FirstOrDefaultAsync(c => c.VCenterId == SelectedVCenter.Id && c.Name == clusterInfo.Name);
-                            
-                            if (cluster == null)
-                            {
-                                // Create a temporary cluster if it doesn't exist
-                                cluster = new Cluster
-                                {
-                                    Name = clusterInfo.Name,
-                                    VCenterId = SelectedVCenter.Id,
-                                    MoId = clusterInfo.MoId,
-                                    Enabled = true,
-                                    CreatedAt = DateTime.UtcNow,
-                                    UpdatedAt = DateTime.UtcNow
-                                };
-                                _context.Clusters.Add(cluster);
-                                await _context.SaveChangesAsync(); // Save to get the cluster ID
-                            }
-                            
-                            // Create the host entity with proper foreign key relationships
-                            hostEntity = new Host
-                            {
-                                Name = hostInfo.Name,
-                                MoId = hostInfo.MoId,
-                                IpAddress = hostInfo.IpAddress ?? "Unknown",
-                                VCenterId = SelectedVCenter.Id,
-                                ClusterId = cluster.Id,
-                                HostType = hostInfo.Type,
-                                ClusterName = clusterInfo.Name,
-                                Enabled = true,
-                                CreatedAt = DateTime.UtcNow,
-                                UpdatedAt = DateTime.UtcNow
-                            };
-                            
-                            // Add to database and save
-                            _context.Hosts.Add(hostEntity);
-                            await _context.SaveChangesAsync(); // Save to get the host ID
-                        }
-
-                        var result = await checkExecutionService.ExecuteCheckAsync(hostEntity, iSCSICheck, SelectedVCenter);
-                        results.Add(result);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, "Failed to execute iSCSI check on host {HostName}", hostInfo.Name);
-                        
-                        // Create a failed result for reporting purposes
-                        var failedResult = new CheckResult
-                        {
-                            CheckDefinitionId = iSCSICheck.Id,
-                            HostId = 0, // No host ID available
-                            Status = CheckStatus.Error,
-                            ErrorMessage = $"Failed to execute check: {ex.Message}",
-                            ExecutedAt = DateTime.UtcNow,
-                            ExecutionTime = TimeSpan.Zero,
-                            Output = "Check execution failed",
-                            Details = $"Host: {hostInfo.Name}, Error: {ex.Message}"
-                        };
-                        results.Add(failedResult);
-                    }
-                }
-
-                // Load the results into the check results view model
-                await CheckResultsViewModel.LoadCheckResultsAsync(SelectedVCenter);
-
-                var passedCount = results.Count(r => r.Status == CheckStatus.Passed);
-                var failedCount = results.Count(r => r.Status == CheckStatus.Failed);
-
-                StatusMessage = $"iSCSI checks completed: {passedCount} passed, {failedCount} failed on {allHosts.Count} hosts";
-
-                _logger.LogInformation("iSCSI checks completed for {HostCount} hosts: {PassedCount} passed, {FailedCount} failed",
-                    allHosts.Count, passedCount, failedCount);
-            }
-            finally
-            {
-                // Clean up the session
-                if (session != null)
-                {
-                    try
-                    {
-                        await _restApiService.DisconnectAsync(session);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, "Failed to disconnect REST API session");
-                    }
-                }
-            }
+            _logger.LogInformation("iSCSI check command sent to service with ID: {CommandId}", commandId);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to run iSCSI checks");
-            StatusMessage = $"Failed to run iSCSI checks: {ex.Message}";
+            _logger.LogError(ex, "Failed to send iSCSI check command to service");
+            StatusMessage = $"Failed to send command to service: {ex.Message}";
         }
         finally
         {
             IsLoading = false;
+        }
+    }
+
+    /// <summary>
+    /// Monitors a service command for completion
+    /// </summary>
+    private async Task MonitorCommandCompletionAsync(string commandId, string operationName)
+    {
+        var timeout = DateTime.UtcNow.AddMinutes(10); // 10 minute timeout
+        
+        while (DateTime.UtcNow < timeout)
+        {
+            await Task.Delay(2000); // Check every 2 seconds
+            
+            var command = await _serviceConfigurationManager.GetCommandResultAsync(commandId);
+            if (command != null)
+            {
+                if (command.Status == "Completed")
+                {
+                    StatusMessage = $"{operationName} completed successfully";
+                    return;
+                }
+                else if (command.Status == "Failed")
+                {
+                    StatusMessage = $"{operationName} failed: {command.ErrorMessage}";
+                    return;
+                }
+            }
+        }
+        
+        StatusMessage = $"{operationName} timed out";
+    }
+
+    /// <summary>
+    /// Monitors Windows Service status
+    /// </summary>
+    private async Task MonitorServiceStatusAsync()
+    {
+        try
+        {
+            var serviceStatus = await _serviceConfigurationManager.GetServiceStatusAsync();
+            if (serviceStatus != null)
+            {
+                ServiceStatus = serviceStatus.Status;
+                ServiceLastHeartbeat = serviceStatus.LastHeartbeat;
+                ServiceActiveExecutions = serviceStatus.ActiveExecutions;
+                
+                // Consider service running if heartbeat is within last 2 minutes
+                IsServiceRunning = serviceStatus.LastHeartbeat > DateTime.UtcNow.AddMinutes(-2);
+            }
+            else
+            {
+                ServiceStatus = "Unknown";
+                IsServiceRunning = false;
+                ServiceLastHeartbeat = DateTime.MinValue;
+                ServiceActiveExecutions = 0;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to monitor service status");
+            ServiceStatus = "Error";
+            IsServiceRunning = false;
         }
     }
 
@@ -706,36 +624,31 @@ public partial class MainWindowViewModel : ObservableObject
     {
         try
         {
-            // Check each vCenter's connection status
-            var monitoringTasks = VCenters.Where(v => v.Enabled).Select(async vCenter =>
+            // Check database connectivity
+            await CheckDatabaseConnectivityAsync();
+            
+            // Monitor service status
+            await MonitorServiceStatusAsync();
+
+            // Check vCenter connections health for connected vCenters
+            foreach (var vCenter in VCenters.Where(v => v.IsConnected))
             {
                 try
                 {
-                    // Reset stale connection flags first
-                    if (vCenter.IsCurrentlyConnected && 
-                        vCenter.LastSuccessfulConnection.HasValue &&
-                        DateTime.UtcNow - vCenter.LastSuccessfulConnection.Value > TimeSpan.FromMinutes(5))
+                    var isHealthy = await _vmwareService.TestConnectionHealthAsync(vCenter);
+                    if (!isHealthy)
                     {
                         vCenter.UpdateConnectionStatus(false);
-                    }
-
-                    // If marked as disconnected but hasn't been tested recently, perform health check
-                    if (!vCenter.IsCurrentlyConnected && 
-                        (!vCenter.LastSuccessfulConnection.HasValue || 
-                         DateTime.UtcNow - vCenter.LastSuccessfulConnection.Value > TimeSpan.FromMinutes(2)))
-                    {
-                        var isHealthy = await _vmwareService.TestConnectionHealthAsync(vCenter);
-                        vCenter.UpdateConnectionStatus(isHealthy);
+                        await _context.SaveChangesAsync();
                     }
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Error monitoring connection for vCenter: {VCenterName}", vCenter.Name);
+                    _logger.LogWarning(ex, "Health check failed for vCenter: {VCenterName}", vCenter.Name);
                     vCenter.UpdateConnectionStatus(false);
+                    await _context.SaveChangesAsync();
                 }
-            });
-
-            await Task.WhenAll(monitoringTasks);
+            }
         }
         catch (Exception ex)
         {
@@ -945,6 +858,8 @@ public partial class MainWindowViewModel : ObservableObject
         
         _clockTimer?.Dispose();
         _connectionMonitorTimer?.Dispose();
+        _serviceMonitorTimer?.Dispose();
+        _serviceConfigurationManager?.Dispose();
         InfrastructureViewModel?.Dispose();
         VCenterOverviewViewModel?.Dispose();
     }

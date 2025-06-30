@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using VMwareGUITools.Core.Models;
 using VMwareGUITools.Data;
-using VMwareGUITools.Infrastructure.Checks;
+using VMwareGUITools.Infrastructure.Services;
 
 namespace VMwareGUITools.UI.ViewModels;
 
@@ -19,7 +19,7 @@ public partial class CheckResultsViewModel : ObservableObject
 {
     private readonly ILogger<CheckResultsViewModel> _logger;
     private readonly VMwareDbContext _dbContext;
-    private readonly ICheckExecutionService _checkExecutionService;
+    private readonly IServiceConfigurationManager _serviceConfigurationManager;
 
     [ObservableProperty]
     private ObservableCollection<CheckResult> _checkResults = new();
@@ -68,11 +68,11 @@ public partial class CheckResultsViewModel : ObservableObject
     public CheckResultsViewModel(
         ILogger<CheckResultsViewModel> logger,
         VMwareDbContext dbContext,
-        ICheckExecutionService checkExecutionService)
+        IServiceConfigurationManager serviceConfigurationManager)
     {
         _logger = logger;
         _dbContext = dbContext;
-        _checkExecutionService = checkExecutionService;
+        _serviceConfigurationManager = serviceConfigurationManager;
 
         CheckResultsView = CollectionViewSource.GetDefaultView(CheckResults);
         CheckResultsView.Filter = FilterCheckResults;
@@ -215,7 +215,7 @@ public partial class CheckResultsViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Executes a check against a specific host
+    /// Executes a single check via Windows Service
     /// </summary>
     [RelayCommand]
     private async Task ExecuteCheckAsync(object? parameter)
@@ -227,29 +227,45 @@ public partial class CheckResultsViewModel : ObservableObject
 
         try
         {
+            // Check if service is running
+            var serviceStatus = await _serviceConfigurationManager.GetServiceStatusAsync();
+            if (serviceStatus == null || serviceStatus.LastHeartbeat < DateTime.UtcNow.AddMinutes(-2))
+            {
+                StatusMessage = "Windows Service is not running. Cannot execute checks.";
+                return;
+            }
+
             IsLoading = true;
-            StatusMessage = $"Executing check '{request.CheckDefinition.Name}' on host '{request.Host.Name}'...";
+            StatusMessage = $"Sending check '{request.CheckDefinition.Name}' command to Windows Service...";
 
-            var result = await _checkExecutionService.ExecuteCheckAsync(
-                request.Host, 
-                request.CheckDefinition, 
-                SelectedVCenter);
+            // Send command to service instead of executing directly
+            var parameters = new
+            {
+                HostId = request.Host.Id,
+                CheckDefinitionId = request.CheckDefinition.Id,
+                VCenterId = SelectedVCenter.Id,
+                IsManualRun = true
+            };
 
-            // Add the new result to the collection
-            CheckResults.Insert(0, result);
-            UpdateFilteredResultsCount();
-            
-            await GroupCheckResultsAsync();
+            var commandId = await _serviceConfigurationManager.SendCommandAsync(
+                ServiceCommandTypes.ExecuteCheck, 
+                parameters);
 
-            StatusMessage = $"Check execution completed: {result.Status}";
+            StatusMessage = $"Check command sent to service (ID: {commandId}). Monitoring for results...";
 
-            _logger.LogInformation("Executed check '{CheckName}' on host '{HostName}' with result: {Status}",
-                request.CheckDefinition.Name, request.Host.Name, result.Status);
+            // Monitor for completion
+            await MonitorCommandCompletionAsync(commandId, $"Check '{request.CheckDefinition.Name}'");
+
+            // Refresh results
+            await LoadCheckResultsAsync(SelectedVCenter, SelectedHostMoId, SelectedClusterName);
+
+            _logger.LogInformation("Check command sent to service: '{CheckName}' on host '{HostName}' with ID: {CommandId}",
+                request.CheckDefinition.Name, request.Host.Name, commandId);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to execute check");
-            StatusMessage = $"Failed to execute check: {ex.Message}";
+            _logger.LogError(ex, "Failed to send check command to service");
+            StatusMessage = $"Failed to send command to service: {ex.Message}";
         }
         finally
         {
@@ -258,7 +274,7 @@ public partial class CheckResultsViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Executes checks for all hosts in a cluster
+    /// Executes checks for all hosts in a cluster via Windows Service
     /// </summary>
     [RelayCommand]
     private async Task ExecuteClusterChecksAsync(string? clusterName)
@@ -270,8 +286,16 @@ public partial class CheckResultsViewModel : ObservableObject
 
         try
         {
+            // Check if service is running
+            var serviceStatus = await _serviceConfigurationManager.GetServiceStatusAsync();
+            if (serviceStatus == null || serviceStatus.LastHeartbeat < DateTime.UtcNow.AddMinutes(-2))
+            {
+                StatusMessage = "Windows Service is not running. Cannot execute checks.";
+                return;
+            }
+
             IsLoading = true;
-            StatusMessage = $"Executing checks for cluster '{clusterName}'...";
+            StatusMessage = $"Sending cluster checks command to Windows Service...";
 
             // Find the cluster
             var cluster = await _dbContext.Clusters
@@ -283,34 +307,68 @@ public partial class CheckResultsViewModel : ObservableObject
                 return;
             }
 
-            var results = await _checkExecutionService.ExecuteClusterChecksAsync(cluster, SelectedVCenter);
-
-            // Add the new results to the collection
-            foreach (var result in results.OrderByDescending(r => r.ExecutedAt))
+            // Send command to service instead of executing directly
+            var parameters = new
             {
-                CheckResults.Insert(0, result);
-            }
-            UpdateFilteredResultsCount();
+                ClusterId = cluster.Id,
+                VCenterId = SelectedVCenter.Id,
+                IsManualRun = true
+            };
 
-            await GroupCheckResultsAsync();
+            var commandId = await _serviceConfigurationManager.SendCommandAsync(
+                ServiceCommandTypes.ExecuteCheck, 
+                parameters);
 
-            var passedCount = results.Count(r => r.Status == CheckStatus.Passed);
-            var failedCount = results.Count(r => r.Status == CheckStatus.Failed);
+            StatusMessage = $"Cluster checks command sent to service (ID: {commandId}). Monitoring for results...";
 
-            StatusMessage = $"Cluster checks completed: {passedCount} passed, {failedCount} failed";
+            // Monitor for completion
+            await MonitorCommandCompletionAsync(commandId, $"Cluster '{clusterName}' checks");
 
-            _logger.LogInformation("Executed cluster checks for '{ClusterName}': {TotalCount} checks, {PassedCount} passed, {FailedCount} failed",
-                clusterName, results.Count, passedCount, failedCount);
+            // Refresh results
+            await LoadCheckResultsAsync(SelectedVCenter, SelectedHostMoId, SelectedClusterName);
+
+            _logger.LogInformation("Cluster checks command sent to service for '{ClusterName}' with ID: {CommandId}",
+                clusterName, commandId);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to execute cluster checks for '{ClusterName}'", clusterName);
-            StatusMessage = $"Failed to execute cluster checks: {ex.Message}";
+            _logger.LogError(ex, "Failed to send cluster checks command to service for '{ClusterName}'", clusterName);
+            StatusMessage = $"Failed to send command to service: {ex.Message}";
         }
         finally
         {
             IsLoading = false;
         }
+    }
+
+    /// <summary>
+    /// Monitors a service command for completion
+    /// </summary>
+    private async Task MonitorCommandCompletionAsync(string commandId, string operationName)
+    {
+        var timeout = DateTime.UtcNow.AddMinutes(10); // 10 minute timeout
+        
+        while (DateTime.UtcNow < timeout)
+        {
+            await Task.Delay(2000); // Check every 2 seconds
+            
+            var command = await _serviceConfigurationManager.GetCommandResultAsync(commandId);
+            if (command != null)
+            {
+                if (command.Status == "Completed")
+                {
+                    StatusMessage = $"{operationName} completed successfully";
+                    return;
+                }
+                else if (command.Status == "Failed")
+                {
+                    StatusMessage = $"{operationName} failed: {command.ErrorMessage}";
+                    return;
+                }
+            }
+        }
+        
+        StatusMessage = $"{operationName} timed out";
     }
 
     /// <summary>

@@ -114,54 +114,32 @@ public partial class App : Application
                 ?? "Data Source=vmware-gui-tools.db";
             options.UseSqlite(connectionString);
             
-            // Enable sensitive data logging for better debugging
-            var enableSensitiveDataLogging = configuration.GetValue<bool>("EntityFramework:EnableSensitiveDataLogging", false);
-            var enableDetailedErrors = configuration.GetValue<bool>("EntityFramework:EnableDetailedErrors", true);
+            // Enable sensitive data logging in development
+            var environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Production";
+            var enableSensitiveDataLogging = environment == "Development" || 
+                                           configuration.GetValue<bool>("EntityFramework:EnableSensitiveDataLogging", false);
             
             if (enableSensitiveDataLogging)
             {
                 options.EnableSensitiveDataLogging();
             }
             
-            if (enableDetailedErrors)
-            {
-                options.EnableDetailedErrors();
-            }
+            options.EnableDetailedErrors();
         });
 
-        // vSphere REST API Services - Replaces PowerShell/PowerCLI to avoid execution policy issues
+        // vSphere REST API Services - For GUI data display only (no execution)
         services.Configure<VSphereRestAPIOptions>(configuration.GetSection(VSphereRestAPIOptions.SectionName));
         services.AddHttpClient();
         services.AddScoped<IVSphereRestAPIService, VSphereRestAPIService>();
         
-        // vSphere SDK Services - For advanced operations like iSCSI path monitoring
-        // services.AddScoped<IVSphereSDKService, VSphereSDKService>();
-        
-        // Infrastructure Services
-        services.AddSingleton<ICredentialService, CredentialService>();
+        // VMware Connection Service - For GUI testing and data retrieval only
         services.AddScoped<IVMwareConnectionService, RestVMwareConnectionService>();
 
-        // Check Engine Services  
-        services.AddScoped<ICheckExecutionService, CheckExecutionService>();
-        services.AddScoped<ICheckEngine, RestAPICheckEngine>();
-        services.Configure<CheckExecutionOptions>(configuration.GetSection(CheckExecutionOptions.SectionName));
+        // Credential Service - For GUI credential management
+        services.AddSingleton<ICredentialService, CredentialService>();
 
-        // Notification Services
-        services.AddScoped<INotificationService, NotificationService>();
-
-        // Scheduling Services with Quartz.NET
-        services.AddQuartz(q =>
-        {
-            q.UseSimpleTypeLoader();
-            q.UseInMemoryStore();
-            q.UseDefaultThreadPool(tp =>
-            {
-                tp.MaxConcurrency = 10;
-            });
-        });
-
-        services.AddQuartzHostedService(q => q.WaitForJobsToComplete = true);
-        services.AddScoped<ISchedulingService, SchedulingService>();
+        // Service Communication - For GUI to Windows Service communication
+        services.AddScoped<IServiceConfigurationManager, ServiceConfigurationManager>();
 
         // ViewModels
         services.AddTransient<MainWindowViewModel>();
