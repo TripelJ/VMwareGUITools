@@ -22,6 +22,12 @@ public class VMwareDbContext : DbContext
     public DbSet<CheckCategory> CheckCategories { get; set; }
     public DbSet<CheckDefinition> CheckDefinitions { get; set; }
     public DbSet<CheckResult> CheckResults { get; set; }
+    public DbSet<CheckExecutionResult> CheckExecutionResults { get; set; }
+    
+    // Service Configuration and Communication
+    public DbSet<ServiceConfiguration> ServiceConfigurations { get; set; }
+    public DbSet<ServiceStatus> ServiceStatuses { get; set; }
+    public DbSet<ServiceCommand> ServiceCommands { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

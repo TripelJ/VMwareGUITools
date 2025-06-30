@@ -12,6 +12,7 @@ using VMwareGUITools.Infrastructure.Notifications;
 using VMwareGUITools.Infrastructure.PowerShell;
 using VMwareGUITools.Infrastructure.Scheduling;
 using VMwareGUITools.Infrastructure.Security;
+using VMwareGUITools.Infrastructure.Services;
 using VMwareGUITools.Infrastructure.VMware;
 
 namespace VMwareGUITools.Service;
@@ -105,17 +106,32 @@ public class Program
             }
         });
         
-        // vSphere REST API Services - Replaces PowerShell/PowerCLI
+        // vSphere REST API Services
         services.Configure<VSphereRestAPIOptions>(configuration.GetSection(VSphereRestAPIOptions.SectionName));
         services.AddHttpClient();
         services.AddScoped<IVSphereRestAPIService, VSphereRestAPIService>();
         
+        // PowerShell/PowerCLI Services - Available in service context with proper execution policy
+        services.Configure<PowerShellOptions>(configuration.GetSection(PowerShellOptions.SectionName));
+        services.Configure<PowerCLIOptions>(configuration.GetSection(PowerCLIOptions.SectionName));
+        services.AddScoped<IPowerShellService, PowerShellService>();
+        services.AddScoped<IPowerCLIService, PowerCLIService>();
+        
         // Infrastructure services
         services.AddScoped<ICredentialService, CredentialService>();
         services.AddScoped<IVMwareConnectionService, RestVMwareConnectionService>();
+        
+        // Check Engines - Both REST API and PowerCLI available
         services.AddScoped<ICheckEngine, RestAPICheckEngine>();
+        services.AddScoped<ICheckEngine, PowerCLICheckEngine>();
+        services.Configure<CheckExecutionOptions>(configuration.GetSection(CheckExecutionOptions.SectionName));
+        
+        // Check Execution and Scheduling
         services.AddScoped<ICheckExecutionService, CheckExecutionService>();
         services.AddScoped<INotificationService, NotificationService>();
         services.AddScoped<ISchedulingService, SchedulingService>();
+        
+        // Service Configuration and Communication
+        services.AddScoped<IServiceConfigurationManager, ServiceConfigurationManager>();
     }
 } 
