@@ -166,7 +166,7 @@ public class DataSynchronizationJob : IJob
     /// <summary>
     /// Synchronize clusters in the database
     /// </summary>
-    private async Task SynchronizeClustersAsync(VMwareDbContext dbContext, VCenter vCenter, List<VMwareGUITools.Core.Models.ClusterInfo> discoveredClusters, CancellationToken cancellationToken)
+    private async Task SynchronizeClustersAsync(VMwareDbContext dbContext, VCenter vCenter, List<VMwareGUITools.Infrastructure.VMware.ClusterInfo> discoveredClusters, CancellationToken cancellationToken)
     {
         // Get existing clusters for this vCenter
         var existingClusters = await dbContext.Clusters
@@ -186,10 +186,6 @@ public class DataSynchronizationJob : IJob
                     Name = clusterInfo.Name,
                     MoId = clusterInfo.MoId,
                     VCenterId = vCenter.Id,
-                    DrsEnabled = clusterInfo.DrsEnabled,
-                    HaEnabled = clusterInfo.HaEnabled,
-                    VsanEnabled = clusterInfo.VsanEnabled,
-                    HostCount = clusterInfo.HostCount,
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
                 };
@@ -201,10 +197,6 @@ public class DataSynchronizationJob : IJob
             {
                 // Update existing cluster
                 existingCluster.Name = clusterInfo.Name;
-                existingCluster.DrsEnabled = clusterInfo.DrsEnabled;
-                existingCluster.HaEnabled = clusterInfo.HaEnabled;
-                existingCluster.VsanEnabled = clusterInfo.VsanEnabled;
-                existingCluster.HostCount = clusterInfo.HostCount;
                 existingCluster.UpdatedAt = DateTime.UtcNow;
                 
                 _logger.LogDebug("Updated cluster: {ClusterName} (MoId: {MoId})", clusterInfo.Name, clusterInfo.MoId);
@@ -226,7 +218,7 @@ public class DataSynchronizationJob : IJob
     /// <summary>
     /// Synchronize hosts in the database
     /// </summary>
-    private async Task SynchronizeHostsAsync(VMwareDbContext dbContext, VCenter vCenter, VMwareGUITools.Core.Models.ClusterInfo clusterInfo, List<VMwareGUITools.Core.Models.HostInfo> discoveredHosts, CancellationToken cancellationToken)
+    private async Task SynchronizeHostsAsync(VMwareDbContext dbContext, VCenter vCenter, VMwareGUITools.Infrastructure.VMware.ClusterInfo clusterInfo, List<VMwareGUITools.Infrastructure.VMware.HostInfo> discoveredHosts, CancellationToken cancellationToken)
     {
         // Get the cluster from the database
         var cluster = await dbContext.Clusters
@@ -256,10 +248,6 @@ public class DataSynchronizationJob : IJob
                     Name = hostInfo.Name,
                     MoId = hostInfo.MoId,
                     IpAddress = hostInfo.IpAddress,
-                    Version = hostInfo.Version,
-                    PowerState = hostInfo.PowerState,
-                    ConnectionState = hostInfo.ConnectionState,
-                    InMaintenanceMode = hostInfo.InMaintenanceMode,
                     HostType = hostInfo.Type,
                     VCenterId = vCenter.Id,
                     ClusterId = cluster.Id,
@@ -277,10 +265,6 @@ public class DataSynchronizationJob : IJob
                 // Update existing host
                 existingHost.Name = hostInfo.Name;
                 existingHost.IpAddress = hostInfo.IpAddress;
-                existingHost.Version = hostInfo.Version;
-                existingHost.PowerState = hostInfo.PowerState;
-                existingHost.ConnectionState = hostInfo.ConnectionState;
-                existingHost.InMaintenanceMode = hostInfo.InMaintenanceMode;
                 existingHost.HostType = hostInfo.Type;
                 existingHost.ClusterName = cluster.Name;
                 existingHost.UpdatedAt = DateTime.UtcNow;
@@ -305,7 +289,7 @@ public class DataSynchronizationJob : IJob
     /// <summary>
     /// Synchronize datastores in the database
     /// </summary>
-    private async Task SynchronizeDatastoresAsync(VMwareDbContext dbContext, VCenter vCenter, List<VMwareGUITools.Core.Models.DatastoreInfo> discoveredDatastores, CancellationToken cancellationToken)
+    private async Task SynchronizeDatastoresAsync(VMwareDbContext dbContext, VCenter vCenter, List<VMwareGUITools.Infrastructure.VMware.DatastoreInfo> discoveredDatastores, CancellationToken cancellationToken)
     {
         // Get existing datastores for this vCenter
         var existingDatastores = await dbContext.Datastores
@@ -325,28 +309,30 @@ public class DataSynchronizationJob : IJob
                     Name = datastoreInfo.Name,
                     MoId = datastoreInfo.MoId,
                     Type = datastoreInfo.Type,
-                    CapacityGB = datastoreInfo.CapacityGB,
-                    FreeSpaceGB = datastoreInfo.FreeSpaceGB,
+                    CapacityMB = datastoreInfo.CapacityMB,
+                    FreeMB = datastoreInfo.FreeMB,
+                    Accessible = datastoreInfo.Accessible,
                     VCenterId = vCenter.Id,
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
                 };
                 
                 dbContext.Datastores.Add(newDatastore);
-                _logger.LogDebug("Added new datastore: {DatastoreName} (Type: {Type}, Capacity: {CapacityGB}GB)", 
-                    datastoreInfo.Name, datastoreInfo.Type, datastoreInfo.CapacityGB);
+                _logger.LogDebug("Added new datastore: {DatastoreName} (Type: {Type}, Capacity: {CapacityMB}MB)", 
+                    datastoreInfo.Name, datastoreInfo.Type, datastoreInfo.CapacityMB);
             }
             else
             {
                 // Update existing datastore
                 existingDatastore.Name = datastoreInfo.Name;
                 existingDatastore.Type = datastoreInfo.Type;
-                existingDatastore.CapacityGB = datastoreInfo.CapacityGB;
-                existingDatastore.FreeSpaceGB = datastoreInfo.FreeSpaceGB;
+                existingDatastore.CapacityMB = datastoreInfo.CapacityMB;
+                existingDatastore.FreeMB = datastoreInfo.FreeMB;
+                existingDatastore.Accessible = datastoreInfo.Accessible;
                 existingDatastore.UpdatedAt = DateTime.UtcNow;
                 
-                _logger.LogDebug("Updated datastore: {DatastoreName} (Type: {Type}, Capacity: {CapacityGB}GB)", 
-                    datastoreInfo.Name, datastoreInfo.Type, datastoreInfo.CapacityGB);
+                _logger.LogDebug("Updated datastore: {DatastoreName} (Type: {Type}, Capacity: {CapacityMB}MB)", 
+                    datastoreInfo.Name, datastoreInfo.Type, datastoreInfo.CapacityMB);
             }
         }
 

@@ -50,6 +50,14 @@ public interface IVMwareConnectionService
     Task<List<HostInfo>> DiscoverHostsAsync(VMwareSession session, string clusterMoId, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Discovers datastores in the connected vCenter
+    /// </summary>
+    /// <param name="session">The active VMware session</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>List of discovered datastores</returns>
+    Task<List<DatastoreInfo>> DiscoverDatastoresAsync(VMwareSession session, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Retrieves detailed information about a specific host
     /// </summary>
     /// <param name="session">The active VMware session</param>
