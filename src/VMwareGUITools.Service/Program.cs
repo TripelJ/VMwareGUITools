@@ -54,6 +54,10 @@ public class Program
                 {
                     tp.MaxConcurrency = 10;
                 });
+                
+                // Register our custom job types
+                q.SchedulerId = "VMwareGUIToolsScheduler";
+                q.SchedulerName = "VMware GUI Tools Scheduler";
             });
             
             builder.Services.AddQuartzHostedService(opt =>
