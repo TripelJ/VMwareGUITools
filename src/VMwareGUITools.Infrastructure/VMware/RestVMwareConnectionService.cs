@@ -255,6 +255,31 @@ public class RestVMwareConnectionService : IVMwareConnectionService
         }
     }
 
+    public async Task<List<DatastoreInfo>> DiscoverDatastoresAsync(VMwareSession session, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            _logger.LogInformation("Discovering datastores via REST API for session: {SessionId}", session.SessionId);
+
+            if (!_activeSessions.TryGetValue(session.SessionId, out var restSession))
+            {
+                throw new InvalidOperationException("Session not found or inactive");
+            }
+
+            var datastores = await GetDatastoresAsync(restSession.VCenterUrl, restSession.SessionToken, cancellationToken);
+            restSession.LastActivity = DateTime.UtcNow;
+
+            _logger.LogInformation("Discovered {DatastoreCount} datastores via REST API for session: {SessionId}", 
+                datastores.Count, session.SessionId);
+            return datastores;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to discover datastores via REST API for session: {SessionId}", session.SessionId);
+            throw;
+        }
+    }
+
     public Task<bool> IsPowerCLIAvailableAsync()
     {
         // REST API doesn't need PowerCLI
@@ -491,6 +516,40 @@ public class RestVMwareConnectionService : IVMwareConnectionService
             MemorySize = 137438953472,
             CpuCores = 40,
             SshEnabled = false
+        };
+    }
+
+    private async Task<List<DatastoreInfo>> GetDatastoresAsync(string vcenterUrl, string sessionToken, CancellationToken cancellationToken)
+    {
+        // Implementation would use vSphere REST API to get datastore information
+        await Task.Delay(100, cancellationToken); // Simulate API call
+        
+        return new List<DatastoreInfo>
+        {
+            new DatastoreInfo
+            {
+                Name = "datastore1",
+                MoId = "datastore-1001",
+                Type = "VMFS",
+                CapacityMB = 1024000, // ~1TB
+                FreeMB = 512000,      // ~500GB
+                Accessible = true,
+                Url = "192.168.1.200:/datastore1",
+                MaintenanceMode = false,
+                HostNames = new List<string> { "esx01.company.com", "esx02.company.com" }
+            },
+            new DatastoreInfo
+            {
+                Name = "vsanDatastore",
+                MoId = "datastore-2001",
+                Type = "vsan",
+                CapacityMB = 5120000, // ~5TB
+                FreeMB = 2560000,     // ~2.5TB
+                Accessible = true,
+                Url = "vsanDatastore",
+                MaintenanceMode = false,
+                HostNames = new List<string> { "esx01.company.com", "esx02.company.com", "esx03.company.com" }
+            }
         };
     }
 

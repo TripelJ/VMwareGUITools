@@ -428,6 +428,68 @@ public class EnhancedVMwareConnectionService : IVMwareConnectionService
         }
     }
 
+    public async Task<List<DatastoreInfo>> DiscoverDatastoresAsync(VMwareSession session, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            _logger.LogInformation("Discovering datastores for session: {SessionId}", session.SessionId);
+
+            if (!_activeSessions.TryGetValue(session.SessionId, out var enhancedSession))
+            {
+                throw new InvalidOperationException("Session not found or inactive");
+            }
+
+            var command = @"
+                Get-Datastore | Select-Object Name,
+                    @{N='MoId'; E={$_.Id}},
+                    @{N='Type'; E={$_.Type}},
+                    @{N='CapacityMB'; E={[math]::Round($_.CapacityMB)}},
+                    @{N='FreeMB'; E={[math]::Round($_.FreeSpaceMB)}},
+                    @{N='Accessible'; E={$_.State -eq 'Available'}},
+                    @{N='Url'; E={if ($_.RemoteHost) { $_.RemoteHost + ':' + $_.RemotePath } else { $_.Name }}},
+                    @{N='MaintenanceMode'; E={$_.ExtensionData.Summary.MaintenanceMode -eq 'inMaintenance'}},
+                    @{N='HostNames'; E={($_ | Get-VMHost | Select-Object -ExpandProperty Name) -join ','}}
+            ";
+
+            var result = await _powerCLIService.ExecuteCommandAsync(enhancedSession.PowerCLISession, command, timeoutSeconds: 120);
+            
+            if (!result.IsSuccess)
+            {
+                throw new InvalidOperationException($"Failed to discover datastores: {result.ErrorMessage}");
+            }
+
+            enhancedSession.LastActivity = DateTime.UtcNow;
+
+            var datastores = new List<DatastoreInfo>();
+            foreach (var obj in result.Objects.OfType<PSObject>())
+            {
+                var hostNamesString = GetPropertyValue<string>(obj, "HostNames") ?? "";
+                var hostNames = hostNamesString.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList();
+
+                datastores.Add(new DatastoreInfo
+                {
+                    Name = GetPropertyValue<string>(obj, "Name") ?? "",
+                    MoId = GetPropertyValue<string>(obj, "MoId") ?? "",
+                    Type = GetPropertyValue<string>(obj, "Type") ?? "",
+                    CapacityMB = GetPropertyValue<long>(obj, "CapacityMB"),
+                    FreeMB = GetPropertyValue<long>(obj, "FreeMB"),
+                    Accessible = GetPropertyValue<bool>(obj, "Accessible"),
+                    Url = GetPropertyValue<string>(obj, "Url") ?? "",
+                    MaintenanceMode = GetPropertyValue<bool>(obj, "MaintenanceMode"),
+                    HostNames = hostNames
+                });
+            }
+
+            _logger.LogInformation("Discovered {DatastoreCount} datastores for session: {SessionId}", datastores.Count, session.SessionId);
+            return datastores;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to discover datastores for session: {SessionId}", session.SessionId);
+            throw;
+        }
+    }
+
     public async Task<bool> IsPowerCLIAvailableAsync()
     {
         var validation = await _powerCLIService.ValidatePowerCLIAsync();

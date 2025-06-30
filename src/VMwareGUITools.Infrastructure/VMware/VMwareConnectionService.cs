@@ -444,6 +444,94 @@ public class VMwareConnectionService : IVMwareConnectionService
         }
     }
 
+    public async Task<List<DatastoreInfo>> DiscoverDatastoresAsync(VMwareSession session, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            _logger.LogInformation("Discovering datastores for session: {SessionId}", session.SessionId);
+
+            var script = @"
+                param($Server)
+                
+                try {
+                    # Connect to vCenter (assuming we're using the same session)
+                    $datastores = Get-Datastore | ForEach-Object {
+                        $datastore = $_
+                        $hosts = Get-VMHost -Datastore $datastore
+                        
+                        [PSCustomObject]@{
+                            Name = $datastore.Name
+                            MoId = $datastore.Id
+                            Type = $datastore.Type
+                            CapacityMB = [math]::Round($datastore.CapacityMB)
+                            FreeMB = [math]::Round($datastore.FreeSpaceMB)
+                            Accessible = ($datastore.State -eq 'Available')
+                            Url = if ($datastore.RemoteHost) { $datastore.RemoteHost + ':' + $datastore.RemotePath } else { $datastore.Name }
+                            MaintenanceMode = ($datastore.ExtensionData.Summary.MaintenanceMode -eq 'inMaintenance')
+                            HostNames = ($hosts | Select-Object -ExpandProperty Name) -join ','
+                        }
+                    }
+                    
+                    return $datastores
+                } catch {
+                    Write-Error $_.Exception.Message
+                    return @()
+                }
+            ";
+
+            var parameters = new Dictionary<string, object>
+            {
+                ["Server"] = session.VCenterUrl
+            };
+
+            var psResult = await _powerShellService.ExecutePowerCLICommandAsync(script, parameters, 120, cancellationToken);
+
+            var datastores = new List<DatastoreInfo>();
+
+            if (psResult.IsSuccess)
+            {
+                foreach (var obj in psResult.Objects)
+                {
+                    if (obj is PSObject psObj)
+                    {
+                        var hostNamesString = psObj.Properties["HostNames"]?.Value?.ToString() ?? "";
+                        var hostNames = hostNamesString.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList();
+
+                        var datastore = new DatastoreInfo
+                        {
+                            Name = psObj.Properties["Name"]?.Value?.ToString() ?? "",
+                            MoId = psObj.Properties["MoId"]?.Value?.ToString() ?? "",
+                            Type = psObj.Properties["Type"]?.Value?.ToString() ?? "",
+                            CapacityMB = long.Parse(psObj.Properties["CapacityMB"]?.Value?.ToString() ?? "0"),
+                            FreeMB = long.Parse(psObj.Properties["FreeMB"]?.Value?.ToString() ?? "0"),
+                            Accessible = bool.Parse(psObj.Properties["Accessible"]?.Value?.ToString() ?? "true"),
+                            Url = psObj.Properties["Url"]?.Value?.ToString() ?? "",
+                            MaintenanceMode = bool.Parse(psObj.Properties["MaintenanceMode"]?.Value?.ToString() ?? "false"),
+                            HostNames = hostNames
+                        };
+                        datastores.Add(datastore);
+                    }
+                }
+            }
+            else
+            {
+                _logger.LogError("Failed to discover datastores for session: {SessionId} - {Error}", session.SessionId, psResult.ErrorOutput);
+            }
+
+            session.LastActivity = DateTime.UtcNow;
+
+            _logger.LogInformation("Discovered {DatastoreCount} datastores for session: {SessionId}", 
+                datastores.Count, session.SessionId);
+
+            return datastores;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to discover datastores for session: {SessionId}", session.SessionId);
+            throw;
+        }
+    }
+
     public async Task<bool> IsPowerCLIAvailableAsync()
     {
         try
