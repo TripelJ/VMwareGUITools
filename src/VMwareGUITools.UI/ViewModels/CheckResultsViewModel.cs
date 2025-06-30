@@ -229,7 +229,7 @@ public partial class CheckResultsViewModel : ObservableObject
         {
             // Check if service is running
             var serviceStatus = await _serviceConfigurationManager.GetServiceStatusAsync();
-            if (serviceStatus == null || serviceStatus.LastHeartbeat < DateTime.UtcNow.AddMinutes(-2))
+            if (serviceStatus == null || serviceStatus.LastHeartbeat < DateTime.UtcNow.AddSeconds(-30))
             {
                 StatusMessage = "Windows Service is not running. Cannot execute checks.";
                 return;
@@ -288,7 +288,7 @@ public partial class CheckResultsViewModel : ObservableObject
         {
             // Check if service is running
             var serviceStatus = await _serviceConfigurationManager.GetServiceStatusAsync();
-            if (serviceStatus == null || serviceStatus.LastHeartbeat < DateTime.UtcNow.AddMinutes(-2))
+            if (serviceStatus == null || serviceStatus.LastHeartbeat < DateTime.UtcNow.AddSeconds(-30))
             {
                 StatusMessage = "Windows Service is not running. Cannot execute checks.";
                 return;

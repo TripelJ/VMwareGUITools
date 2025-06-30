@@ -79,7 +79,7 @@ public partial class VCenterOverviewViewModel : ObservableObject, IDisposable
 
             // Check if service is running
             var serviceStatus = await _serviceConfigurationManager.GetServiceStatusAsync();
-            if (serviceStatus == null || serviceStatus.LastHeartbeat < DateTime.UtcNow.AddMinutes(-2))
+            if (serviceStatus == null || serviceStatus.LastHeartbeat < DateTime.UtcNow.AddSeconds(-30))
             {
                 StatusMessage = "Windows Service is not running. Cannot load overview data.";
                 return;
@@ -148,7 +148,7 @@ public partial class VCenterOverviewViewModel : ObservableObject, IDisposable
 
             // Check if service is running
             var serviceStatus = await _serviceConfigurationManager.GetServiceStatusAsync();
-            if (serviceStatus == null || serviceStatus.LastHeartbeat < DateTime.UtcNow.AddMinutes(-2))
+            if (serviceStatus == null || serviceStatus.LastHeartbeat < DateTime.UtcNow.AddSeconds(-30))
             {
                 await Application.Current.Dispatcher.InvokeAsync(() =>
                 {

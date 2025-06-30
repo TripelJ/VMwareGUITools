@@ -74,7 +74,7 @@ public partial class InfrastructureViewModel : ObservableObject, IDisposable
 
             // Check if service is running
             var serviceStatus = await _serviceConfigurationManager.GetServiceStatusAsync();
-            if (serviceStatus == null || serviceStatus.LastHeartbeat < DateTime.UtcNow.AddMinutes(-2))
+            if (serviceStatus == null || serviceStatus.LastHeartbeat < DateTime.UtcNow.AddSeconds(-30))
             {
                 StatusMessage = "Windows Service is not running. Cannot load infrastructure data.";
                 return;

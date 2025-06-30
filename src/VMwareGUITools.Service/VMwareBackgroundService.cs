@@ -49,8 +49,8 @@ public class VMwareBackgroundService : BackgroundService
             // Initialize scheduled jobs for data refresh and health checks
             await InitializeScheduledJobsAsync();
 
-            // Start heartbeat timer (every 30 seconds)
-            _heartbeatTimer.Change(TimeSpan.Zero, TimeSpan.FromSeconds(30));
+            // Start heartbeat timer (every 10 seconds)
+            _heartbeatTimer.Change(TimeSpan.Zero, TimeSpan.FromSeconds(10));
             
             // Start job monitoring timer (every 5 minutes)
             _jobMonitorTimer.Change(TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(5));

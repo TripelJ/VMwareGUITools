@@ -32,8 +32,8 @@ public class ServiceConfigurationManager : IServiceConfigurationManager
         // Process commands every 5 seconds
         _commandProcessingTimer = new Timer(ProcessPendingCommands, null, TimeSpan.Zero, TimeSpan.FromSeconds(5));
         
-        // Update heartbeat every 30 seconds
-        _heartbeatTimer = new Timer(UpdateHeartbeat, null, TimeSpan.Zero, TimeSpan.FromSeconds(30));
+        // Update heartbeat every 10 seconds
+        _heartbeatTimer = new Timer(UpdateHeartbeat, null, TimeSpan.Zero, TimeSpan.FromSeconds(10));
     }
 
     public async Task<T?> GetConfigurationAsync<T>(string key, string category = "") where T : class
@@ -497,7 +497,12 @@ public class ServiceConfigurationManager : IServiceConfigurationManager
                 throw new ArgumentException("VCenterId parameter is required");
             }
 
-            var vCenterId = Convert.ToInt32(vCenterIdObj);
+            var vCenterId = vCenterIdObj switch
+            {
+                JsonElement jsonElement => jsonElement.GetInt32(),
+                int intValue => intValue,
+                _ => Convert.ToInt32(vCenterIdObj)
+            };
             var vCenter = await _dbContext.VCenters.FirstOrDefaultAsync(v => v.Id == vCenterId);
             if (vCenter == null)
             {
@@ -532,7 +537,12 @@ public class ServiceConfigurationManager : IServiceConfigurationManager
                 throw new ArgumentException("VCenterId parameter is required");
             }
 
-            var vCenterId = Convert.ToInt32(vCenterIdObj);
+            var vCenterId = vCenterIdObj switch
+            {
+                JsonElement jsonElement => jsonElement.GetInt32(),
+                int intValue => intValue,
+                _ => Convert.ToInt32(vCenterIdObj)
+            };
             var vCenter = await _dbContext.VCenters.FirstOrDefaultAsync(v => v.Id == vCenterId);
             if (vCenter == null)
             {

@@ -482,8 +482,8 @@ public partial class MainWindowViewModel : ObservableObject
                 ServiceLastHeartbeat = serviceStatus.LastHeartbeat;
                 ServiceActiveExecutions = serviceStatus.ActiveExecutions;
                 
-                // Consider service running if heartbeat is within last 2 minutes
-                IsServiceRunning = serviceStatus.LastHeartbeat > DateTime.UtcNow.AddMinutes(-2);
+                // Consider service running if heartbeat is within last 30 seconds (heartbeat updates every 10 seconds)
+                IsServiceRunning = serviceStatus.LastHeartbeat > DateTime.UtcNow.AddSeconds(-30);
             }
             else
             {
