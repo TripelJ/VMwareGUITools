@@ -1,3 +1,6 @@
+using System.ComponentModel.DataAnnotations;
+using System.Text.Json;
+
 namespace VMwareGUITools.Core.Models;
 
 /// <summary>
@@ -5,6 +8,12 @@ namespace VMwareGUITools.Core.Models;
 /// </summary>
 public class CheckExecutionResult
 {
+    /// <summary>
+    /// Primary key for Entity Framework
+    /// </summary>
+    [Key]
+    public int Id { get; set; }
+
     /// <summary>
     /// Whether the check execution was successful (not the check result itself)
     /// </summary>
@@ -31,9 +40,24 @@ public class CheckExecutionResult
     public string? RawData { get; set; }
 
     /// <summary>
-    /// Additional metadata about the execution
+    /// Additional metadata about the execution stored as JSON
     /// </summary>
-    public Dictionary<string, object> Metadata { get; set; } = new Dictionary<string, object>();
+    public string MetadataJson { get; set; } = "{}";
+
+    /// <summary>
+    /// Additional metadata about the execution (not mapped to database)
+    /// </summary>
+    public Dictionary<string, object> Metadata 
+    { 
+        get => string.IsNullOrEmpty(MetadataJson) ? new Dictionary<string, object>() : 
+               JsonSerializer.Deserialize<Dictionary<string, object>>(MetadataJson) ?? new Dictionary<string, object>();
+        set => MetadataJson = JsonSerializer.Serialize(value);
+    }
+
+    /// <summary>
+    /// When this execution result was created
+    /// </summary>
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     /// <summary>
     /// Creates a successful execution result

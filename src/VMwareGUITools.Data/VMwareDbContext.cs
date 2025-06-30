@@ -197,6 +197,58 @@ public class VMwareDbContext : DbContext
             entity.HasIndex(e => e.ExecutedAt);
         });
 
+        // Configure CheckExecutionResult entity
+        modelBuilder.Entity<CheckExecutionResult>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Output).HasDefaultValue(string.Empty);
+            entity.Property(e => e.ErrorMessage).HasDefaultValue(string.Empty);
+            entity.Property(e => e.MetadataJson).HasDefaultValue("{}");
+            
+            // Ignore the computed Metadata property since it's not stored directly
+            entity.Ignore(e => e.Metadata);
+            
+            entity.HasIndex(e => e.CreatedAt);
+            entity.HasIndex(e => e.IsSuccess);
+        });
+
+        // Configure ServiceConfiguration entity
+        modelBuilder.Entity<ServiceConfiguration>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Key).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Value).HasDefaultValue(string.Empty);
+            entity.Property(e => e.Category).HasMaxLength(50);
+            entity.Property(e => e.Description).HasMaxLength(500);
+            entity.Property(e => e.ModifiedBy).HasMaxLength(100);
+            
+            entity.HasIndex(e => new { e.Category, e.Key }).IsUnique();
+        });
+
+        // Configure ServiceStatus entity
+        modelBuilder.Entity<ServiceStatus>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Status).HasMaxLength(20);
+            entity.Property(e => e.Version).HasMaxLength(20);
+            entity.Property(e => e.Statistics).HasDefaultValue("{}");
+            
+            entity.HasIndex(e => e.LastHeartbeat);
+        });
+
+        // Configure ServiceCommand entity
+        modelBuilder.Entity<ServiceCommand>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.CommandType).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.Parameters).HasDefaultValue("{}");
+            entity.Property(e => e.Status).HasMaxLength(20);
+            entity.Property(e => e.Result).HasDefaultValue(string.Empty);
+            
+            entity.HasIndex(e => new { e.Status, e.CreatedAt });
+            entity.HasIndex(e => e.CommandType);
+        });
+
         // Seed default data
         SeedDefaultData(modelBuilder);
     }
