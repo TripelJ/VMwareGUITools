@@ -13,6 +13,7 @@ using VMwareGUITools.Infrastructure.Security;
 using VMwareGUITools.Infrastructure.Checks;
 using VMwareGUITools.UI.Views;
 using VMwareGUITools.Infrastructure.Services;
+using VMwareGUITools.Infrastructure.VMware;
 using System.Text.Json;
 
 namespace VMwareGUITools.UI.ViewModels;
@@ -26,6 +27,7 @@ public partial class MainWindowViewModel : ObservableObject
     private readonly VMwareDbContext _context;
     private readonly IServiceProvider _serviceProvider;
     private readonly IServiceConfigurationManager _serviceConfigurationManager;
+    private readonly IVMwareConnectionService _vmwareService;
     private readonly System.Timers.Timer _clockTimer;
     private readonly System.Timers.Timer _connectionMonitorTimer;
     private readonly System.Timers.Timer _serviceMonitorTimer;
@@ -85,12 +87,14 @@ public partial class MainWindowViewModel : ObservableObject
         ILogger<MainWindowViewModel> logger,
         VMwareDbContext context,
         IServiceProvider serviceProvider,
-        IServiceConfigurationManager serviceConfigurationManager)
+        IServiceConfigurationManager serviceConfigurationManager,
+        IVMwareConnectionService vmwareService)
     {
         _logger = logger;
         _context = context;
         _serviceProvider = serviceProvider;
         _serviceConfigurationManager = serviceConfigurationManager;
+        _vmwareService = vmwareService;
 
         // Initialize view models
         _infrastructureViewModel = new InfrastructureViewModel(
