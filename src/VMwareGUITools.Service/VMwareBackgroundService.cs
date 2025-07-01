@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using VMwareGUITools.Core.Models;
 using Quartz;
 using Quartz.Impl.Triggers;
+using System.Diagnostics;
 
 namespace VMwareGUITools.Service;
 
@@ -36,7 +37,10 @@ public class VMwareBackgroundService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("VMware GUI Tools Service starting...");
+        _logger.LogInformation("=== VMware GUI Tools Service ExecuteAsync Starting ===");
+        _logger.LogInformation("Process ID: {ProcessId}", Environment.ProcessId);
+        _logger.LogInformation("Machine Name: {MachineName}", Environment.MachineName);
+        _logger.LogInformation("Service Start Time: {StartTime}", DateTime.UtcNow);
 
         try
         {
@@ -44,16 +48,47 @@ public class VMwareBackgroundService : BackgroundService
             using var scope = _serviceProvider.CreateScope();
             var serviceConfigManager = scope.ServiceProvider.GetRequiredService<IServiceConfigurationManager>();
             
-            _logger.LogInformation("ServiceConfigurationManager initialized - heartbeat started");
+            // Set initial status to starting
+            await serviceConfigManager.UpdateServiceStatusAsync(
+                status: "Starting",
+                activeExecutions: 0,
+                nextExecution: null,
+                statistics: new
+                {
+                    ServiceStartTime = DateTime.UtcNow,
+                    ProcessId = Environment.ProcessId,
+                    MachineName = Environment.MachineName,
+                    Phase = "Initializing"
+                });
+            
+            _logger.LogInformation("ServiceConfigurationManager initialized - Initial status set to 'Starting'");
 
             // Initialize scheduled jobs for data refresh and health checks
             await InitializeScheduledJobsAsync();
+
+            // Now set status to running since initialization is complete
+            await serviceConfigManager.UpdateServiceStatusAsync(
+                status: "Running",
+                activeExecutions: 0,
+                nextExecution: null,
+                statistics: new
+                {
+                    ServiceStartTime = DateTime.UtcNow,
+                    ProcessId = Environment.ProcessId,
+                    MachineName = Environment.MachineName,
+                    Phase = "Running",
+                    JobsInitialized = _jobsInitialized
+                });
+
+            _logger.LogInformation("=== Service Status Changed to 'Running' ===");
 
             // Start heartbeat timer (every 10 seconds)
             _heartbeatTimer.Change(TimeSpan.Zero, TimeSpan.FromSeconds(10));
             
             // Start job monitoring timer (every 5 minutes)
             _jobMonitorTimer.Change(TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(5));
+
+            _logger.LogInformation("=== VMware GUI Tools Service Fully Operational ===");
 
             // Keep the service running
             while (!stoppingToken.IsCancellationRequested)
@@ -69,6 +104,20 @@ public class VMwareBackgroundService : BackgroundService
         catch (Exception ex)
         {
             _logger.LogError(ex, "VMware GUI Tools Service encountered an error");
+            
+            // Set error status
+            try
+            {
+                using var scope = _serviceProvider.CreateScope();
+                var serviceConfigManager = scope.ServiceProvider.GetRequiredService<IServiceConfigurationManager>();
+                await serviceConfigManager.UpdateServiceStatusAsync(
+                    status: "Error",
+                    activeExecutions: 0,
+                    nextExecution: null,
+                    statistics: new { Error = ex.Message, ErrorTime = DateTime.UtcNow });
+            }
+            catch { /* Ignore errors during error reporting */ }
+            
             throw;
         }
     }
@@ -310,8 +359,23 @@ public class VMwareBackgroundService : BackgroundService
         {
             using var scope = _serviceProvider.CreateScope();
             var serviceConfigManager = scope.ServiceProvider.GetRequiredService<IServiceConfigurationManager>();
-            await serviceConfigManager.UpdateServiceStatusAsync("Running");
-            _logger.LogDebug("Service heartbeat updated");
+            
+            // Update heartbeat with more detailed status
+            var heartbeatTime = DateTime.UtcNow;
+            await serviceConfigManager.UpdateServiceStatusAsync(
+                status: "Running",
+                activeExecutions: 0,
+                nextExecution: null,
+                statistics: new
+                {
+                    HeartbeatTime = heartbeatTime,
+                    ServiceUptime = DateTime.UtcNow.Subtract(Process.GetCurrentProcess().StartTime).ToString(@"hh\:mm\:ss"),
+                    ProcessId = Environment.ProcessId,
+                    MachineName = Environment.MachineName,
+                    JobsInitialized = _jobsInitialized
+                });
+            
+            _logger.LogDebug("Service heartbeat updated at {HeartbeatTime} - Status: Running", heartbeatTime);
         }
         catch (Exception ex)
         {

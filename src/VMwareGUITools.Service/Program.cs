@@ -22,15 +22,27 @@ public class Program
 {
     public static async Task Main(string[] args)
     {
+        // Get the service's own directory for logging
+        var serviceDirectory = AppDomain.CurrentDomain.BaseDirectory;
+        var logsDirectory = Path.Combine(serviceDirectory, "logs");
+        
+        // Ensure logs directory exists
+        Directory.CreateDirectory(logsDirectory);
+        
+        var logFilePath = Path.Combine(logsDirectory, "vmware-service-.log");
+        
         // Configure Serilog
         Log.Logger = new LoggerConfiguration()
             .WriteTo.Console()
-            .WriteTo.File("logs/vmware-service-.log", rollingInterval: RollingInterval.Day)
+            .WriteTo.File(logFilePath, rollingInterval: RollingInterval.Day)
             .CreateLogger();
 
         try
         {
-            Log.Information("Starting VMware GUI Tools Service");
+            Log.Information("=== VMware GUI Tools Service Starting ===");
+            Log.Information("Service Directory: {ServiceDirectory}", serviceDirectory);
+            Log.Information("Logs Directory: {LogsDirectory}", logsDirectory);
+            Log.Information("Log File Path: {LogFilePath}", logFilePath);
             
             var builder = Host.CreateApplicationBuilder(args);
             
@@ -78,6 +90,8 @@ public class Program
             // Initialize database before starting the service
             await InitializeDatabaseAsync(host.Services);
             
+            Log.Information("=== VMware GUI Tools Service Started Successfully ===");
+            
             await host.RunAsync();
         }
         catch (Exception ex)
@@ -86,6 +100,7 @@ public class Program
         }
         finally
         {
+            Log.Information("=== VMware GUI Tools Service Stopped ===");
             Log.CloseAndFlush();
         }
     }
@@ -97,15 +112,39 @@ public class Program
             using var scope = services.CreateScope();
             var context = scope.ServiceProvider.GetRequiredService<VMwareDbContext>();
             
-            Log.Information("Initializing database...");
+            // Get connection string and database path
+            var connectionString = context.Database.GetConnectionString();
+            var dbPath = "";
+            
+            if (connectionString?.Contains("Data Source=") == true)
+            {
+                var dataSourceStart = connectionString.IndexOf("Data Source=") + "Data Source=".Length;
+                var dataSourceEnd = connectionString.IndexOf(";", dataSourceStart);
+                if (dataSourceEnd == -1) dataSourceEnd = connectionString.Length;
+                
+                dbPath = connectionString.Substring(dataSourceStart, dataSourceEnd - dataSourceStart);
+                
+                // If it's a relative path, make it absolute
+                if (!Path.IsPathRooted(dbPath))
+                {
+                    dbPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, dbPath);
+                }
+            }
+            
+            Log.Information("=== Database Initialization ===");
+            Log.Information("Connection String: {ConnectionString}", connectionString);
+            Log.Information("Database Path: {DatabasePath}", dbPath);
+            Log.Information("Database File Exists: {Exists}", File.Exists(dbPath));
             
             // Check if database exists
             var databaseExists = await context.Database.CanConnectAsync();
+            Log.Information("Database Can Connect: {CanConnect}", databaseExists);
             
             if (!databaseExists)
             {
                 Log.Information("Creating new database...");
                 await context.Database.EnsureCreatedAsync();
+                Log.Information("Database created successfully at: {DatabasePath}", dbPath);
             }
             else
             {
@@ -149,7 +188,16 @@ public class Program
                 }
             }
             
-            Log.Information("Database initialized successfully");
+            // Final verification
+            var finalExists = await context.Database.CanConnectAsync();
+            Log.Information("Database initialization completed successfully. Can Connect: {CanConnect}", finalExists);
+            Log.Information("Final Database Path: {DatabasePath}", dbPath);
+            
+            if (File.Exists(dbPath))
+            {
+                var fileInfo = new FileInfo(dbPath);
+                Log.Information("Database file size: {Size} bytes, Created: {Created}", fileInfo.Length, fileInfo.CreationTime);
+            }
         }
         catch (Exception ex)
         {

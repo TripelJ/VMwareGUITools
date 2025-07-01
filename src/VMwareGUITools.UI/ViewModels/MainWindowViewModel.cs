@@ -511,22 +511,36 @@ public partial class MainWindowViewModel : ObservableObject
             var serviceStatus = await _serviceConfigurationManager.GetServiceStatusAsync();
             if (serviceStatus != null)
             {
+                // Update service status string exactly as received from the service
                 ServiceStatus = serviceStatus.Status;
                 ServiceLastHeartbeat = serviceStatus.LastHeartbeat;
                 ServiceActiveExecutions = serviceStatus.ActiveExecutions;
                 
-                // Consider service running if heartbeat is within last 30 seconds (heartbeat updates every 10 seconds)
+                // Consider service running if:
+                // 1. Status is explicitly "Running" or "Starting"
+                // 2. AND heartbeat is within last 30 seconds (heartbeat updates every 10 seconds)
                 var wasServiceRunning = IsServiceRunning;
-                IsServiceRunning = serviceStatus.LastHeartbeat > DateTime.UtcNow.AddSeconds(-30);
+                var heartbeatCutoff = DateTime.UtcNow.AddSeconds(-30);
+                var statusIsRunning = serviceStatus.Status?.Equals("Running", StringComparison.OrdinalIgnoreCase) == true ||
+                                    serviceStatus.Status?.Equals("Starting", StringComparison.OrdinalIgnoreCase) == true;
+                var heartbeatFresh = serviceStatus.LastHeartbeat > heartbeatCutoff;
+                
+                IsServiceRunning = statusIsRunning && heartbeatFresh;
+                
+                _logger.LogDebug("Service Status Check - Status: '{Status}', Heartbeat: {Heartbeat}, IsRunning: {IsRunning}, " +
+                               "StatusIsRunning: {StatusIsRunning}, HeartbeatFresh: {HeartbeatFresh}", 
+                               serviceStatus.Status, serviceStatus.LastHeartbeat, IsServiceRunning, statusIsRunning, heartbeatFresh);
                 
                 // If service status changed, update PowerCLI status
                 if (wasServiceRunning != IsServiceRunning)
                 {
+                    _logger.LogInformation("Service status changed: {WasRunning} -> {IsRunning}", wasServiceRunning, IsServiceRunning);
                     await CheckPowerCLIAsync();
                 }
             }
             else
             {
+                _logger.LogDebug("No service status received - service appears to be stopped");
                 ServiceStatus = "Stopped";
                 IsServiceRunning = false;
                 ServiceLastHeartbeat = DateTime.MinValue;
@@ -545,6 +559,8 @@ public partial class MainWindowViewModel : ObservableObject
             ServiceStatus = "Error";
             IsServiceRunning = false;
             IsPowerCLIAvailable = false;
+            ServiceLastHeartbeat = DateTime.MinValue;
+            ServiceActiveExecutions = 0;
             
             // When service has error, mark all vCenters as disconnected
             UpdateVCenterConnectionStates();
@@ -581,8 +597,6 @@ public partial class MainWindowViewModel : ObservableObject
             _logger.LogError(ex, "Failed to update vCenter connection states");
         }
     }
-
-
 
     /// <summary>
     /// Command to assign a vCenter to an availability zone
