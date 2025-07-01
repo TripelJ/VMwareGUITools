@@ -810,7 +810,6 @@ public class ServiceConfigurationManager : IServiceConfigurationManager
                 AvailabilityZoneId = availabilityZoneId,
                 EnableAutoDiscovery = enableAutoDiscovery,
                 CreatedAt = DateTime.UtcNow,
-                IsConnected = false,
                 LastScan = null
             };
 
@@ -940,8 +939,6 @@ public class ServiceConfigurationManager : IServiceConfigurationManager
                 .Include(v => v.Clusters)
                     .ThenInclude(c => c.Hosts)
                         .ThenInclude(h => h.CheckResults)
-                .Include(v => v.Clusters)
-                    .ThenInclude(c => c.Datastores)
                 .FirstOrDefaultAsync(v => v.Id == vCenterId);
 
             if (vCenter == null)
@@ -961,10 +958,11 @@ public class ServiceConfigurationManager : IServiceConfigurationManager
                 }
                 // Delete hosts in cluster
                 dbContext.Hosts.RemoveRange(cluster.Hosts);
-                
-                // Delete datastores in cluster
-                dbContext.Datastores.RemoveRange(cluster.Datastores);
             }
+            
+            // Delete datastores associated with this vCenter
+            var datastores = await dbContext.Datastores.Where(d => d.VCenterId == vCenterId).ToListAsync();
+            dbContext.Datastores.RemoveRange(datastores);
             
             // Delete clusters
             dbContext.Clusters.RemoveRange(vCenter.Clusters);

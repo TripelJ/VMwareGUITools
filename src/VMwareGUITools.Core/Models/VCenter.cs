@@ -26,6 +26,8 @@ public class VCenter : INotifyPropertyChanged
 
     public DateTime? LastScan { get; set; }
 
+    public bool EnableAutoDiscovery { get; set; } = true;
+
     private DateTime? _lastSuccessfulConnection;
     /// <summary>
     /// Tracks the last time a successful connection was made (not persisted to database)
