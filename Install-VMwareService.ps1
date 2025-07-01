@@ -72,6 +72,8 @@ function Install-Service {
         Configure-ServiceForPowerCLI
         
         Write-Log "Service '$ServiceName' installed successfully!" -Level "SUCCESS"
+        Write-Log "IMPORTANT: The service uses its own encryption context for credentials." -Level "SUCCESS"
+        Write-Log "All vCenter operations (add/edit/test) must be done through the GUI, which will send credentials to the service for encryption." -Level "SUCCESS"
         Write-Log "You can now start the service with: .\Install-VMwareService.ps1 -Action Start"
         
     } catch {

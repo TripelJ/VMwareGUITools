@@ -270,6 +270,10 @@ public class ServiceConfigurationManager : IServiceConfigurationManager
                 ServiceCommandTypes.GetInfrastructureData => await GetInfrastructureDataCommand(command.Parameters),
                 ServiceCommandTypes.ConnectVCenter => await ConnectVCenterCommand(command.Parameters),
                 ServiceCommandTypes.TestVCenterConnection => await TestVCenterConnectionCommand(command.Parameters),
+                ServiceCommandTypes.TestVCenterConnectionWithCredentials => await TestVCenterConnectionWithCredentialsCommand(command.Parameters),
+                ServiceCommandTypes.AddVCenter => await AddVCenterCommand(command.Parameters),
+                ServiceCommandTypes.EditVCenter => await EditVCenterCommand(command.Parameters),
+                ServiceCommandTypes.DeleteVCenter => await DeleteVCenterCommand(command.Parameters),
                 _ => throw new NotSupportedException($"Command type '{command.CommandType}' is not supported")
             };
 
@@ -722,6 +726,265 @@ public class ServiceConfigurationManager : IServiceConfigurationManager
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to test vCenter connection");
+            throw;
+        }
+    }
+
+    private async Task<string> TestVCenterConnectionWithCredentialsCommand(string parametersJson)
+    {
+        try
+        {
+            _logger.LogInformation("Executing TestVCenterConnectionWithCredentials command");
+            
+            var parameters = JsonSerializer.Deserialize<Dictionary<string, object>>(parametersJson);
+            if (parameters == null)
+            {
+                throw new ArgumentException("Invalid parameters");
+            }
+
+            // Extract parameters
+            var url = parameters.TryGetValue("Url", out var urlObj) ? urlObj.ToString() : throw new ArgumentException("Url is required");
+            var username = parameters.TryGetValue("Username", out var usernameObj) ? usernameObj.ToString() : throw new ArgumentException("Username is required");
+            var password = parameters.TryGetValue("Password", out var passwordObj) ? passwordObj.ToString() : throw new ArgumentException("Password is required");
+
+            using var scope = _serviceProvider.CreateScope();
+            var vmwareService = scope.ServiceProvider.GetRequiredService<IVMwareConnectionService>();
+            
+            var testResult = await vmwareService.TestConnectionAsync(url!, username!, password!);
+
+            return JsonSerializer.Serialize(new 
+            { 
+                IsSuccessful = testResult.IsSuccessful,
+                ResponseTime = testResult.ResponseTime.TotalMilliseconds,
+                ErrorMessage = testResult.ErrorMessage,
+                VersionInfo = testResult.VersionInfo
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to test vCenter connection with credentials");
+            throw;
+        }
+    }
+
+    private async Task<string> AddVCenterCommand(string parametersJson)
+    {
+        try
+        {
+            _logger.LogInformation("Executing AddVCenter command");
+            
+            var parameters = JsonSerializer.Deserialize<Dictionary<string, object>>(parametersJson);
+            if (parameters == null)
+            {
+                throw new ArgumentException("Invalid parameters");
+            }
+
+            // Extract parameters
+            var name = parameters.TryGetValue("Name", out var nameObj) ? nameObj.ToString() : throw new ArgumentException("Name is required");
+            var url = parameters.TryGetValue("Url", out var urlObj) ? urlObj.ToString() : throw new ArgumentException("Url is required");
+            var username = parameters.TryGetValue("Username", out var usernameObj) ? usernameObj.ToString() : throw new ArgumentException("Username is required");
+            var password = parameters.TryGetValue("Password", out var passwordObj) ? passwordObj.ToString() : throw new ArgumentException("Password is required");
+            var availabilityZoneId = parameters.TryGetValue("AvailabilityZoneId", out var azIdObj) ? Convert.ToInt32(azIdObj) : (int?)null;
+            var enableAutoDiscovery = parameters.TryGetValue("EnableAutoDiscovery", out var autoDiscoveryObj) ? Convert.ToBoolean(autoDiscoveryObj) : true;
+
+            using var scope = _serviceProvider.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<VMwareDbContext>();
+            var credentialService = scope.ServiceProvider.GetRequiredService<ICredentialService>();
+            
+            // Check if vCenter with same URL already exists
+            var existingVCenter = await dbContext.VCenters.FirstOrDefaultAsync(v => v.Url == url);
+            if (existingVCenter != null)
+            {
+                throw new InvalidOperationException($"A vCenter with URL '{url}' already exists");
+            }
+
+            // Encrypt credentials using service context
+            var encryptedCredentials = credentialService.EncryptCredentials(username!, password!);
+
+            // Create new vCenter
+            var vCenter = new VCenter
+            {
+                Name = name!,
+                Url = url!,
+                EncryptedCredentials = encryptedCredentials,
+                AvailabilityZoneId = availabilityZoneId,
+                EnableAutoDiscovery = enableAutoDiscovery,
+                CreatedAt = DateTime.UtcNow,
+                IsConnected = false,
+                LastScan = null
+            };
+
+            dbContext.VCenters.Add(vCenter);
+            await dbContext.SaveChangesAsync();
+
+            _logger.LogInformation("vCenter '{Name}' added successfully with ID: {Id}", name, vCenter.Id);
+
+            return JsonSerializer.Serialize(new 
+            { 
+                Success = true, 
+                Message = $"vCenter '{name}' added successfully",
+                VCenterId = vCenter.Id
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to add vCenter");
+            throw;
+        }
+    }
+
+    private async Task<string> EditVCenterCommand(string parametersJson)
+    {
+        try
+        {
+            _logger.LogInformation("Executing EditVCenter command");
+            
+            var parameters = JsonSerializer.Deserialize<Dictionary<string, object>>(parametersJson);
+            if (parameters == null)
+            {
+                throw new ArgumentException("Invalid parameters");
+            }
+
+            // Extract parameters
+            var vCenterId = parameters.TryGetValue("VCenterId", out var idObj) ? Convert.ToInt32(idObj) : throw new ArgumentException("VCenterId is required");
+            var name = parameters.TryGetValue("Name", out var nameObj) ? nameObj.ToString() : null;
+            var url = parameters.TryGetValue("Url", out var urlObj) ? urlObj.ToString() : null;
+            var username = parameters.TryGetValue("Username", out var usernameObj) ? usernameObj.ToString() : null;
+            var password = parameters.TryGetValue("Password", out var passwordObj) ? passwordObj.ToString() : null;
+            var availabilityZoneId = parameters.TryGetValue("AvailabilityZoneId", out var azIdObj) ? Convert.ToInt32(azIdObj) : (int?)null;
+            var enableAutoDiscovery = parameters.TryGetValue("EnableAutoDiscovery", out var autoDiscoveryObj) ? Convert.ToBoolean(autoDiscoveryObj) : (bool?)null;
+
+            using var scope = _serviceProvider.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<VMwareDbContext>();
+            var credentialService = scope.ServiceProvider.GetRequiredService<ICredentialService>();
+            
+            // Find existing vCenter
+            var vCenter = await dbContext.VCenters.FirstOrDefaultAsync(v => v.Id == vCenterId);
+            if (vCenter == null)
+            {
+                throw new ArgumentException($"vCenter with ID {vCenterId} not found");
+            }
+
+            // Update properties if provided
+            if (!string.IsNullOrEmpty(name))
+                vCenter.Name = name;
+            
+            if (!string.IsNullOrEmpty(url))
+            {
+                // Check if another vCenter with same URL exists
+                var existingWithUrl = await dbContext.VCenters.FirstOrDefaultAsync(v => v.Url == url && v.Id != vCenterId);
+                if (existingWithUrl != null)
+                {
+                    throw new InvalidOperationException($"Another vCenter with URL '{url}' already exists");
+                }
+                vCenter.Url = url;
+            }
+
+            // Update credentials if provided
+            if (!string.IsNullOrEmpty(username) && !string.IsNullOrEmpty(password))
+            {
+                var encryptedCredentials = credentialService.EncryptCredentials(username, password);
+                vCenter.EncryptedCredentials = encryptedCredentials;
+            }
+
+            if (availabilityZoneId.HasValue)
+                vCenter.AvailabilityZoneId = availabilityZoneId;
+
+            if (enableAutoDiscovery.HasValue)
+                vCenter.EnableAutoDiscovery = enableAutoDiscovery.Value;
+
+            vCenter.UpdatedAt = DateTime.UtcNow;
+            
+            await dbContext.SaveChangesAsync();
+
+            _logger.LogInformation("vCenter '{Name}' (ID: {Id}) updated successfully", vCenter.Name, vCenter.Id);
+
+            return JsonSerializer.Serialize(new 
+            { 
+                Success = true, 
+                Message = $"vCenter '{vCenter.Name}' updated successfully",
+                VCenterId = vCenter.Id
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to edit vCenter");
+            throw;
+        }
+    }
+
+    private async Task<string> DeleteVCenterCommand(string parametersJson)
+    {
+        try
+        {
+            _logger.LogInformation("Executing DeleteVCenter command");
+            
+            var parameters = JsonSerializer.Deserialize<Dictionary<string, object>>(parametersJson);
+            if (parameters == null || !parameters.TryGetValue("VCenterId", out var vCenterIdObj))
+            {
+                throw new ArgumentException("VCenterId parameter is required");
+            }
+
+            var vCenterId = vCenterIdObj switch
+            {
+                JsonElement jsonElement => jsonElement.GetInt32(),
+                int intValue => intValue,
+                _ => Convert.ToInt32(vCenterIdObj)
+            };
+
+            using var scope = _serviceProvider.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<VMwareDbContext>();
+            
+            // Find the vCenter and related data
+            var vCenter = await dbContext.VCenters
+                .Include(v => v.Clusters)
+                    .ThenInclude(c => c.Hosts)
+                        .ThenInclude(h => h.CheckResults)
+                .Include(v => v.Clusters)
+                    .ThenInclude(c => c.Datastores)
+                .FirstOrDefaultAsync(v => v.Id == vCenterId);
+
+            if (vCenter == null)
+            {
+                throw new ArgumentException($"vCenter with ID {vCenterId} not found");
+            }
+
+            var vCenterName = vCenter.Name;
+
+            // Delete all related data (cascading delete)
+            foreach (var cluster in vCenter.Clusters.ToList())
+            {
+                foreach (var host in cluster.Hosts.ToList())
+                {
+                    // Delete check results for this host
+                    dbContext.CheckResults.RemoveRange(host.CheckResults);
+                }
+                // Delete hosts in cluster
+                dbContext.Hosts.RemoveRange(cluster.Hosts);
+                
+                // Delete datastores in cluster
+                dbContext.Datastores.RemoveRange(cluster.Datastores);
+            }
+            
+            // Delete clusters
+            dbContext.Clusters.RemoveRange(vCenter.Clusters);
+            
+            // Finally delete the vCenter
+            dbContext.VCenters.Remove(vCenter);
+            
+            await dbContext.SaveChangesAsync();
+
+            _logger.LogInformation("vCenter '{Name}' (ID: {Id}) and all related data deleted successfully", vCenterName, vCenterId);
+
+            return JsonSerializer.Serialize(new 
+            { 
+                Success = true, 
+                Message = $"vCenter '{vCenterName}' and all related data deleted successfully"
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to delete vCenter");
             throw;
         }
     }

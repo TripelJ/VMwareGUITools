@@ -146,25 +146,8 @@ public partial class App : Application
             options.EnableDetailedErrors();
         });
 
-        // vSphere REST API Services - For GUI data display only (no execution)
-        services.Configure<VSphereRestAPIOptions>(configuration.GetSection(VSphereRestAPIOptions.SectionName));
-        services.AddHttpClient();
-        services.AddScoped<IVSphereRestAPIService, VSphereRestAPIService>();
-        
-        // VMware Connection Service - For GUI testing and data retrieval only
-        services.AddScoped<IVMwareConnectionService, RestVMwareConnectionService>();
-
-        // Credential Service - For GUI credential management
-        services.AddSingleton<ICredentialService>(provider =>
-        {
-            var logger = provider.GetRequiredService<ILogger<CredentialService>>();
-            var vmwareOptions = configuration.GetSection("VMwareGUITools").Get<VMwareGUIToolsOptions>() ?? new VMwareGUIToolsOptions();
-            var credentialService = new CredentialService(logger);
-            credentialService.SetEncryptionScope(vmwareOptions.UseMachineLevelEncryption);
-            return credentialService;
-        });
-
         // Service Communication - For GUI to Windows Service communication
+        // The GUI is now a pure frontend that communicates with the Windows Service for all operations
         services.AddScoped<IServiceConfigurationManager, ServiceConfigurationManager>();
 
         // ViewModels
@@ -184,7 +167,11 @@ public partial class App : Application
             var viewModel = provider.GetRequiredService<MainWindowViewModel>();
             return new MainWindow(viewModel);
         });
-        services.AddTransient<AddVCenterWindow>();
+        services.AddTransient<AddVCenterWindow>(provider =>
+        {
+            var viewModel = provider.GetRequiredService<AddVCenterViewModel>();
+            return new AddVCenterWindow { DataContext = viewModel };
+        });
         services.AddTransient<EditVCenterWindow>(provider =>
         {
             var viewModel = provider.GetRequiredService<EditVCenterViewModel>();

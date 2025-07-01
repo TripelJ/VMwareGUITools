@@ -1,13 +1,13 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using VMwareGUITools.Core.Models;
 using VMwareGUITools.Data;
-using VMwareGUITools.Infrastructure.Security;
-using VMwareGUITools.Infrastructure.VMware;
+using VMwareGUITools.Infrastructure.Services;
 
 namespace VMwareGUITools.UI.ViewModels;
 
@@ -18,8 +18,7 @@ public partial class EditVCenterViewModel : ObservableValidator
 {
     private readonly ILogger<EditVCenterViewModel> _logger;
     private readonly VMwareDbContext _context;
-    private readonly ICredentialService _credentialService;
-    private readonly IVMwareConnectionService _vmwareService;
+    private readonly IServiceConfigurationManager _serviceConfigurationManager;
     private VCenter? _originalVCenter;
 
     [ObservableProperty]
@@ -67,13 +66,11 @@ public partial class EditVCenterViewModel : ObservableValidator
     public EditVCenterViewModel(
         ILogger<EditVCenterViewModel> logger,
         VMwareDbContext context,
-        ICredentialService credentialService,
-        IVMwareConnectionService vmwareService)
+        IServiceConfigurationManager serviceConfigurationManager)
     {
         _logger = logger;
         _context = context;
-        _credentialService = credentialService;
-        _vmwareService = vmwareService;
+        _serviceConfigurationManager = serviceConfigurationManager;
     }
 
     /// <summary>
@@ -134,18 +131,10 @@ public partial class EditVCenterViewModel : ObservableValidator
         Url = vCenter.Url;
         EnableAutoDiscovery = true; // Default value
         
-        // Decrypt credentials to populate form
-        try
-        {
-            var credentials = _credentialService.DecryptCredentials(vCenter.EncryptedCredentials);
-            Username = credentials.Username;
-            Password = credentials.Password;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to decrypt credentials for vCenter: {VCenterName}", vCenter.Name);
-            // Leave username/password empty if decryption fails
-        }
+        // Note: We can't decrypt credentials in the GUI anymore (service-only)
+        // User will need to re-enter credentials when editing
+        Username = string.Empty;
+        Password = string.Empty;
         
         // Load availability zones and set current selection
         await LoadAvailabilityZonesAsync();
@@ -163,16 +152,99 @@ public partial class EditVCenterViewModel : ObservableValidator
             IsTesting = true;
             ShowTestResult = false;
 
-            _logger.LogInformation("Testing connection to vCenter: {Url}", Url);
+            _logger.LogInformation("Testing connection to vCenter: {Url} via service", Url);
 
-            TestResult = await _vmwareService.TestConnectionAsync(Url, Username, Password);
+            // Check if service is running
+            var serviceStatus = await _serviceConfigurationManager.GetServiceStatusAsync();
+            if (serviceStatus == null || serviceStatus.LastHeartbeat < DateTime.UtcNow.AddSeconds(-30))
+            {
+                TestResult = new VCenterConnectionResult
+                {
+                    IsSuccessful = false,
+                    ErrorMessage = "Windows Service is not running. Cannot test connection.",
+                    ResponseTime = TimeSpan.Zero
+                };
+                ShowTestResult = true;
+                return;
+            }
+
+            // Send test command to service
+            var parameters = new 
+            { 
+                Url = Url, 
+                Username = Username, 
+                Password = Password 
+            };
+
+            var commandId = await _serviceConfigurationManager.SendCommandAsync(
+                ServiceCommandTypes.TestVCenterConnectionWithCredentials, 
+                parameters);
+
+            // Monitor for completion
+            var result = await MonitorCommandCompletionAsync(commandId, "Connection test");
+            
+            if (result != null)
+            {
+                var testResultData = JsonSerializer.Deserialize<Dictionary<string, object>>(result);
+                if (testResultData != null)
+                {
+                    var isSuccessful = testResultData.TryGetValue("IsSuccessful", out var successObj) 
+                        && Convert.ToBoolean(successObj);
+                    var responseTime = testResultData.TryGetValue("ResponseTime", out var timeObj) 
+                        ? TimeSpan.FromMilliseconds(Convert.ToDouble(timeObj)) : TimeSpan.Zero;
+                    var errorMessage = testResultData.TryGetValue("ErrorMessage", out var errorObj) 
+                        ? errorObj?.ToString() : null;
+
+                    TestResult = new VCenterConnectionResult
+                    {
+                        IsSuccessful = isSuccessful,
+                        ErrorMessage = errorMessage,
+                        ResponseTime = responseTime
+                    };
+
+                    // Parse version info if available
+                    if (testResultData.TryGetValue("VersionInfo", out var versionObj) && versionObj != null)
+                    {
+                        try
+                        {
+                            var versionJson = versionObj.ToString();
+                            if (!string.IsNullOrEmpty(versionJson))
+                            {
+                                TestResult.VersionInfo = JsonSerializer.Deserialize<VCenterVersionInfo>(versionJson);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Failed to parse version info from test result");
+                        }
+                    }
+                }
+                else
+                {
+                    TestResult = new VCenterConnectionResult
+                    {
+                        IsSuccessful = false,
+                        ErrorMessage = "Invalid response from service",
+                        ResponseTime = TimeSpan.Zero
+                    };
+                }
+            }
+            else
+            {
+                TestResult = new VCenterConnectionResult
+                {
+                    IsSuccessful = false,
+                    ErrorMessage = "Connection test timed out or failed",
+                    ResponseTime = TimeSpan.Zero
+                };
+            }
+
             ShowTestResult = true;
-
-            _logger.LogInformation("Connection test completed. Success: {Success}", TestResult.IsSuccessful);
+            _logger.LogInformation("Connection test completed via service. Success: {Success}", TestResult.IsSuccessful);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to test connection");
+            _logger.LogError(ex, "Failed to test connection via service");
             TestResult = new VCenterConnectionResult
             {
                 IsSuccessful = false,
@@ -200,7 +272,7 @@ public partial class EditVCenterViewModel : ObservableValidator
 
             IsSaving = true;
 
-            _logger.LogInformation("Updating vCenter: {Name} ({Url})", Name, Url);
+            _logger.LogInformation("Updating vCenter: {Name} ({Url}) via service", Name, Url);
 
             // Test connection if required
             if (TestOnSave && (TestResult == null || !TestResult.IsSuccessful))
@@ -213,39 +285,61 @@ public partial class EditVCenterViewModel : ObservableValidator
                 }
             }
 
-            // Check for duplicate URLs (excluding current vCenter)
-            var existingVCenter = await _context.VCenters
-                .FirstOrDefaultAsync(v => v.Url.ToLower() == Url.ToLower() && v.Id != _originalVCenter.Id);
-
-            if (existingVCenter != null)
+            // Check if service is running
+            var serviceStatus = await _serviceConfigurationManager.GetServiceStatusAsync();
+            if (serviceStatus == null || serviceStatus.LastHeartbeat < DateTime.UtcNow.AddSeconds(-30))
             {
-                _logger.LogWarning("vCenter with URL {Url} already exists", Url);
+                _logger.LogWarning("Windows Service is not running. Cannot save vCenter.");
                 // TODO: Show error message to user
                 return;
             }
 
-            // Encrypt credentials
-            var encryptedCredentials = _credentialService.EncryptCredentials(Username, Password);
-
-            // Update vCenter entity
-            _originalVCenter.Name = Name.Trim();
-            _originalVCenter.Url = Url.Trim();
-            _originalVCenter.EncryptedCredentials = encryptedCredentials;
-            _originalVCenter.AvailabilityZoneId = SelectedAvailabilityZone?.Id;
-            _originalVCenter.UpdatedAt = DateTime.UtcNow;
-            
-            // Update last scan time if connection test was successful
-            if (TestResult?.IsSuccessful == true)
+            // Send edit vCenter command to service
+            var parameters = new Dictionary<string, object>
             {
-                _originalVCenter.LastScan = DateTime.UtcNow;
+                { "VCenterId", _originalVCenter.Id },
+                { "Name", Name.Trim() },
+                { "Url", Url.Trim() },
+                { "AvailabilityZoneId", SelectedAvailabilityZone?.Id ?? 0 },
+                { "EnableAutoDiscovery", EnableAutoDiscovery }
+            };
+
+            // Only include credentials if they were entered
+            if (!string.IsNullOrEmpty(Username) && !string.IsNullOrEmpty(Password))
+            {
+                parameters.Add("Username", Username);
+                parameters.Add("Password", Password);
             }
 
-            await _context.SaveChangesAsync();
+            var commandId = await _serviceConfigurationManager.SendCommandAsync(
+                ServiceCommandTypes.EditVCenter, 
+                parameters);
 
-            _logger.LogInformation("Successfully updated vCenter: {Name} with ID: {Id}", Name, _originalVCenter.Id);
+            // Monitor for completion
+            var result = await MonitorCommandCompletionAsync(commandId, "Edit vCenter");
+            
+            if (result != null)
+            {
+                var resultData = JsonSerializer.Deserialize<Dictionary<string, object>>(result);
+                if (resultData != null && resultData.TryGetValue("Success", out var successObj) && Convert.ToBoolean(successObj))
+                {
+                    _logger.LogInformation("Successfully updated vCenter via service: {Name}", Name);
+                    // Close dialog with success
+                    DialogResultRequested?.Invoke(true);
+                }
+                else
+                {
+                    var message = resultData?.TryGetValue("Message", out var msgObj) == true ? msgObj.ToString() : "Unknown error";
+                    _logger.LogError("Failed to update vCenter via service: {Message}", message);
+                    // TODO: Show error message to user
+                }
+            }
+            else
+            {
+                _logger.LogError("Edit vCenter command timed out or failed");
+                // TODO: Show error message to user
+            }
 
-            // Close dialog with success
-            DialogResultRequested?.Invoke(true);
         }
         catch (Exception ex)
         {
@@ -398,5 +492,50 @@ public partial class EditVCenterViewModel : ObservableValidator
         {
             _logger.LogError(ex, "Failed to load availability zones");
         }
+    }
+
+    /// <summary>
+    /// Monitors a service command for completion and returns the result
+    /// </summary>
+    private async Task<string?> MonitorCommandCompletionAsync(string commandId, string operationName)
+    {
+        const int maxAttempts = 30; // 30 seconds timeout
+        const int delayMs = 1000; // 1 second delay between checks
+
+        for (int attempt = 0; attempt < maxAttempts; attempt++)
+        {
+            try
+            {
+                var command = await _serviceConfigurationManager.GetCommandResultAsync(commandId);
+                if (command != null)
+                {
+                    switch (command.Status)
+                    {
+                        case "Completed":
+                            _logger.LogInformation("{OperationName} completed successfully", operationName);
+                            return command.Result;
+                        
+                        case "Failed":
+                            _logger.LogError("{OperationName} failed: {Error}", operationName, command.ErrorMessage);
+                            return null;
+                        
+                        case "Processing":
+                        case "Pending":
+                            // Continue monitoring
+                            break;
+                    }
+                }
+
+                await Task.Delay(delayMs);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error monitoring {OperationName} command", operationName);
+                return null;
+            }
+        }
+
+        _logger.LogWarning("{OperationName} command timed out after {Timeout} seconds", operationName, maxAttempts);
+        return null;
     }
 } 

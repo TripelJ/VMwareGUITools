@@ -158,6 +158,10 @@ public static class ServiceCommandTypes
     public const string GetInfrastructureData = "GetInfrastructureData";
     public const string ConnectVCenter = "ConnectVCenter";
     public const string TestVCenterConnection = "TestVCenterConnection";
+    public const string TestVCenterConnectionWithCredentials = "TestVCenterConnectionWithCredentials";
+    public const string AddVCenter = "AddVCenter";
+    public const string EditVCenter = "EditVCenter";
+    public const string DeleteVCenter = "DeleteVCenter";
 }
 
 /// <summary>
