@@ -71,6 +71,9 @@ public class CredentialService : ICredentialService
             byte[] decryptedData;
             DataProtectionScope usedScope;
             
+            _logger.LogDebug("Attempting to decrypt credentials using configured scope: {Scope}", 
+                primaryScope == DataProtectionScope.LocalMachine ? "LocalMachine" : "CurrentUser");
+            
             try
             {
                 decryptedData = ProtectedData.Unprotect(encryptedData, null, primaryScope);
@@ -78,19 +81,38 @@ public class CredentialService : ICredentialService
                 _logger.LogDebug("Successfully decrypted credentials using configured scope: {Scope}", 
                     primaryScope == DataProtectionScope.LocalMachine ? "LocalMachine" : "CurrentUser");
             }
-            catch (CryptographicException)
+            catch (CryptographicException primaryEx)
             {
                 // Try fallback scope for backward compatibility
-                _logger.LogDebug("Failed to decrypt with configured scope, trying fallback scope: {Scope}", 
+                _logger.LogDebug("Failed to decrypt with configured scope ({Scope}): {Error}. Trying fallback scope: {FallbackScope}", 
+                    primaryScope == DataProtectionScope.LocalMachine ? "LocalMachine" : "CurrentUser",
+                    primaryEx.Message,
                     fallbackScope == DataProtectionScope.LocalMachine ? "LocalMachine" : "CurrentUser");
-                    
-                decryptedData = ProtectedData.Unprotect(encryptedData, null, fallbackScope);
-                usedScope = fallbackScope;
                 
-                _logger.LogWarning("Credentials were decrypted using fallback scope ({Scope}). " +
-                    "Consider re-saving credentials to use the current configured scope ({ConfiguredScope})",
-                    fallbackScope == DataProtectionScope.LocalMachine ? "LocalMachine" : "CurrentUser",
-                    primaryScope == DataProtectionScope.LocalMachine ? "LocalMachine" : "CurrentUser");
+                try
+                {
+                    decryptedData = ProtectedData.Unprotect(encryptedData, null, fallbackScope);
+                    usedScope = fallbackScope;
+                    
+                    _logger.LogWarning("Credentials were decrypted using fallback scope ({Scope}). " +
+                        "Consider re-saving credentials to use the current configured scope ({ConfiguredScope})",
+                        fallbackScope == DataProtectionScope.LocalMachine ? "LocalMachine" : "CurrentUser",
+                        primaryScope == DataProtectionScope.LocalMachine ? "LocalMachine" : "CurrentUser");
+                }
+                catch (CryptographicException fallbackEx)
+                {
+                    _logger.LogError("Failed to decrypt credentials with both scopes. " +
+                        "Primary scope ({PrimaryScope}) error: {PrimaryError}. " +
+                        "Fallback scope ({FallbackScope}) error: {FallbackError}. " +
+                        "Credentials may be corrupted or from an incompatible encryption context.",
+                        primaryScope == DataProtectionScope.LocalMachine ? "LocalMachine" : "CurrentUser",
+                        primaryEx.Message,
+                        fallbackScope == DataProtectionScope.LocalMachine ? "LocalMachine" : "CurrentUser",
+                        fallbackEx.Message);
+                    
+                    // Re-throw the original exception to maintain the call stack
+                    throw;
+                }
             }
 
             var json = Encoding.UTF8.GetString(decryptedData);

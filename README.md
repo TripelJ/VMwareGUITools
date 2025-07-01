@@ -223,4 +223,110 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 For support and questions:
 - Create an issue in this repository
 - Check the [documentation](docs/)
-- Review the [troubleshooting guide](TROUBLESHOOTING.md) 
+- Review the [troubleshooting guide](TROUBLESHOOTING.md)
+
+## Credential Security Enhancement
+
+As of the latest version, VMware GUI Tools uses enhanced credential encryption for improved security:
+
+### Machine-Level Encryption
+Credentials are now encrypted using machine-level encryption by default, which provides better security and consistency across user sessions.
+
+### Troubleshooting Credential Issues
+
+If you encounter credential decryption errors after updating:
+
+1. **Automatic Resolution**: The application will detect credential decryption failures and offer to update your credentials automatically.
+
+2. **Manual Resolution**: If you see credential-related errors:
+   - Go to the vCenter settings/edit dialog
+   - Re-enter your credentials
+   - Save the changes
+
+3. **Error Messages**: Look for these specific error messages:
+   - "Failed to decrypt credentials - invalid encryption scope"
+   - "Credential decryption failed"
+   
+   These indicate that your stored credentials need to be updated with the new encryption method.
+
+### Technical Details
+- The system attempts to decrypt credentials using both the current and fallback encryption scopes
+- Detailed logging is available in the application logs for troubleshooting
+- No data is lost - you simply need to re-enter credentials once after the upgrade
+
+## Configuration
+
+### Application Settings
+Configuration is managed through `appsettings.json` files:
+
+- **UI Application**: `src/VMwareGUITools.UI/appsettings.json`
+- **Windows Service**: `src/VMwareGUITools.Service/appsettings.json`
+
+### Key Configuration Options
+
+```json
+{
+  "VMwareGUITools": {
+    "UseMachineLevelEncryption": true,
+    "ConnectionTimeoutSeconds": 30,
+    "DefaultCheckTimeoutSeconds": 300,
+    "EnableAutoDiscovery": true
+  }
+}
+```
+
+## Usage
+
+1. **Start the Application**: Launch `VMwareGUITools.UI.exe`
+2. **Add vCenter Servers**: Use the "Add vCenter" button to configure your servers
+3. **Connect**: Click "Connect" to establish connections via the background service
+4. **Monitor**: View infrastructure health and run checks as needed
+
+## Architecture
+
+The application uses a service-based architecture:
+
+- **UI Application**: WPF-based user interface for interaction
+- **Windows Service**: Background service for automation and PowerCLI execution
+- **SQLite Database**: Local storage for configuration and results
+- **REST API**: Communication between UI and service components
+
+## Development
+
+### Building from Source
+
+1. Clone the repository
+2. Ensure .NET 6.0 SDK is installed
+3. Build the solution:
+   ```
+   dotnet build VMwareGUITools.sln
+   ```
+
+### Project Structure
+
+```
+src/
+├── VMwareGUITools.Core/          # Core models and interfaces
+├── VMwareGUITools.Data/          # Entity Framework data layer
+├── VMwareGUITools.Infrastructure/ # Services and infrastructure
+├── VMwareGUITools.Service/       # Windows Service implementation
+└── VMwareGUITools.UI/           # WPF User Interface
+```
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Submit a pull request
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Support
+
+For issues and questions:
+1. Check the troubleshooting section above
+2. Review the application logs in the `logs/` directory
+3. Create an issue on GitHub with detailed information about your environment and the problem 

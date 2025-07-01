@@ -184,9 +184,9 @@ public partial class MainWindowViewModel : ObservableObject
         try
         {
             IsLoading = true;
-            StatusMessage = $"Requesting connection to {vCenter.DisplayName} via service...";
+            StatusMessage = $"Connecting to {vCenter.DisplayName} via service...";
 
-            _logger.LogInformation("Requesting vCenter connection via service: {VCenterName}", vCenter.Name);
+            _logger.LogInformation("Attempting to connect to vCenter via service: {VCenterName}", vCenter.Name);
 
             // Check if service is running
             var serviceStatus = await _serviceConfigurationManager.GetServiceStatusAsync();
@@ -224,6 +224,13 @@ public partial class MainWindowViewModel : ObservableObject
         {
             vCenter.UpdateConnectionStatus(false);
             _logger.LogError(ex, "Failed to connect to vCenter via service: {VCenterName}", vCenter.Name);
+            
+            // Handle credential decryption errors specifically
+            if (await HandleCredentialDecryptionErrorAsync(vCenter, ex, "connect to"))
+            {
+                return; // Error was handled, don't show generic message
+            }
+            
             StatusMessage = $"Failed to connect to {vCenter.DisplayName}: {ex.Message}";
         }
         finally
@@ -389,12 +396,56 @@ public partial class MainWindowViewModel : ObservableObject
         {
             vCenter.UpdateConnectionStatus(false);
             _logger.LogError(ex, "Failed to test connection to vCenter via service: {VCenterName}", vCenter.Name);
+            
+            // Handle credential decryption errors specifically
+            if (await HandleCredentialDecryptionErrorAsync(vCenter, ex, "test connection to"))
+            {
+                return; // Error was handled, don't show generic message
+            }
+            
             StatusMessage = $"Failed to test connection to {vCenter.DisplayName}: {ex.Message}";
         }
         finally
         {
             IsLoading = false;
         }
+    }
+
+    /// <summary>
+    /// Handles credential decryption errors by offering to update credentials
+    /// </summary>
+    /// <param name="vCenter">The vCenter with credential issues</param>
+    /// <param name="ex">The exception that occurred</param>
+    /// <param name="operation">Description of the operation that failed (e.g., "connect to", "test connection to")</param>
+    /// <returns>True if the error was handled, false if it should be processed as a regular error</returns>
+    private async Task<bool> HandleCredentialDecryptionErrorAsync(VCenter vCenter, Exception ex, string operation)
+    {
+        if (ex.Message.Contains("Failed to decrypt credentials") || 
+            ex.Message.Contains("invalid encryption scope") ||
+            ex.Message.Contains("corrupted data"))
+        {
+            var result = MessageBox.Show(
+                $"Failed to decrypt stored credentials for '{vCenter.DisplayName}'.\n\n" +
+                "This can happen when encryption settings have changed or credentials are corrupted.\n\n" +
+                "Would you like to update the credentials for this vCenter?",
+                "Credential Decryption Error",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+
+            if (result == MessageBoxResult.Yes)
+            {
+                // Open edit dialog to allow user to re-enter credentials
+                await EditVCenterAsync(vCenter);
+            }
+            else
+            {
+                StatusMessage = $"Credential decryption failed for {vCenter.DisplayName}. Please update credentials to resolve this issue.";
+            }
+            
+            return true; // Error was handled
+        }
+        
+        return false; // Error was not a credential decryption issue
     }
 
     /// <summary>
