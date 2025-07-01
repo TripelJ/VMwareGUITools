@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging;
 using VMwareGUITools.Core.Models;
 using VMwareGUITools.Data;
 using VMwareGUITools.Infrastructure.Services;
+using VMwareGUITools.Infrastructure.VMware;
 
 namespace VMwareGUITools.UI.ViewModels;
 
