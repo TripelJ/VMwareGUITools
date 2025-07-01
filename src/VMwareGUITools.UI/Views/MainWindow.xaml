@@ -255,12 +255,48 @@
                                                                              </DataTrigger>
                                                                              <DataTrigger Binding="{Binding Status}" Value="Disconnected">
                                                                                  <Setter Property="Fill" Value="{StaticResource ErrorBrush}"/>
+                                                                                 <!-- Blinking animation when disconnected -->
+                                                                                 <DataTrigger.EnterActions>
+                                                                                     <BeginStoryboard>
+                                                                                         <Storyboard RepeatBehavior="Forever">
+                                                                                             <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                                                                              From="1.0" To="0.3" Duration="0:0:1"
+                                                                                                              AutoReverse="True"/>
+                                                                                         </Storyboard>
+                                                                                     </BeginStoryboard>
+                                                                                 </DataTrigger.EnterActions>
+                                                                                 <DataTrigger.ExitActions>
+                                                                                     <BeginStoryboard>
+                                                                                         <Storyboard>
+                                                                                             <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                                                                              To="1.0" Duration="0:0:0.2"/>
+                                                                                         </Storyboard>
+                                                                                     </BeginStoryboard>
+                                                                                 </DataTrigger.ExitActions>
                                                                              </DataTrigger>
                                                                              <DataTrigger Binding="{Binding Status}" Value="NotTested">
                                                                                  <Setter Property="Fill" Value="{StaticResource InfoBrush}"/>
                                                                              </DataTrigger>
                                                                              <DataTrigger Binding="{Binding Status}" Value="Stale">
                                                                                  <Setter Property="Fill" Value="{StaticResource WarningBrush}"/>
+                                                                                 <!-- Blinking animation when stale -->
+                                                                                 <DataTrigger.EnterActions>
+                                                                                     <BeginStoryboard>
+                                                                                         <Storyboard RepeatBehavior="Forever">
+                                                                                             <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                                                                              From="1.0" To="0.5" Duration="0:0:1.5"
+                                                                                                              AutoReverse="True"/>
+                                                                                         </Storyboard>
+                                                                                     </BeginStoryboard>
+                                                                                 </DataTrigger.EnterActions>
+                                                                                 <DataTrigger.ExitActions>
+                                                                                     <BeginStoryboard>
+                                                                                         <Storyboard>
+                                                                                             <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                                                                              To="1.0" Duration="0:0:0.2"/>
+                                                                                         </Storyboard>
+                                                                                     </BeginStoryboard>
+                                                                                 </DataTrigger.ExitActions>
                                                                              </DataTrigger>
                                                                              <DataTrigger Binding="{Binding Status}" Value="Disabled">
                                                                                  <Setter Property="Fill" Value="Gray"/>
@@ -819,8 +855,8 @@
                                                                                                      To="1.0" Duration="0:0:0.2"/>
                                                                                 </Storyboard>
                                                                             </BeginStoryboard>
-                                                                        </DataTrigger.ExitActions>
-                                                                    </DataTrigger>
+                                                                </DataTrigger.ExitActions>
+                                                            </DataTrigger>
                                                                 </Style.Triggers>
                                                             </Style>
                                                         </Ellipse.Style>

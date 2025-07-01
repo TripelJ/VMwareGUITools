@@ -516,23 +516,73 @@ public partial class MainWindowViewModel : ObservableObject
                 ServiceActiveExecutions = serviceStatus.ActiveExecutions;
                 
                 // Consider service running if heartbeat is within last 30 seconds (heartbeat updates every 10 seconds)
+                var wasServiceRunning = IsServiceRunning;
                 IsServiceRunning = serviceStatus.LastHeartbeat > DateTime.UtcNow.AddSeconds(-30);
+                
+                // If service status changed, update PowerCLI status
+                if (wasServiceRunning != IsServiceRunning)
+                {
+                    await CheckPowerCLIAsync();
+                }
             }
             else
             {
-                ServiceStatus = "Unknown";
+                ServiceStatus = "Stopped";
                 IsServiceRunning = false;
                 ServiceLastHeartbeat = DateTime.MinValue;
                 ServiceActiveExecutions = 0;
+                
+                // Service not running means PowerCLI is not available
+                IsPowerCLIAvailable = false;
             }
+            
+            // Update vCenter connection status based on service status
+            UpdateVCenterConnectionStates();
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to monitor service status");
             ServiceStatus = "Error";
             IsServiceRunning = false;
+            IsPowerCLIAvailable = false;
+            
+            // When service has error, mark all vCenters as disconnected
+            UpdateVCenterConnectionStates();
         }
     }
+
+    /// <summary>
+    /// Updates the connection status of all vCenters based on current service status
+    /// </summary>
+    private void UpdateVCenterConnectionStates()
+    {
+        try
+        {
+            foreach (var vCenter in VCenters)
+            {
+                // If service is not running, all vCenters are considered disconnected
+                if (!IsServiceRunning)
+                {
+                    vCenter.UpdateConnectionStatus(false);
+                }
+                else
+                {
+                    // TODO: In a real implementation, you would check the actual connection status
+                    // through the service for each vCenter. For now, we'll assume they're connected
+                    // if the service is running and they were previously connected.
+                    
+                    // Keep current status if service is running - don't override actual connection checks
+                    // The service should update the connection status through other means
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to update vCenter connection states");
+        }
+    }
+
+
 
     /// <summary>
     /// Command to assign a vCenter to an availability zone
@@ -750,15 +800,23 @@ public partial class MainWindowViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Check if VMware connectivity is available (using REST API)
+    /// Check if VMware connectivity is available (considering both PowerCLI and service status)
     /// </summary>
     private async Task CheckPowerCLIAsync()
     {
         try
         {
             _logger.LogDebug("Checking VMware REST API connectivity availability");
-            IsPowerCLIAvailable = await _vmwareService.IsPowerCLIAvailableAsync();
-            _logger.LogDebug("VMware REST API availability: {Available}", IsPowerCLIAvailable);
+            
+            // Check basic PowerCLI availability
+            var powerCLIAvailable = await _vmwareService.IsPowerCLIAvailableAsync();
+            
+            // PowerCLI is only truly available if the service is also running
+            // Since all VMware operations go through the Windows Service
+            IsPowerCLIAvailable = powerCLIAvailable && IsServiceRunning;
+            
+            _logger.LogDebug("VMware REST API availability: {Available} (PowerCLI: {PowerCLI}, Service: {Service})", 
+                IsPowerCLIAvailable, powerCLIAvailable, IsServiceRunning);
         }
         catch (Exception ex)
         {
