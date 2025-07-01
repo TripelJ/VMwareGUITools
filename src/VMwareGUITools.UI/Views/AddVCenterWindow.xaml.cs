@@ -13,13 +13,27 @@ public partial class AddVCenterWindow : Window
         InitializeComponent();
         DataContext = viewModel;
         
-        // Set window owner and handle dialog result
+        // Set window owner
         if (Application.Current.MainWindow != this)
         {
             Owner = Application.Current.MainWindow;
         }
+    }
+
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
         
-        // Subscribe to view model events
-        viewModel.DialogResultRequested += (result) => DialogResult = result;
+        // Setup the view model after the window is properly initialized
+        SetupViewModel();
+    }
+    
+    private void SetupViewModel()
+    {
+        if (DataContext is AddVCenterViewModel viewModel)
+        {
+            // Subscribe to dialog result event now that window is initialized
+            viewModel.DialogResultRequested += (result) => DialogResult = result;
+        }
     }
 } 

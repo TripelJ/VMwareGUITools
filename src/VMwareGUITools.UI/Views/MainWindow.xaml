@@ -100,6 +100,7 @@
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
 
                         <!-- vCenter Panel Header -->
@@ -218,7 +219,38 @@
                                                                               CommandParameter="{Binding}"/>
                                                                     <Separator/>
                                                                     <MenuItem Header="Move to Zone" Icon="{materialDesign:PackIcon Kind=FolderMove}">
-                                                                        <!-- Zone submenu items would be bound here -->
+                                                                        <MenuItem.ItemsSource>
+                                                                            <CompositeCollection>
+                                                                                <MenuItem Header="(No Zone)" 
+                                                                                          Command="{Binding DataContext.AssignVCenterToZoneCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                                          CommandParameter="{Binding}">
+                                                                                    <MenuItem.Icon>
+                                                                                        <materialDesign:PackIcon Kind="FolderRemove"/>
+                                                                                    </MenuItem.Icon>
+                                                                                </MenuItem>
+                                                                                <Separator/>
+                                                                                <CollectionContainer Collection="{Binding DataContext.AvailabilityZones, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                                                                            </CompositeCollection>
+                                                                        </MenuItem.ItemsSource>
+                                                                        <MenuItem.ItemContainerStyle>
+                                                                            <Style TargetType="MenuItem" BasedOn="{StaticResource MaterialDesignMenuItem}">
+                                                                                <Setter Property="Header" Value="{Binding Name}"/>
+                                                                                <Setter Property="Command" Value="{Binding DataContext.AssignVCenterToZoneCommand, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                                                                                <Setter Property="CommandParameter">
+                                                                                    <Setter.Value>
+                                                                                        <MultiBinding>
+                                                                                            <Binding/>
+                                                                                            <Binding RelativeSource="{RelativeSource AncestorType=Grid}" Path="DataContext"/>
+                                                                                        </MultiBinding>
+                                                                                    </Setter.Value>
+                                                                                </Setter>
+                                                                                <Setter Property="Icon">
+                                                                                    <Setter.Value>
+                                                                                        <materialDesign:PackIcon Kind="Folder"/>
+                                                                                    </Setter.Value>
+                                                                                </Setter>
+                                                                            </Style>
+                                                                        </MenuItem.ItemContainerStyle>
                                                                     </MenuItem>
                                                                 </ContextMenu>
                                                             </Grid.ContextMenu>

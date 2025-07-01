@@ -158,17 +158,25 @@ public partial class MainWindowViewModel : ObservableObject
             _logger.LogInformation("Opening Add vCenter dialog");
 
             var addVCenterWindow = _serviceProvider.GetRequiredService<AddVCenterWindow>();
+            
+            // Show dialog and await result
             var result = addVCenterWindow.ShowDialog();
 
             if (result == true)
             {
+                _logger.LogInformation("Add vCenter dialog completed successfully");
                 await LoadVCentersAsync();
                 StatusMessage = "vCenter server added successfully";
+            }
+            else
+            {
+                _logger.LogInformation("Add vCenter dialog was cancelled or closed");
+                StatusMessage = "Add vCenter operation cancelled";
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to add vCenter server");
+            _logger.LogError(ex, "Failed to open Add vCenter dialog");
             StatusMessage = $"Failed to add vCenter server: {ex.Message}";
         }
     }
@@ -273,7 +281,11 @@ public partial class MainWindowViewModel : ObservableObject
     [RelayCommand]
     private async Task EditVCenterAsync(VCenter? vCenter)
     {
-        if (vCenter == null) return;
+        if (vCenter == null) 
+        {
+            _logger.LogWarning("EditVCenterAsync called with null vCenter parameter");
+            return;
+        }
 
         try
         {
@@ -289,9 +301,20 @@ public partial class MainWindowViewModel : ObservableObject
 
                 if (result == true)
                 {
+                    _logger.LogInformation("Edit vCenter dialog completed successfully for: {VCenterName}", vCenter.Name);
                     await LoadVCentersAsync();
                     StatusMessage = $"vCenter '{vCenter.DisplayName}' updated successfully";
                 }
+                else
+                {
+                    _logger.LogInformation("Edit vCenter dialog was cancelled for: {VCenterName}", vCenter.Name);
+                    StatusMessage = "Edit vCenter operation cancelled";
+                }
+            }
+            else
+            {
+                _logger.LogError("Failed to get EditVCenterViewModel from EditVCenterWindow");
+                StatusMessage = "Failed to initialize edit dialog";
             }
         }
         catch (Exception ex)
@@ -311,21 +334,39 @@ public partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            _logger.LogInformation("Deleting vCenter: {VCenterName}", vCenter.Name);
+            _logger.LogInformation("Requesting to delete vCenter: {VCenterName}", vCenter.Name);
 
+            // Show confirmation dialog
             var result = MessageBox.Show(
-                $"Are you sure you want to delete vCenter '{vCenter.DisplayName}'?\n\nThis will also remove all associated clusters and hosts data.",
-                "Confirm Delete",
+                $"Are you sure you want to delete vCenter '{vCenter.DisplayName}'?\n\n" +
+                "This action will permanently remove:\n" +
+                "• The vCenter connection\n" +
+                "• All collected cluster data\n" +
+                "• All collected host data\n" +
+                "• All collected datastore data\n" +
+                "• All historical check results\n\n" +
+                "This action cannot be undone.",
+                "Confirm Delete vCenter",
                 MessageBoxButton.YesNo,
-                MessageBoxImage.Warning);
+                MessageBoxImage.Warning,
+                MessageBoxResult.No);
 
             if (result == MessageBoxResult.Yes)
             {
+                IsLoading = true;
+                StatusMessage = $"Deleting vCenter '{vCenter.DisplayName}' and all associated data...";
+
+                _logger.LogInformation("User confirmed deletion of vCenter: {VCenterName}", vCenter.Name);
+
+                // Remove the vCenter - EF Core will handle cascade deletes for related data
                 _context.VCenters.Remove(vCenter);
                 await _context.SaveChangesAsync();
 
+                _logger.LogInformation("Successfully deleted vCenter: {VCenterName}", vCenter.Name);
+
+                // Reload data to refresh the UI
                 await LoadVCentersAsync();
-                StatusMessage = $"vCenter '{vCenter.DisplayName}' deleted successfully";
+                StatusMessage = $"vCenter '{vCenter.DisplayName}' and all associated data deleted successfully";
                 
                 // Clear selection if deleted vCenter was selected
                 if (SelectedVCenter?.Id == vCenter.Id)
@@ -333,11 +374,20 @@ public partial class MainWindowViewModel : ObservableObject
                     SelectedVCenter = null;
                 }
             }
+            else
+            {
+                _logger.LogInformation("User cancelled deletion of vCenter: {VCenterName}", vCenter.Name);
+                StatusMessage = "Delete operation cancelled";
+            }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to delete vCenter: {VCenterName}", vCenter.Name);
+            _logger.LogError(ex, "Failed to delete vCenter: {VCenterName}", vCenter?.Name ?? "Unknown");
             StatusMessage = $"Failed to delete vCenter: {ex.Message}";
+        }
+        finally
+        {
+            IsLoading = false;
         }
     }
 
@@ -650,22 +700,37 @@ public partial class MainWindowViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Command to assign a vCenter to an availability zone
+    /// Command to assign a vCenter to a specific availability zone
     /// </summary>
     [RelayCommand]
-    private void AssignVCenterToZone(object? parameter)
+    private async Task AssignVCenterToZoneAsync(object? parameter)
     {
-        if (parameter == null)
-            return;
-
-        // For now, we'll implement this when we add the context menu functionality
-        // This method is ready for future drag-and-drop or context menu operations
-        
         try
         {
-            // Example: await _availabilityZoneViewModel.MoveVCenterToZoneAsync(vCenter, targetZone);
-            // await LoadVCentersAsync();
-            StatusMessage = "vCenter assignment functionality ready for implementation";
+            if (parameter is VCenter vCenter)
+            {
+                // Handle "No Zone" assignment (remove from current zone)
+                _logger.LogInformation("Removing vCenter {VCenterName} from any availability zone", vCenter.Name);
+                await AvailabilityZoneViewModel.MoveVCenterToZoneAsync(vCenter, null);
+                await LoadVCentersAsync();
+                StatusMessage = $"vCenter '{vCenter.DisplayName}' removed from availability zone";
+            }
+            else if (parameter is object[] parameters && parameters.Length == 2 && 
+                     parameters[0] is AvailabilityZone targetZone && parameters[1] is VCenter targetVCenter)
+            {
+                // Handle assignment to specific zone
+                _logger.LogInformation("Moving vCenter {VCenterName} to availability zone {ZoneName}", 
+                    targetVCenter.Name, targetZone.Name);
+                
+                await AvailabilityZoneViewModel.MoveVCenterToZoneAsync(targetVCenter, targetZone);
+                await LoadVCentersAsync();
+                StatusMessage = $"vCenter '{targetVCenter.DisplayName}' moved to zone '{targetZone.Name}'";
+            }
+            else
+            {
+                _logger.LogWarning("AssignVCenterToZone called with invalid parameter: {Parameter}", parameter);
+                StatusMessage = "Invalid zone assignment parameters";
+            }
         }
         catch (Exception ex)
         {
