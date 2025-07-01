@@ -5,6 +5,7 @@ using System.Text.Json;
 using VMwareGUITools.Core.Models;
 using VMwareGUITools.Data;
 using VMwareGUITools.Infrastructure.Checks;
+using VMwareGUITools.Infrastructure.Security;
 using VMwareGUITools.Infrastructure.VMware;
 
 namespace VMwareGUITools.Infrastructure.Services;
