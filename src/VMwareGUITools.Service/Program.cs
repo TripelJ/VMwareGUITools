@@ -45,7 +45,7 @@ public class Program
             Log.Information("Logs Directory: {LogsDirectory}", logsDirectory);
             Log.Information("Log File Path: {LogFilePath}", logFilePath);
             
-            var builder = Host.CreateApplicationBuilder(args);
+            var builder = Microsoft.Extensions.Hosting.Host.CreateApplicationBuilder(args);
             
             // Configure services
             if (OperatingSystem.IsWindows())
