@@ -170,7 +170,7 @@ public partial class App : Application
         services.AddTransient<AddVCenterWindow>(provider =>
         {
             var viewModel = provider.GetRequiredService<AddVCenterViewModel>();
-            return new AddVCenterWindow { DataContext = viewModel };
+            return new AddVCenterWindow(viewModel);
         });
         services.AddTransient<EditVCenterWindow>(provider =>
         {
