@@ -63,8 +63,35 @@ public class CredentialService : ICredentialService
         try
         {
             var encryptedData = Convert.FromBase64String(encryptedCredentials);
-            var scope = _useMachineScope ? DataProtectionScope.LocalMachine : DataProtectionScope.CurrentUser;
-            var decryptedData = ProtectedData.Unprotect(encryptedData, null, scope);
+            
+            // Try the configured scope first
+            var primaryScope = _useMachineScope ? DataProtectionScope.LocalMachine : DataProtectionScope.CurrentUser;
+            var fallbackScope = _useMachineScope ? DataProtectionScope.CurrentUser : DataProtectionScope.LocalMachine;
+            
+            byte[] decryptedData;
+            DataProtectionScope usedScope;
+            
+            try
+            {
+                decryptedData = ProtectedData.Unprotect(encryptedData, null, primaryScope);
+                usedScope = primaryScope;
+                _logger.LogDebug("Successfully decrypted credentials using configured scope: {Scope}", 
+                    primaryScope == DataProtectionScope.LocalMachine ? "LocalMachine" : "CurrentUser");
+            }
+            catch (CryptographicException)
+            {
+                // Try fallback scope for backward compatibility
+                _logger.LogDebug("Failed to decrypt with configured scope, trying fallback scope: {Scope}", 
+                    fallbackScope == DataProtectionScope.LocalMachine ? "LocalMachine" : "CurrentUser");
+                    
+                decryptedData = ProtectedData.Unprotect(encryptedData, null, fallbackScope);
+                usedScope = fallbackScope;
+                
+                _logger.LogWarning("Credentials were decrypted using fallback scope ({Scope}). " +
+                    "Consider re-saving credentials to use the current configured scope ({ConfiguredScope})",
+                    fallbackScope == DataProtectionScope.LocalMachine ? "LocalMachine" : "CurrentUser",
+                    primaryScope == DataProtectionScope.LocalMachine ? "LocalMachine" : "CurrentUser");
+            }
 
             var json = Encoding.UTF8.GetString(decryptedData);
             var credentials = JsonSerializer.Deserialize<VCenterCredentials>(json);
@@ -79,7 +106,7 @@ public class CredentialService : ICredentialService
         }
         catch (CryptographicException ex)
         {
-            _logger.LogError(ex, "Failed to decrypt credentials - cryptographic error");
+            _logger.LogError(ex, "Failed to decrypt credentials - cryptographic error with both scopes");
             throw new UnauthorizedAccessException("Failed to decrypt credentials - invalid encryption scope or corrupted data", ex);
         }
         catch (Exception ex)

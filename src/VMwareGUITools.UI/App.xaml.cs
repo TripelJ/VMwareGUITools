@@ -155,7 +155,14 @@ public partial class App : Application
         services.AddScoped<IVMwareConnectionService, RestVMwareConnectionService>();
 
         // Credential Service - For GUI credential management
-        services.AddSingleton<ICredentialService, CredentialService>();
+        services.AddSingleton<ICredentialService>(provider =>
+        {
+            var logger = provider.GetRequiredService<ILogger<CredentialService>>();
+            var vmwareOptions = configuration.GetSection("VMwareGUITools").Get<VMwareGUIToolsOptions>() ?? new VMwareGUIToolsOptions();
+            var credentialService = new CredentialService(logger);
+            credentialService.SetEncryptionScope(vmwareOptions.UseMachineLevelEncryption);
+            return credentialService;
+        });
 
         // Service Communication - For GUI to Windows Service communication
         services.AddScoped<IServiceConfigurationManager, ServiceConfigurationManager>();

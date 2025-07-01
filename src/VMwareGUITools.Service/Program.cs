@@ -262,7 +262,14 @@ public class Program
         services.AddScoped<IPowerCLIService, PowerCLIService>();
         
         // Infrastructure services
-        services.AddScoped<ICredentialService, CredentialService>();
+        services.AddScoped<ICredentialService>(provider =>
+        {
+            var logger = provider.GetRequiredService<ILogger<CredentialService>>();
+            var vmwareOptions = configuration.GetSection("VMwareGUITools").Get<VMwareGUIToolsOptions>() ?? new VMwareGUIToolsOptions();
+            var credentialService = new CredentialService(logger);
+            credentialService.SetEncryptionScope(vmwareOptions.UseMachineLevelEncryption);
+            return credentialService;
+        });
         services.AddScoped<IVMwareConnectionService, RestVMwareConnectionService>();
         
         // Check Engines - Both REST API and PowerCLI available
@@ -282,4 +289,20 @@ public class Program
                 provider,
                 isServiceContext: true));
     }
+}
+
+/// <summary>
+/// Configuration options for the VMware GUI Tools application
+/// </summary>
+public class VMwareGUIToolsOptions
+{
+    public const string SectionName = "VMwareGUITools";
+
+    public bool UseMachineLevelEncryption { get; set; } = false;
+    public int ConnectionTimeoutSeconds { get; set; } = 30;
+    public int DefaultCheckTimeoutSeconds { get; set; } = 300;
+    public bool EnableAutoDiscovery { get; set; } = true;
+    public string PowerCLIModulePath { get; set; } = string.Empty;
+    public string CheckScriptsPath { get; set; } = "Scripts";
+    public string ReportsPath { get; set; } = "Reports";
 } 
