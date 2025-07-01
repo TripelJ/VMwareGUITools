@@ -162,18 +162,6 @@
                                             
                                             <Grid Margin="16,8,16,4"
                                                   Background="Transparent">
-                                                                                                 <Grid.ContextMenu>
-                                                     <ContextMenu>
-                                                         <MenuItem Header="Edit Zone" 
-                                                                   Icon="{materialDesign:PackIcon Kind=Edit}"
-                                                                   Command="{Binding DataContext.EditAvailabilityZoneCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                                   CommandParameter="{Binding}"/>
-                                                         <MenuItem Header="Delete Zone" 
-                                                                   Icon="{materialDesign:PackIcon Kind=Delete}"
-                                                                   Command="{Binding DataContext.DeleteAvailabilityZoneCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                                   CommandParameter="{Binding}"/>
-                                                     </ContextMenu>
-                                                 </Grid.ContextMenu>
                                                 
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="*"/>
@@ -202,58 +190,6 @@
                                                     <DataTemplate>
                                                         <Grid Margin="0,2" 
                                                               Background="Transparent">
-                                                            <Grid.ContextMenu>
-                                                                <ContextMenu>
-                                                                    <MenuItem Header="Edit" 
-                                                                              Icon="{materialDesign:PackIcon Kind=Edit}"
-                                                                              Command="{Binding DataContext.EditVCenterCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                                              CommandParameter="{Binding}"/>
-                                                                    <MenuItem Header="Delete" 
-                                                                              Icon="{materialDesign:PackIcon Kind=Delete}"
-                                                                              Command="{Binding DataContext.DeleteVCenterCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                                              CommandParameter="{Binding}"/>
-                                                                    <Separator/>
-                                                                    <MenuItem Header="Test Connection" 
-                                                                              Icon="{materialDesign:PackIcon Kind=Connection}"
-                                                                              Command="{Binding DataContext.TestVCenterConnectionCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                                              CommandParameter="{Binding}"/>
-                                                                    <Separator/>
-                                                                    <MenuItem Header="Move to Zone" Icon="{materialDesign:PackIcon Kind=FolderMove}">
-                                                                        <MenuItem.ItemsSource>
-                                                                            <CompositeCollection>
-                                                                                <MenuItem Header="(No Zone)" 
-                                                                                          Command="{Binding DataContext.AssignVCenterToZoneCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                                                          CommandParameter="{Binding}">
-                                                                                    <MenuItem.Icon>
-                                                                                        <materialDesign:PackIcon Kind="FolderRemove"/>
-                                                                                    </MenuItem.Icon>
-                                                                                </MenuItem>
-                                                                                <Separator/>
-                                                                                <CollectionContainer Collection="{Binding DataContext.AvailabilityZones, RelativeSource={RelativeSource AncestorType=Window}}"/>
-                                                                            </CompositeCollection>
-                                                                        </MenuItem.ItemsSource>
-                                                                        <MenuItem.ItemContainerStyle>
-                                                                            <Style TargetType="MenuItem" BasedOn="{StaticResource MaterialDesignMenuItem}">
-                                                                                <Setter Property="Header" Value="{Binding Name}"/>
-                                                                                <Setter Property="Command" Value="{Binding DataContext.AssignVCenterToZoneCommand, RelativeSource={RelativeSource AncestorType=Window}}"/>
-                                                                                <Setter Property="CommandParameter">
-                                                                                    <Setter.Value>
-                                                                                        <MultiBinding>
-                                                                                            <Binding/>
-                                                                                            <Binding RelativeSource="{RelativeSource AncestorType=Grid}" Path="DataContext"/>
-                                                                                        </MultiBinding>
-                                                                                    </Setter.Value>
-                                                                                </Setter>
-                                                                                <Setter Property="Icon">
-                                                                                    <Setter.Value>
-                                                                                        <materialDesign:PackIcon Kind="Folder"/>
-                                                                                    </Setter.Value>
-                                                                                </Setter>
-                                                                            </Style>
-                                                                        </MenuItem.ItemContainerStyle>
-                                                                    </MenuItem>
-                                                                </ContextMenu>
-                                                            </Grid.ContextMenu>
                                                             
                                                             <Grid.InputBindings>
                                                                 <MouseBinding MouseAction="LeftClick"

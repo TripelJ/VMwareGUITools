@@ -35,6 +35,12 @@ public partial class EditAvailabilityZoneViewModel : ObservableValidator
     [ObservableProperty]
     private string _statusMessage = string.Empty;
 
+    [ObservableProperty]
+    private bool _canDelete = false;
+
+    [ObservableProperty]
+    private int _vCenterCount = 0;
+
     public EditAvailabilityZoneViewModel(
         ILogger<EditAvailabilityZoneViewModel> logger,
         VMwareDbContext context)
@@ -51,7 +57,7 @@ public partial class EditAvailabilityZoneViewModel : ObservableValidator
     /// <summary>
     /// Initialize the view model with existing availability zone data
     /// </summary>
-    public Task InitializeAsync(AvailabilityZone zone)
+    public async Task InitializeAsync(AvailabilityZone zone)
     {
         _originalZone = zone;
         
@@ -59,7 +65,12 @@ public partial class EditAvailabilityZoneViewModel : ObservableValidator
         ZoneDescription = zone.Description ?? string.Empty;
         ZoneColor = zone.Color ?? "#1976D2";
         
-        return Task.CompletedTask;
+        // Check if any vCenters are assigned to this zone
+        VCenterCount = await _context.VCenters
+            .CountAsync(vc => vc.AvailabilityZoneId == zone.Id);
+            
+        // Can only delete if no vCenters are assigned
+        CanDelete = VCenterCount == 0;
     }
 
     /// <summary>
@@ -120,6 +131,68 @@ public partial class EditAvailabilityZoneViewModel : ObservableValidator
     private void SetZoneColor(string color)
     {
         ZoneColor = color;
+    }
+
+    /// <summary>
+    /// Command to delete the availability zone
+    /// </summary>
+    [RelayCommand]
+    private async Task DeleteAsync()
+    {
+        if (_originalZone == null) return;
+
+        try
+        {
+            // Double-check that no vCenters are assigned
+            var currentVCenterCount = await _context.VCenters
+                .CountAsync(vc => vc.AvailabilityZoneId == _originalZone.Id);
+
+            if (currentVCenterCount > 0)
+            {
+                StatusMessage = $"Cannot delete zone '{_originalZone.Name}' - it contains {currentVCenterCount} vCenter(s). Move them to another zone first.";
+                return;
+            }
+
+            _logger.LogInformation("Requesting to delete availability zone: {ZoneName}", _originalZone.Name);
+
+            // Show confirmation dialog
+            var result = System.Windows.MessageBox.Show(
+                $"Are you sure you want to delete the availability zone '{_originalZone.Name}'?\n\n" +
+                "This action cannot be undone.",
+                "Confirm Delete Availability Zone",
+                System.Windows.MessageBoxButton.YesNo,
+                System.Windows.MessageBoxImage.Warning,
+                System.Windows.MessageBoxResult.No);
+
+            if (result == System.Windows.MessageBoxResult.Yes)
+            {
+                IsLoading = true;
+                StatusMessage = $"Deleting availability zone '{_originalZone.Name}'...";
+
+                _logger.LogInformation("User confirmed deletion of availability zone: {ZoneName}", _originalZone.Name);
+
+                _context.AvailabilityZones.Remove(_originalZone);
+                await _context.SaveChangesAsync();
+
+                _logger.LogInformation("Successfully deleted availability zone: {ZoneName}", _originalZone.Name);
+
+                // Close dialog with success (indicating the zone was deleted)
+                DialogResultRequested?.Invoke(true);
+            }
+            else
+            {
+                _logger.LogInformation("User cancelled deletion of availability zone: {ZoneName}", _originalZone.Name);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to delete availability zone: {ZoneName}", _originalZone?.Name ?? "Unknown");
+            StatusMessage = $"Failed to delete availability zone: {ex.Message}";
+        }
+        finally
+        {
+            IsLoading = false;
+        }
     }
 
     /// <summary>

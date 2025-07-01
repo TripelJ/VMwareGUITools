@@ -82,7 +82,9 @@ public class VCenter : INotifyPropertyChanged
     public string DisplayName => !string.IsNullOrEmpty(Name) ? Name : Url;
 
     /// <summary>
-    /// Gets the connection status based on real-time connection state and last successful connection
+    /// Gets the connection status based on service connection state and data flow.
+    /// Only shows Connected when actively connected through the service and receiving data.
+    /// Test connections do not affect this status.
     /// </summary>
     public ConnectionStatus Status
     {
@@ -90,23 +92,27 @@ public class VCenter : INotifyPropertyChanged
         {
             if (!Enabled) return ConnectionStatus.Disabled;
             
-            // If currently connected, return Connected
-            if (IsCurrentlyConnected) return ConnectionStatus.Connected;
+            // Only show Connected if currently connected through service AND there's been recent data activity
+            if (IsCurrentlyConnected && LastSuccessfulConnection.HasValue)
+            {
+                // Must be connected through service with recent activity (within 10 minutes)
+                if (DateTime.UtcNow - LastSuccessfulConnection.Value <= TimeSpan.FromMinutes(10))
+                    return ConnectionStatus.Connected;
+            }
             
-            // Check last successful connection first (more recent and accurate than LastScan)
+            // Check for stale connections (service was connected but not recently)
             var lastConnection = LastSuccessfulConnection ?? LastScan;
+            if (lastConnection.HasValue)
+            {
+                // If last service connection was within 30 minutes but not recent, show as stale
+                if (DateTime.UtcNow - lastConnection.Value <= TimeSpan.FromMinutes(30))
+                    return ConnectionStatus.Stale;
+                    
+                // Older connections are considered disconnected
+                return ConnectionStatus.Disconnected;
+            }
             
-            if (!lastConnection.HasValue) return ConnectionStatus.NotTested;
-            
-            // If last connection was within 5 minutes, consider it connected
-            if (DateTime.UtcNow - lastConnection.Value <= TimeSpan.FromMinutes(5))
-                return ConnectionStatus.Connected;
-                
-            // If last connection was within 30 minutes, consider it stale
-            if (DateTime.UtcNow - lastConnection.Value <= TimeSpan.FromMinutes(30))
-                return ConnectionStatus.Stale;
-                
-            return ConnectionStatus.Disconnected;
+            return ConnectionStatus.NotTested;
         }
     }
 

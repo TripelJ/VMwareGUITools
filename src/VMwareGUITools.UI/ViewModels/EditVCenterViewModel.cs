@@ -259,6 +259,64 @@ public partial class EditVCenterViewModel : ObservableValidator
     }
 
     /// <summary>
+    /// Command to delete the vCenter
+    /// </summary>
+    [RelayCommand]
+    private async Task DeleteAsync()
+    {
+        if (_originalVCenter == null) return;
+
+        try
+        {
+            _logger.LogInformation("Requesting to delete vCenter: {VCenterName}", _originalVCenter.Name);
+
+            // Show confirmation dialog
+            var result = System.Windows.MessageBox.Show(
+                $"Are you sure you want to delete vCenter '{_originalVCenter.DisplayName}'?\n\n" +
+                "This action will permanently remove:\n" +
+                "• The vCenter connection\n" +
+                "• All collected cluster data\n" +
+                "• All collected host data\n" +
+                "• All collected datastore data\n" +
+                "• All historical check results\n\n" +
+                "This action cannot be undone.",
+                "Confirm Delete vCenter",
+                System.Windows.MessageBoxButton.YesNo,
+                System.Windows.MessageBoxImage.Warning,
+                System.Windows.MessageBoxResult.No);
+
+            if (result == System.Windows.MessageBoxResult.Yes)
+            {
+                IsSaving = true;
+
+                _logger.LogInformation("User confirmed deletion of vCenter: {VCenterName}", _originalVCenter.Name);
+
+                // Remove the vCenter - EF Core will handle cascade deletes for related data
+                _context.VCenters.Remove(_originalVCenter);
+                await _context.SaveChangesAsync();
+
+                _logger.LogInformation("Successfully deleted vCenter: {VCenterName}", _originalVCenter.Name);
+
+                // Close dialog with success (indicating the vCenter was deleted)
+                DialogResultRequested?.Invoke(true);
+            }
+            else
+            {
+                _logger.LogInformation("User cancelled deletion of vCenter: {VCenterName}", _originalVCenter.Name);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to delete vCenter: {VCenterName}", _originalVCenter?.Name ?? "Unknown");
+            // TODO: Show error message to user
+        }
+        finally
+        {
+            IsSaving = false;
+        }
+    }
+
+    /// <summary>
     /// Command to cancel the dialog
     /// </summary>
     [RelayCommand]
