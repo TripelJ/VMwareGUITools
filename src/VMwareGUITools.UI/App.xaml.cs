@@ -16,6 +16,7 @@ using VMwareGUITools.Infrastructure.Services;
 using VMwareGUITools.Infrastructure.VMware;
 using VMwareGUITools.UI.ViewModels;
 using VMwareGUITools.UI.Views;
+using VMwareGUITools.Core.Models;
 
 namespace VMwareGUITools.UI;
 
@@ -109,11 +110,27 @@ public partial class App : Application
 
     private static void ConfigureServices(IServiceCollection services, IConfiguration configuration)
     {
+        // Database configuration
+        services.Configure<DatabaseOptions>(configuration.GetSection(DatabaseOptions.SectionName));
+        
         // Database
         services.AddDbContext<VMwareDbContext>(options =>
         {
-            var connectionString = configuration.GetConnectionString("DefaultConnection") 
+            // Resolve database path using configuration
+            var databaseOptions = new DatabaseOptions();
+            configuration.GetSection(DatabaseOptions.SectionName).Bind(databaseOptions);
+            var databasePath = databaseOptions.ResolveDatabasePath();
+            
+            var connectionStringTemplate = configuration.GetConnectionString("DefaultConnection") 
                 ?? "Data Source=vmware-gui-tools.db";
+            var connectionString = connectionStringTemplate.Replace("{DatabasePath}", databasePath);
+            
+            Log.Information("=== UI Database Configuration ===");
+            Log.Information("Executable Directory: {ExecutableDirectory}", AppDomain.CurrentDomain.BaseDirectory);
+            Log.Information("Relative Path Setting: {RelativePath}", databaseOptions.RelativePathFromExecutable);
+            Log.Information("Resolved Database Path: {DatabasePath}", databasePath);
+            Log.Information("Final Connection String: {ConnectionString}", connectionString);
+            
             options.UseSqlite(connectionString);
             
             // Enable sensitive data logging in development

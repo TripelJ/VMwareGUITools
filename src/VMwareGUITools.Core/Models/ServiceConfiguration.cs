@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.IO;
 
 namespace VMwareGUITools.Core.Models;
 
@@ -157,4 +158,33 @@ public static class ServiceCommandTypes
     public const string GetInfrastructureData = "GetInfrastructureData";
     public const string ConnectVCenter = "ConnectVCenter";
     public const string TestVCenterConnection = "TestVCenterConnection";
+}
+
+/// <summary>
+/// Configuration options for database path resolution
+/// </summary>
+public class DatabaseOptions
+{
+    public const string SectionName = "Database";
+    
+    /// <summary>
+    /// Relative path from the executable to the database file
+    /// </summary>
+    public string RelativePathFromExecutable { get; set; } = "vmware-gui-tools.db";
+    
+    /// <summary>
+    /// Database file name
+    /// </summary>
+    public string FileName { get; set; } = "vmware-gui-tools.db";
+    
+    /// <summary>
+    /// Resolves the actual database path based on the executable location
+    /// </summary>
+    /// <returns>Full path to the database file</returns>
+    public string ResolveDatabasePath()
+    {
+        var executableDirectory = AppDomain.CurrentDomain.BaseDirectory;
+        var databasePath = Path.Combine(executableDirectory, RelativePathFromExecutable);
+        return Path.GetFullPath(databasePath);
+    }
 } 

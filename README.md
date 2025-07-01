@@ -127,13 +127,34 @@ The GUI now includes comprehensive status monitoring:
 ## 🔧 Configuration
 
 ### Database Configuration
-Both GUI and Service use the same database connection string defined in `appsettings.json`:
+Both GUI and Service now use a configurable database path system to ensure they connect to the same database:
+
 ```json
 {
   "ConnectionStrings": {
-    "DefaultConnection": "Data Source=vmware-gui-tools.db"
+    "DefaultConnection": "Data Source={DatabasePath}"
+  },
+  "Database": {
+    "RelativePathFromExecutable": "vmware-gui-tools.db",
+    "FileName": "vmware-gui-tools.db"
   }
 }
+```
+
+#### Database Path Resolution
+- **GUI Application**: Uses `"vmware-gui-tools.db"` (relative to executable, project root)
+- **Windows Service**: Uses `"../../../../../vmware-gui-tools.db"` (navigates back to project root)
+- **{DatabasePath}**: Placeholder replaced with resolved absolute path at runtime
+
+This ensures both applications use the same database file located in the project root directory, regardless of where each executable runs from.
+
+#### Troubleshooting Database Paths
+Check the application logs for database path information:
+```
+=== Database Configuration ===
+Executable Directory: C:\...\VMwareGUITools\src\VMwareGUITools.Service\bin\Release\net8.0\
+Relative Path Setting: ../../../../../vmware-gui-tools.db
+Resolved Database Path: C:\...\VMwareGUITools\vmware-gui-tools.db
 ```
 
 ### Service Configuration
