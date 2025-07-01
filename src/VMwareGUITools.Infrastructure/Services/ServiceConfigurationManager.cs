@@ -16,21 +16,34 @@ public class ServiceConfigurationManager : IServiceConfigurationManager
 {
     private readonly ILogger<ServiceConfigurationManager> _logger;
     private readonly IServiceProvider _serviceProvider;
-    private readonly Timer _commandProcessingTimer;
-    private readonly Timer _heartbeatTimer;
+    private readonly Timer? _commandProcessingTimer;
+    private readonly Timer? _heartbeatTimer;
+    private readonly bool _isServiceContext;
 
     public ServiceConfigurationManager(
         ILogger<ServiceConfigurationManager> logger,
-        IServiceProvider serviceProvider)
+        IServiceProvider serviceProvider,
+        bool isServiceContext = false)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
+        _isServiceContext = isServiceContext;
 
-        // Process commands every 5 seconds
-        _commandProcessingTimer = new Timer(ProcessPendingCommands, null, TimeSpan.Zero, TimeSpan.FromSeconds(5));
-        
-        // Update heartbeat every 10 seconds
-        _heartbeatTimer = new Timer(UpdateHeartbeat, null, TimeSpan.Zero, TimeSpan.FromSeconds(10));
+        // Only run heartbeat and command processing if this is running in the service context
+        if (_isServiceContext)
+        {
+            // Process commands every 5 seconds
+            _commandProcessingTimer = new Timer(ProcessPendingCommands, null, TimeSpan.Zero, TimeSpan.FromSeconds(5));
+            
+            // Update heartbeat every 10 seconds
+            _heartbeatTimer = new Timer(UpdateHeartbeat, null, TimeSpan.Zero, TimeSpan.FromSeconds(10));
+            
+            _logger.LogInformation("ServiceConfigurationManager initialized in SERVICE context - heartbeat and command processing enabled");
+        }
+        else
+        {
+            _logger.LogInformation("ServiceConfigurationManager initialized in GUI context - heartbeat and command processing disabled");
+        }
     }
 
     public async Task<T?> GetConfigurationAsync<T>(string key, string category = "") where T : class
@@ -234,20 +247,19 @@ public class ServiceConfigurationManager : IServiceConfigurationManager
 
     private async Task ProcessCommandAsync(ServiceCommand command)
     {
-        using var scope = _serviceProvider.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<VMwareDbContext>();
-        
         try
         {
             _logger.LogInformation("Processing command: {CommandType} (ID: {CommandId})", command.CommandType, command.Id);
 
-            // Attach the command to this context and update it
-            dbContext.Attach(command);
             command.Status = "Processing";
             command.ProcessedAt = DateTime.UtcNow;
+
+            using var scope = _serviceProvider.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<VMwareDbContext>();
+            dbContext.ServiceCommands.Update(command);
             await dbContext.SaveChangesAsync();
 
-            var result = command.CommandType switch
+            string result = command.CommandType switch
             {
                 ServiceCommandTypes.ExecuteCheck => await ExecuteCheckCommand(command.Parameters),
                 ServiceCommandTypes.ValidatePowerCLI => await ValidatePowerCLICommand(),
@@ -255,21 +267,26 @@ public class ServiceConfigurationManager : IServiceConfigurationManager
                 ServiceCommandTypes.ReloadConfiguration => await ReloadConfigurationCommand(),
                 ServiceCommandTypes.GetOverviewData => await GetOverviewDataCommand(command.Parameters),
                 ServiceCommandTypes.GetInfrastructureData => await GetInfrastructureDataCommand(command.Parameters),
-                _ => $"Unknown command type: {command.CommandType}"
+                ServiceCommandTypes.ConnectVCenter => await ConnectVCenterCommand(command.Parameters),
+                ServiceCommandTypes.TestVCenterConnection => await TestVCenterConnectionCommand(command.Parameters),
+                _ => throw new NotSupportedException($"Command type '{command.CommandType}' is not supported")
             };
 
-            command.Status = "Completed";
             command.Result = result;
-            await dbContext.SaveChangesAsync();
-
+            command.Status = "Completed";
             _logger.LogInformation("Command completed: {CommandType} (ID: {CommandId})", command.CommandType, command.Id);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to process command: {CommandType} (ID: {CommandId})", command.CommandType, command.Id);
-            
-            command.Status = "Failed";
             command.ErrorMessage = ex.Message;
+            command.Status = "Failed";
+            _logger.LogError(ex, "Command failed: {CommandType} (ID: {CommandId})", command.CommandType, command.Id);
+        }
+        finally
+        {
+            using var scope = _serviceProvider.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<VMwareDbContext>();
+            dbContext.ServiceCommands.Update(command);
             await dbContext.SaveChangesAsync();
         }
     }
@@ -606,6 +623,104 @@ public class ServiceConfigurationManager : IServiceConfigurationManager
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to get infrastructure data");
+            throw;
+        }
+    }
+
+
+
+    private async Task<string> ConnectVCenterCommand(string parametersJson)
+    {
+        try
+        {
+            _logger.LogInformation("Executing ConnectVCenter command");
+            
+            var parameters = JsonSerializer.Deserialize<Dictionary<string, object>>(parametersJson);
+            if (parameters == null || !parameters.TryGetValue("VCenterId", out var vCenterIdObj))
+            {
+                throw new ArgumentException("VCenterId parameter is required");
+            }
+
+            var vCenterId = vCenterIdObj switch
+            {
+                JsonElement jsonElement => jsonElement.GetInt32(),
+                int intValue => intValue,
+                _ => Convert.ToInt32(vCenterIdObj)
+            };
+
+            using var scope = _serviceProvider.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<VMwareDbContext>();
+            var vmwareService = scope.ServiceProvider.GetRequiredService<IVMwareConnectionService>();
+            
+            var vCenter = await dbContext.VCenters.FirstOrDefaultAsync(v => v.Id == vCenterId);
+            if (vCenter == null)
+            {
+                throw new ArgumentException($"vCenter with ID {vCenterId} not found");
+            }
+
+            var session = await vmwareService.ConnectAsync(vCenter);
+            
+            // Update connection status
+            vCenter.UpdateConnectionStatus(true);
+            vCenter.LastScan = DateTime.UtcNow;
+            await dbContext.SaveChangesAsync();
+
+            return JsonSerializer.Serialize(new { Success = true, Message = $"Connected to {vCenter.Name}", SessionId = session?.SessionId });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to connect to vCenter");
+            throw;
+        }
+    }
+
+    private async Task<string> TestVCenterConnectionCommand(string parametersJson)
+    {
+        try
+        {
+            _logger.LogInformation("Executing TestVCenterConnection command");
+            
+            var parameters = JsonSerializer.Deserialize<Dictionary<string, object>>(parametersJson);
+            if (parameters == null || !parameters.TryGetValue("VCenterId", out var vCenterIdObj))
+            {
+                throw new ArgumentException("VCenterId parameter is required");
+            }
+
+            var vCenterId = vCenterIdObj switch
+            {
+                JsonElement jsonElement => jsonElement.GetInt32(),
+                int intValue => intValue,
+                _ => Convert.ToInt32(vCenterIdObj)
+            };
+
+            using var scope = _serviceProvider.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<VMwareDbContext>();
+            var vmwareService = scope.ServiceProvider.GetRequiredService<IVMwareConnectionService>();
+            var credentialService = scope.ServiceProvider.GetRequiredService<ICredentialService>();
+            
+            var vCenter = await dbContext.VCenters.FirstOrDefaultAsync(v => v.Id == vCenterId);
+            if (vCenter == null)
+            {
+                throw new ArgumentException($"vCenter with ID {vCenterId} not found");
+            }
+
+            var credentials = credentialService.DecryptCredentials(vCenter.EncryptedCredentials);
+            var testResult = await vmwareService.TestConnectionAsync(vCenter.Url, credentials.Username, credentials.Password);
+
+            // Update connection status
+            vCenter.UpdateConnectionStatus(testResult.IsSuccessful);
+            await dbContext.SaveChangesAsync();
+
+            return JsonSerializer.Serialize(new 
+            { 
+                IsSuccessful = testResult.IsSuccessful,
+                ResponseTime = testResult.ResponseTime.TotalMilliseconds,
+                ErrorMessage = testResult.ErrorMessage
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to test vCenter connection");
             throw;
         }
     }

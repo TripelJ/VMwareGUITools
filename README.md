@@ -1,189 +1,205 @@
-# VMware GUI Tools - vSphere Infrastructure Management
+# VMware GUI Tools
 
-A comprehensive .NET 8 WPF application for managing and monitoring VMware vSphere infrastructure through a modern, user-friendly interface.
+A comprehensive VMware vSphere management application built with WPF and .NET 8, featuring automated compliance checking, infrastructure monitoring, and PowerCLI integration.
 
-## Overview
+## 🚀 Recent Architecture Improvements
 
-This application provides system administrators with a centralized tool to:
-- Manage multiple vCenter servers with secure credential storage
-- Monitor ESXi host health and configuration compliance
-- Execute automated checks across different host profiles
-- Generate reports and alerts for infrastructure issues
-- Schedule background monitoring tasks
+### Service-First Architecture
+The application now follows a strict **service-first architecture** where:
 
-## Features
+- **GUI Application**: Only communicates with the database, never directly with vCenter
+- **Windows Service**: Handles all vCenter connections, data collection, and compliance checks
+- **Database**: Central data store for configuration, monitoring data, and inter-service communication
 
-### Core Functionality ✅ (Phase 1 - Completed)
-- **Secure vCenter Management**: Add, configure, and connect to multiple vCenter servers
-- **Credential Encryption**: Windows DPAPI-based secure credential storage
-- **Modern UI**: Material Design-based WPF interface
-- **Database Integration**: SQLite database for configuration and results storage
-- **Logging**: Comprehensive logging with Serilog
+### Enhanced Service Status Monitoring
+- **Accurate Service Status**: Fixed false-positive service status by ensuring only the Windows Service updates heartbeat data
+- **Real-time Monitoring**: GUI displays actual service status with heartbeat timestamps
+- **Data Freshness Indicators**: Visual indicators show how recent the displayed data is with color-coded freshness levels
 
-### Advanced Features ✅ (All Phases Completed)
-- **Cluster Discovery**: Automatic discovery and management of vSphere clusters
-- **Host Monitoring**: ESXi host health and configuration monitoring  
-- **Check Engine**: Extensible PowerCLI-based check system with multiple execution engines
-- **Host Profiles**: Configurable host profiles for different infrastructure types
-- **Reporting**: Comprehensive reporting and alerting system
-- **Scheduling**: Background task scheduling with Quartz.NET and cron expressions
-- **Notifications**: Multi-channel notifications (Email, Slack, OpsGenie, Webhooks, etc.)
+### Improved Data Flow
+1. **vCenter Operations**: GUI sends commands to the Windows Service via database
+2. **Data Collection**: Service collects vCenter data and stores it in the database
+3. **GUI Updates**: GUI reads processed data from the database and displays real-time freshness status
 
-## Architecture
+## 🔧 Architecture Components
 
-### Project Structure
-```
-VMwareGUITools/
-├── src/
-│   ├── VMwareGUITools.Core/         # Domain models and business logic
-│   ├── VMwareGUITools.Data/         # Entity Framework DbContext and migrations
-│   ├── VMwareGUITools.Infrastructure/ # External services (VMware API, SSH, etc.)
-│   ├── VMwareGUITools.UI/           # WPF user interface
-│   └── VMwareGUITools.Service/      # Background Windows service (planned)
-├── docs/                            # Documentation
-└── VMwareGUITools.sln              # Solution file
-```
+### Windows Service (`VMwareGUITools.Service`)
+- **Primary Role**: All vCenter connections and operations
+- **Responsibilities**:
+  - vCenter authentication and connection management
+  - Automated data collection (overview, infrastructure, compliance)
+  - Scheduled compliance checks and monitoring
+  - Command processing from GUI application
+  - Service heartbeat maintenance
 
-### Technology Stack
-- **.NET 8**: Latest .NET framework
-- **WPF**: Windows Presentation Foundation for desktop UI
-- **Entity Framework Core**: Object-relational mapping with SQLite
-- **Material Design**: Modern UI components and styling
-- **MVVM Community Toolkit**: Modern MVVM implementation
-- **Serilog**: Structured logging
-- **PowerCLI**: VMware PowerShell modules (integration planned)
-- **SSH.NET**: SSH connectivity for direct ESXi access
+### GUI Application (`VMwareGUITools.UI`)
+- **Primary Role**: User interface and data visualization
+- **Responsibilities**:
+  - Display vCenter data from database
+  - Send operation commands to service
+  - Monitor service status and data freshness
+  - Configuration management
+  - Report generation
 
-### Database Schema
-- **VCenters**: vCenter server configurations
-- **Clusters**: vSphere cluster information
-- **Hosts**: ESXi host details and status
-- **HostProfiles**: Configurable host check profiles
-- **CheckCategories**: Health and configuration check categories
-- **CheckDefinitions**: Individual check definitions and scripts
-- **CheckResults**: Historical check execution results
+### Database Layer (`VMwareGUITools.Data`)
+- **Primary Role**: Central data repository
+- **Responsibilities**:
+  - vCenter configuration storage
+  - Monitoring data persistence
+  - Service status and heartbeat tracking
+  - Inter-service command queue
+  - Compliance check results
 
-## Getting Started
+### Core Models (`VMwareGUITools.Core`)
+- **Primary Role**: Shared data models
+- **Includes**: vCenter entities, check definitions, service configuration, command types
 
-### Prerequisites
+### Infrastructure Layer (`VMwareGUITools.Infrastructure`)
+- **Primary Role**: Business logic and external integrations
+- **Services**: VMware APIs, PowerCLI, security, scheduling, notifications
+
+## 🎯 Key Features
+
+### 🔍 Infrastructure Monitoring
+- **Real-time Overview**: Resource usage, cluster health, VM counts
+- **Infrastructure Tree**: Hierarchical view of clusters, hosts, and datastores
+- **Connection Management**: Service-managed vCenter connections
+- **Health Monitoring**: Automated status checks and alerts
+
+### ✅ Compliance Checking
+- **Automated Checks**: PowerCLI-based compliance validation
+- **Scheduled Execution**: Configurable check intervals
+- **Custom Rules**: Extensible check framework
+- **Report Generation**: Detailed compliance reports
+
+### 🗄️ Database Management
+- **Entity Framework**: SQLite database with migrations
+- **Service Configuration**: Database-driven service settings
+- **Data Freshness**: Timestamped data with visual freshness indicators
+- **Command Queue**: Service-GUI communication via database
+
+### ⚡ Performance Features
+- **Background Processing**: All heavy operations run in Windows Service
+- **Caching**: Database-cached data for fast GUI responsiveness
+- **Async Operations**: Non-blocking UI with progress indicators
+- **Resource Monitoring**: Memory and CPU usage tracking
+
+## 🚦 Service Status Indicators
+
+The GUI now includes comprehensive status monitoring:
+
+- **🟢 Green**: Service running, data fresh (< 5 minutes)
+- **🟡 Yellow**: Service running, data moderately fresh (5-15 minutes)
+- **🟠 Orange**: Service running, data stale (15-60 minutes)
+- **🔴 Red**: Service stopped or data very stale (> 1 hour)
+
+## 📋 Prerequisites
+
+- .NET 8.0 Runtime
+- VMware PowerCLI (automatically validated)
 - Windows 10/11 or Windows Server 2019+
-- .NET 8 SDK
-- Visual Studio 2022 (recommended) or Visual Studio Code
-- VMware PowerCLI (for VMware connectivity)
+- SQL Server or SQLite support
 
-### Installation
-1. Clone the repository
-```bash
-git clone <repository-url>
-cd VMwareGUITools
-```
+## 🛠️ Installation
 
-2. Restore NuGet packages
-```bash
-dotnet restore
-```
+1. **Clone Repository**
+   ```bash
+   git clone https://github.com/your-org/VMwareGUITools.git
+   cd VMwareGUITools
+   ```
 
-3. Build the solution
-```bash
-dotnet build
-```
+2. **Build Solution**
+   ```bash
+   dotnet build VMwareGUITools.sln
+   ```
 
-4. Run the application
-```bash
-dotnet run --project src/VMwareGUITools.UI
-```
+3. **Install Windows Service**
+   ```powershell
+   # Run as Administrator
+   .\Install-VMwareService.ps1
+   ```
 
-### First Time Setup
-1. Launch the application
-2. Click "Add vCenter Server" to configure your first vCenter
-3. Enter vCenter details and credentials
-4. Test the connection and save
+4. **Start GUI Application**
+   ```bash
+   dotnet run --project src/VMwareGUITools.UI
+   ```
 
-## Configuration
+## 🔧 Configuration
 
-### Application Settings (`appsettings.json`)
+### Database Configuration
+Both GUI and Service use the same database connection string defined in `appsettings.json`:
 ```json
 {
-  "VMwareGUITools": {
-    "UseMachineLevelEncryption": false,    // User vs machine-level credential encryption
-    "ConnectionTimeoutSeconds": 30,        // vCenter connection timeout
-    "DefaultCheckTimeoutSeconds": 300,     // Default check execution timeout
-    "EnableAutoDiscovery": true,           // Automatic cluster/host discovery
-    "PowerCLIModulePath": "",             // Custom PowerCLI module path
-    "CheckScriptsPath": "Scripts",        // Check scripts directory
-    "ReportsPath": "Reports"              // Report output directory
+  "ConnectionStrings": {
+    "DefaultConnection": "Data Source=vmware-gui-tools.db"
   }
 }
 ```
 
-### Security
-- Credentials are encrypted using Windows DPAPI
-- Support for both user-level and machine-level encryption scopes
-- Database connection strings are configurable
-- Comprehensive audit logging
+### Service Configuration
+Service settings are managed through the database and can be updated via the GUI:
+- PowerCLI settings
+- Check execution parameters
+- Scheduling configuration
+- API timeouts and retry policies
 
-## Development Roadmap
+## 🏗️ Development
 
-### Phase 1: Core Infrastructure ✅ (Completed)
-- [x] Project structure and solution setup
-- [x] Database schema and Entity Framework configuration
-- [x] Credential encryption service
-- [x] Basic VMware connection service (stub implementation)
-- [x] Main application UI with vCenter management
-- [x] Add vCenter dialog with connection testing
+### Project Structure
+```
+src/
+├── VMwareGUITools.UI/          # WPF GUI Application
+├── VMwareGUITools.Service/     # Windows Service
+├── VMwareGUITools.Core/        # Shared Models
+├── VMwareGUITools.Data/        # Database Context
+└── VMwareGUITools.Infrastructure/ # Business Logic
+```
 
-### Phase 2: VMware Integration ✅ (Completed)
-- [x] PowerCLI integration and execution engine
-- [x] vCenter discovery functionality (clusters, hosts)
-- [x] Real PowerCLI command execution
-- [x] Connection testing and validation
-- [x] VMware session management
+### Key Design Patterns
+- **MVVM**: Model-View-ViewModel for GUI
+- **Repository Pattern**: Data access abstraction
+- **Command Pattern**: Service communication
+- **Dependency Injection**: Service registration and resolution
+- **Background Services**: Long-running tasks in Windows Service
 
-### Phase 3: Check Engine ✅ (Completed)
-- [x] Check definition and execution system
-- [x] PowerCLI-based check execution engine
-- [x] Check result storage and history
-- [x] Host profile assignment and management
-- [x] Batch execution with concurrency control
-- [x] Check validation and testing framework
+### Database Migrations
+```bash
+# Add new migration
+dotnet ef migrations add MigrationName --project src/VMwareGUITools.Data
 
-### Phase 4: Automation & Scheduling ✅ (Completed)
-- [x] Quartz.NET scheduling integration
-- [x] Automated discovery and checking
-- [x] Multi-threaded parallel execution
-- [x] Cron-based scheduling with flexible configurations
-- [x] Schedule management (create, update, pause, resume, delete)
+# Update database
+dotnet ef database update --project src/VMwareGUITools.Data
+```
 
-### Phase 5: Reporting & Notifications ✅ (Completed)
-- [x] Multi-channel notification framework
-- [x] Execution summary reporting
-- [x] Notification channel management
-- [x] Extensible notification system architecture
-- [x] Batch notification processing
+## 📊 Monitoring and Logging
 
-## Contributing
+- **Structured Logging**: Serilog with configurable levels
+- **Performance Metrics**: Built-in timing and resource monitoring
+- **Health Checks**: Automated service and component validation
+- **Error Tracking**: Comprehensive exception handling and reporting
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+## 🔐 Security
 
-### Development Guidelines
-- Follow MVVM pattern for UI components
-- Use dependency injection for service registration
-- Implement comprehensive logging
-- Write unit tests for business logic
-- Follow C# coding conventions and best practices
+- **Credential Encryption**: Secure credential storage using Windows DPAPI
+- **Role-based Access**: Support for different user permission levels
+- **Secure Communication**: Encrypted service-to-service communication
+- **Audit Logging**: Track all configuration changes and operations
 
-## License
+## 📝 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## Support
+## 🤝 Contributing
 
-For issues, questions, or contributions, please use the GitHub issue tracker.
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
----
+## 📞 Support
 
-**Note**: This application is designed for Windows environments and requires appropriate VMware infrastructure access for full functionality. 
+For support and questions:
+- Create an issue in this repository
+- Check the [documentation](docs/)
+- Review the [troubleshooting guide](TROUBLESHOOTING.md) 

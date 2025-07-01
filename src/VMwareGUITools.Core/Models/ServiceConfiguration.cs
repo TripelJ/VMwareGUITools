@@ -155,4 +155,6 @@ public static class ServiceCommandTypes
     public const string ReloadConfiguration = "ReloadConfiguration";
     public const string GetOverviewData = "GetOverviewData";
     public const string GetInfrastructureData = "GetInfrastructureData";
+    public const string ConnectVCenter = "ConnectVCenter";
+    public const string TestVCenterConnection = "TestVCenterConnection";
 } 

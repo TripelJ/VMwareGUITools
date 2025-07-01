@@ -10,7 +10,6 @@ using Microsoft.Extensions.Logging;
 using VMwareGUITools.Core.Models;
 using VMwareGUITools.Data;
 using VMwareGUITools.Infrastructure.Security;
-using VMwareGUITools.Infrastructure.VMware;
 using VMwareGUITools.Infrastructure.Checks;
 using VMwareGUITools.UI.Views;
 using VMwareGUITools.Infrastructure.Services;
@@ -25,8 +24,6 @@ public partial class MainWindowViewModel : ObservableObject
 {
     private readonly ILogger<MainWindowViewModel> _logger;
     private readonly VMwareDbContext _context;
-    private readonly IVMwareConnectionService _vmwareService;
-    private readonly IVSphereRestAPIService _restApiService;
     private readonly IServiceProvider _serviceProvider;
     private readonly IServiceConfigurationManager _serviceConfigurationManager;
     private readonly System.Timers.Timer _clockTimer;
@@ -87,15 +84,11 @@ public partial class MainWindowViewModel : ObservableObject
     public MainWindowViewModel(
         ILogger<MainWindowViewModel> logger,
         VMwareDbContext context,
-        IVMwareConnectionService vmwareService,
-        IVSphereRestAPIService restApiService,
         IServiceProvider serviceProvider,
         IServiceConfigurationManager serviceConfigurationManager)
     {
         _logger = logger;
         _context = context;
-        _vmwareService = vmwareService;
-        _restApiService = restApiService;
         _serviceProvider = serviceProvider;
         _serviceConfigurationManager = serviceConfigurationManager;
 
@@ -177,7 +170,7 @@ public partial class MainWindowViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Command to connect to a vCenter server
+    /// Command to connect to a vCenter server via Windows Service
     /// </summary>
     [RelayCommand]
     private async Task ConnectVCenterAsync(VCenter? vCenter)
@@ -187,28 +180,46 @@ public partial class MainWindowViewModel : ObservableObject
         try
         {
             IsLoading = true;
-            StatusMessage = $"Connecting to {vCenter.DisplayName}...";
+            StatusMessage = $"Requesting connection to {vCenter.DisplayName} via service...";
 
-            _logger.LogInformation("Connecting to vCenter: {VCenterName}", vCenter.Name);
+            _logger.LogInformation("Requesting vCenter connection via service: {VCenterName}", vCenter.Name);
 
-            var session = await _vmwareService.ConnectAsync(vCenter);
-            
-            // Update connection status
-            vCenter.UpdateConnectionStatus(true);
-            vCenter.LastScan = DateTime.UtcNow;
-            await _context.SaveChangesAsync();
+            // Check if service is running
+            var serviceStatus = await _serviceConfigurationManager.GetServiceStatusAsync();
+            if (serviceStatus == null || serviceStatus.LastHeartbeat < DateTime.UtcNow.AddSeconds(-30))
+            {
+                StatusMessage = "Windows Service is not running. Cannot connect to vCenter.";
+                return;
+            }
 
-            StatusMessage = $"Connected to {vCenter.DisplayName}";
+            // Send connection command to service
+            var parameters = new { VCenterId = vCenter.Id, Action = "Connect" };
+            var commandId = await _serviceConfigurationManager.SendCommandAsync("ConnectVCenter", parameters);
+
+            StatusMessage = $"Connection request sent to service (ID: {commandId}). Processing...";
+
+            // Monitor for completion
+            var result = await MonitorCommandCompletionAsync(commandId, "vCenter connection");
             
-            // Set as selected vCenter
-            SelectedVCenter = VCenters.FirstOrDefault(v => v.Id == vCenter.Id);
-            
-            _logger.LogInformation("Successfully connected to vCenter: {VCenterName}", vCenter.Name);
+            if (result != null)
+            {
+                // Update connection status in UI
+                vCenter.UpdateConnectionStatus(true);
+                vCenter.LastScan = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
+
+                StatusMessage = $"Connected to {vCenter.DisplayName} via service";
+                
+                // Set as selected vCenter
+                SelectedVCenter = VCenters.FirstOrDefault(v => v.Id == vCenter.Id);
+                
+                _logger.LogInformation("Successfully connected to vCenter via service: {VCenterName}", vCenter.Name);
+            }
         }
         catch (Exception ex)
         {
             vCenter.UpdateConnectionStatus(false);
-            _logger.LogError(ex, "Failed to connect to vCenter: {VCenterName}", vCenter.Name);
+            _logger.LogError(ex, "Failed to connect to vCenter via service: {VCenterName}", vCenter.Name);
             StatusMessage = $"Failed to connect to {vCenter.DisplayName}: {ex.Message}";
         }
         finally
@@ -320,7 +331,7 @@ public partial class MainWindowViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Command to test connection to a vCenter server
+    /// Command to test connection to a vCenter server via Windows Service
     /// </summary>
     [RelayCommand]
     private async Task TestVCenterConnectionAsync(VCenter? vCenter)
@@ -330,30 +341,50 @@ public partial class MainWindowViewModel : ObservableObject
         try
         {
             IsLoading = true;
-            StatusMessage = $"Testing connection to {vCenter.DisplayName}...";
+            StatusMessage = $"Testing connection to {vCenter.DisplayName} via service...";
 
-            _logger.LogInformation("Testing connection to vCenter: {VCenterName}", vCenter.Name);
+            _logger.LogInformation("Testing connection to vCenter via service: {VCenterName}", vCenter.Name);
 
-            var credentials = _serviceProvider.GetRequiredService<ICredentialService>()
-                .DecryptCredentials(vCenter.EncryptedCredentials);
-
-            var testResult = await _vmwareService.TestConnectionAsync(vCenter.Url, credentials.Username, credentials.Password);
-
-            if (testResult.IsSuccessful)
+            // Check if service is running
+            var serviceStatus = await _serviceConfigurationManager.GetServiceStatusAsync();
+            if (serviceStatus == null || serviceStatus.LastHeartbeat < DateTime.UtcNow.AddSeconds(-30))
             {
-                vCenter.UpdateConnectionStatus(true);
-                StatusMessage = $"Connection to {vCenter.DisplayName} successful - {testResult.ResponseTime.TotalMilliseconds:F0}ms";
+                StatusMessage = "Windows Service is not running. Cannot test vCenter connection.";
+                return;
             }
-            else
+
+            // Send test connection command to service
+            var parameters = new { VCenterId = vCenter.Id, Action = "TestConnection" };
+            var commandId = await _serviceConfigurationManager.SendCommandAsync("TestVCenterConnection", parameters);
+
+            StatusMessage = $"Connection test request sent to service (ID: {commandId}). Processing...";
+
+            // Monitor for completion
+            var result = await MonitorCommandCompletionAsync(commandId, "vCenter connection test");
+            
+            if (result != null)
             {
-                vCenter.UpdateConnectionStatus(false);
-                StatusMessage = $"Connection to {vCenter.DisplayName} failed: {testResult.ErrorMessage}";
+                var testResult = JsonSerializer.Deserialize<Dictionary<string, object>>(result);
+                if (testResult != null && testResult.TryGetValue("IsSuccessful", out var successObj))
+                {
+                    var isSuccessful = successObj.ToString() == "True";
+                    vCenter.UpdateConnectionStatus(isSuccessful);
+                    
+                    if (isSuccessful && testResult.TryGetValue("ResponseTime", out var responseTimeObj))
+                    {
+                        StatusMessage = $"Connection to {vCenter.DisplayName} successful - {responseTimeObj}ms";
+                    }
+                    else if (testResult.TryGetValue("ErrorMessage", out var errorObj))
+                    {
+                        StatusMessage = $"Connection to {vCenter.DisplayName} failed: {errorObj}";
+                    }
+                }
             }
         }
         catch (Exception ex)
         {
             vCenter.UpdateConnectionStatus(false);
-            _logger.LogError(ex, "Failed to test connection to vCenter: {VCenterName}", vCenter.Name);
+            _logger.LogError(ex, "Failed to test connection to vCenter via service: {VCenterName}", vCenter.Name);
             StatusMessage = $"Failed to test connection to {vCenter.DisplayName}: {ex.Message}";
         }
         finally
@@ -439,11 +470,11 @@ public partial class MainWindowViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Monitors a service command for completion
+    /// Monitors a service command for completion and returns the result
     /// </summary>
-    private async Task MonitorCommandCompletionAsync(string commandId, string operationName)
+    private async Task<string?> MonitorCommandCompletionAsync(string commandId, string operationName)
     {
-        var timeout = DateTime.UtcNow.AddMinutes(10); // 10 minute timeout
+        var timeout = DateTime.UtcNow.AddMinutes(5); // 5 minute timeout
         
         while (DateTime.UtcNow < timeout)
         {
@@ -454,18 +485,16 @@ public partial class MainWindowViewModel : ObservableObject
             {
                 if (command.Status == "Completed")
                 {
-                    StatusMessage = $"{operationName} completed successfully";
-                    return;
+                    return command.Result;
                 }
                 else if (command.Status == "Failed")
                 {
-                    StatusMessage = $"{operationName} failed: {command.ErrorMessage}";
-                    return;
+                    throw new InvalidOperationException($"{operationName} failed: {command.ErrorMessage}");
                 }
             }
         }
         
-        StatusMessage = $"{operationName} timed out";
+        throw new TimeoutException($"{operationName} timed out");
     }
 
     /// <summary>
@@ -629,25 +658,8 @@ public partial class MainWindowViewModel : ObservableObject
             // Monitor service status
             await MonitorServiceStatusAsync();
 
-            // Check vCenter connections health for connected vCenters
-            foreach (var vCenter in VCenters.Where(v => v.IsCurrentlyConnected))
-            {
-                try
-                {
-                    var isHealthy = await _vmwareService.TestConnectionHealthAsync(vCenter);
-                    if (!isHealthy)
-                    {
-                        vCenter.UpdateConnectionStatus(false);
-                        await _context.SaveChangesAsync();
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Health check failed for vCenter: {VCenterName}", vCenter.Name);
-                    vCenter.UpdateConnectionStatus(false);
-                    await _context.SaveChangesAsync();
-                }
-            }
+            // Note: vCenter connection health is now monitored by the Windows Service
+            // The GUI only monitors the service status and database connectivity
         }
         catch (Exception ex)
         {

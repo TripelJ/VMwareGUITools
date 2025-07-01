@@ -211,6 +211,10 @@ public class Program
         services.AddScoped<ISchedulingService, SchedulingService>();
         
         // Service Configuration and Communication
-        services.AddScoped<IServiceConfigurationManager, ServiceConfigurationManager>();
+        services.AddSingleton<IServiceConfigurationManager>(provider =>
+            new ServiceConfigurationManager(
+                provider.GetRequiredService<ILogger<ServiceConfigurationManager>>(),
+                provider,
+                isServiceContext: true));
     }
 } 
