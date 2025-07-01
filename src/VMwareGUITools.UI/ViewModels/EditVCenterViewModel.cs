@@ -189,10 +189,30 @@ public partial class EditVCenterViewModel : ObservableValidator
                 var testResultData = JsonSerializer.Deserialize<Dictionary<string, object>>(result);
                 if (testResultData != null)
                 {
-                    var isSuccessful = testResultData.TryGetValue("IsSuccessful", out var successObj) 
-                        && Convert.ToBoolean(successObj);
-                    var responseTime = testResultData.TryGetValue("ResponseTime", out var timeObj) 
-                        ? TimeSpan.FromMilliseconds(Convert.ToDouble(timeObj)) : TimeSpan.Zero;
+                    // Handle JsonElement objects properly
+                    var isSuccessful = false;
+                    if (testResultData.TryGetValue("IsSuccessful", out var successObj))
+                    {
+                        isSuccessful = successObj switch
+                        {
+                            JsonElement jsonElement => jsonElement.GetBoolean(),
+                            bool boolValue => boolValue,
+                            _ => Convert.ToBoolean(successObj)
+                        };
+                    }
+
+                    var responseTime = TimeSpan.Zero;
+                    if (testResultData.TryGetValue("ResponseTime", out var timeObj))
+                    {
+                        var responseTimeMs = timeObj switch
+                        {
+                            JsonElement jsonElement => jsonElement.GetDouble(),
+                            double doubleValue => doubleValue,
+                            _ => Convert.ToDouble(timeObj)
+                        };
+                        responseTime = TimeSpan.FromMilliseconds(responseTimeMs);
+                    }
+
                     var errorMessage = testResultData.TryGetValue("ErrorMessage", out var errorObj) 
                         ? errorObj?.ToString() : null;
 
@@ -208,7 +228,16 @@ public partial class EditVCenterViewModel : ObservableValidator
                     {
                         try
                         {
-                            var versionJson = versionObj.ToString();
+                            string? versionJson = null;
+                            if (versionObj is JsonElement versionElement)
+                            {
+                                versionJson = versionElement.GetRawText();
+                            }
+                            else
+                            {
+                                versionJson = versionObj.ToString();
+                            }
+
                             if (!string.IsNullOrEmpty(versionJson))
                             {
                                 TestResult.VersionInfo = JsonSerializer.Deserialize<VCenterVersionInfo>(versionJson);
@@ -322,16 +351,31 @@ public partial class EditVCenterViewModel : ObservableValidator
             if (result != null)
             {
                 var resultData = JsonSerializer.Deserialize<Dictionary<string, object>>(result);
-                if (resultData != null && resultData.TryGetValue("Success", out var successObj) && Convert.ToBoolean(successObj))
+                if (resultData != null && resultData.TryGetValue("Success", out var successObj))
                 {
-                    _logger.LogInformation("Successfully updated vCenter via service: {Name}", Name);
-                    // Close dialog with success
-                    DialogResultRequested?.Invoke(true);
+                    var isSuccess = successObj switch
+                    {
+                        JsonElement jsonElement => jsonElement.GetBoolean(),
+                        bool boolValue => boolValue,
+                        _ => Convert.ToBoolean(successObj)
+                    };
+
+                    if (isSuccess)
+                    {
+                        _logger.LogInformation("Successfully updated vCenter via service: {Name}", Name);
+                        // Close dialog with success
+                        DialogResultRequested?.Invoke(true);
+                    }
+                    else
+                    {
+                        var message = resultData.TryGetValue("Message", out var msgObj) ? msgObj.ToString() : "Unknown error";
+                        _logger.LogError("Failed to update vCenter via service: {Message}", message);
+                        // TODO: Show error message to user
+                    }
                 }
                 else
                 {
-                    var message = resultData?.TryGetValue("Message", out var msgObj) == true ? msgObj.ToString() : "Unknown error";
-                    _logger.LogError("Failed to update vCenter via service: {Message}", message);
+                    _logger.LogError("Invalid response format from service");
                     // TODO: Show error message to user
                 }
             }
