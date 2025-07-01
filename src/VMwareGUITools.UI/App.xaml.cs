@@ -10,6 +10,7 @@ using Serilog;
 using VMwareGUITools.Data;
 using VMwareGUITools.Infrastructure.Checks;
 using VMwareGUITools.Infrastructure.Notifications;
+using VMwareGUITools.Infrastructure.PowerShell;
 using VMwareGUITools.Infrastructure.Scheduling;
 using VMwareGUITools.Infrastructure.Security;
 using VMwareGUITools.Infrastructure.Services;
@@ -149,6 +150,38 @@ public partial class App : Application
         // Service Communication - For GUI to Windows Service communication
         // The GUI is now a pure frontend that communicates with the Windows Service for all operations
         services.AddScoped<IServiceConfigurationManager, ServiceConfigurationManager>();
+
+        // vSphere REST API Services
+        services.Configure<VSphereRestAPIOptions>(configuration.GetSection(VSphereRestAPIOptions.SectionName));
+        services.AddHttpClient();
+        services.AddScoped<IVSphereRestAPIService, VSphereRestAPIService>();
+        
+        // PowerShell/PowerCLI Services
+        services.Configure<PowerShellOptions>(configuration.GetSection(PowerShellOptions.SectionName));
+        services.Configure<PowerCLIOptions>(configuration.GetSection(PowerCLIOptions.SectionName));
+        services.AddScoped<IPowerShellService, PowerShellService>();
+        services.AddScoped<IPowerCLIService, PowerCLIService>();
+        
+        // Infrastructure services
+        services.AddScoped<ICredentialService>(provider =>
+        {
+            var logger = provider.GetRequiredService<ILogger<CredentialService>>();
+            var vmwareOptions = configuration.GetSection("VMwareGUITools").Get<VMwareGUIToolsOptions>() ?? new VMwareGUIToolsOptions();
+            var credentialService = new CredentialService(logger);
+            credentialService.SetEncryptionScope(vmwareOptions.UseMachineLevelEncryption);
+            return credentialService;
+        });
+        services.AddScoped<IVMwareConnectionService, RestVMwareConnectionService>();
+        
+        // Check Engines
+        services.AddScoped<ICheckEngine, RestAPICheckEngine>();
+        services.AddScoped<ICheckEngine, PowerCLICheckEngine>();
+        services.Configure<CheckExecutionOptions>(configuration.GetSection(CheckExecutionOptions.SectionName));
+        
+        // Check Execution and Scheduling
+        services.AddScoped<ICheckExecutionService, CheckExecutionService>();
+        services.AddScoped<INotificationService, NotificationService>();
+        services.AddScoped<ISchedulingService, SchedulingService>();
 
         // ViewModels
         services.AddTransient<MainWindowViewModel>();
