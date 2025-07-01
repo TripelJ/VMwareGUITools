@@ -160,9 +160,6 @@
                     <StackPanel Grid.Column="0" Orientation="Vertical">
                         <Button Content="Delete"
                                 Command="{Binding DeleteCommand}"
-                                Style="{StaticResource MaterialDesignOutlinedButton}"
-                                Foreground="#F44336"
-                                BorderBrush="#F44336"
                                 IsEnabled="{Binding CanDelete}"
                                 Margin="0,0,8,0">
                             <Button.Style>

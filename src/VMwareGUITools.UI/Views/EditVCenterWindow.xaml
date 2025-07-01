@@ -234,9 +234,6 @@
                 <Button Grid.Column="0"
                         Content="Delete"
                         Command="{Binding DeleteCommand}"
-                        Style="{StaticResource MaterialDesignOutlinedButton}"
-                        Foreground="#F44336"
-                        BorderBrush="#F44336"
                         Margin="0,0,8,0">
                     <Button.Style>
                         <Style TargetType="Button" BasedOn="{StaticResource MaterialDesignOutlinedButton}">
