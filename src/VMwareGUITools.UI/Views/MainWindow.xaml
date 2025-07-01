@@ -1122,7 +1122,10 @@
                             <Ellipse.Fill>
                                 <SolidColorBrush>
                                     <SolidColorBrush.Color>
-                                        <MultiBinding Converter="{StaticResource DataFreshnessToColorConverter}">
+                                        <MultiBinding>
+                                            <MultiBinding.Converter>
+                                                <converters:DataFreshnessToColorConverter/>
+                                            </MultiBinding.Converter>
                                             <Binding Path="VCenterOverviewViewModel.LastUpdated"/>
                                             <Binding Path="CurrentTime"/>
                                         </MultiBinding>
